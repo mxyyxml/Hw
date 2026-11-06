@@ -1,0 +1,465 @@
+// =============================================================================
+//  player.js — the skater controller (physics + state machine).
+//  States:
+//    ride  : wheels on the ground (steer, push, brake, crouch, pop)
+//    air   : airborne (spin, tricks, grabs) → land or bail
+//    bail  : tumble, slow-mo, then respawn at the last stable spot
+//    walk  : off the board (E)
+//  All tuning numbers come from config.js.
+// =============================================================================
+import * as THREE from 'three';
+import { PHYSICS as P } from './config.js';
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+export const wrapAngle = (a) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+
+export class Player {
+  constructor(world, input, skater) {
+    this.world = world;
+    this.col = world.col;
+    this.input = input;
+    this.skater = skater;
+    this.listeners = [];
+
+    this.pos = new THREE.Vector3();
+    this.vel = new THREE.Vector3();
+    this.normal = new THREE.Vector3(0, 1, 0);
+    this.renderNormal = new THREE.Vector3(0, 1, 0);
+    this.heading = 0;        // direction of travel on the ground
+    this.fakie = false;      // riding backwards (model turned 180°)
+    this.speed = 0;          // m/s along heading while riding
+    this.state = 'ride';
+    this.groundTag = null;
+    this.groundVert = false; this.gvx = 0; this.gvz = 0;
+
+    this.crouching = false; this.spaceStart = 0;
+    this.wantPop = null; this.wantPush = false;
+    this.lastPush = -10; this.pushPhase = -1;
+    this.powersliding = false; this.slideTime = 0;
+    this.lean = 0;
+    this.time = 0;           // game time (affected by slow-mo)
+
+    this.air = null;
+    this.bailInfo = null;
+    this.walkVy = 0; this.walkSpeed = 0;
+
+    this.spawn = world.spots[0];
+    this.customSpot = null;
+    this.lastSafe = null; this.safeTimer = 0;
+    this.timeScale = 1;
+
+    this.respawnAt(this.spawn);
+  }
+
+  on(fn) { this.listeners.push(fn); }
+  emit(type, data = {}) { for (const fn of this.listeners) fn(type, data); }
+
+  // ------------------------------------------------------------------ spawning
+  respawnAt(spot) {
+    this.pos.set(spot.x, spot.y, spot.z);
+    const g = this.col.ground(spot.x, spot.z, spot.y + 0.5);
+    this.pos.y = g.h;
+    this.normal.set(g.nx, g.ny, g.nz);
+    this.heading = spot.heading; this.fakie = false;
+    this.speed = 0; this.vel.set(0, 0, 0);
+    this.state = 'ride';
+    this.air = null; this.bailInfo = null;
+    this.crouching = false; this.wantPop = null; this.powersliding = false;
+    this.lastSafe = { x: this.pos.x, y: this.pos.y, z: this.pos.z, heading: this.heading };
+    this.timeScale = 1;
+    this.skater.setTransform(this.pos, this.modelYaw(), this.normal, 0);
+    this.emit('respawn', {});
+  }
+  teleport(spot) { this.spawn = spot; this.customSpot = null; this.respawnAt(spot); }
+  respawnLast() { this.respawnAt(this.customSpot || this.spawn); }
+  setCustomSpot() {
+    if (this.state !== 'ride' && this.state !== 'walk') return false;
+    this.customSpot = { x: this.pos.x, y: this.pos.y, z: this.pos.z, heading: this.modelYaw() };
+    return true;
+  }
+
+  modelYaw() {
+    if (this.state === 'air' && this.air) return this.air.yaw;
+    return this.heading + (this.fakie ? Math.PI : 0);
+  }
+
+  // ------------------------------------------------------------------ per-frame input (edges)
+  frameInput(realNow) {
+    const inp = this.input;
+    if (inp.pressed.walk) {
+      if (this.state === 'ride' && this.speed < 3) this.enterWalk();
+      else if (this.state === 'walk') this.exitWalk();
+    }
+    if (inp.pressed.respawn && this.state !== 'bail') this.respawnLast();
+    if (inp.pressed.setSpot) this.emit('spotSet', { ok: this.setCustomSpot() });
+
+    const canPop = this.state === 'ride';
+    if (inp.pressed.pop) { this.spaceStart = realNow; this.crouching = true; }
+    if (!inp.held.pop && this.crouching && inp.released.pop) {
+      this.crouching = false;
+      if (canPop) {
+        const dirs = inp.dirEvents.filter((e) => e.t >= this.spaceStart && e.t >= realNow - P.flickWindow).map((e) => e.dir);
+        this.wantPop = { hold: realNow - this.spaceStart, dirs };
+      }
+    }
+    if (!inp.held.pop) this.crouching = false;
+
+    if (this.state === 'ride' && !this.crouching) {
+      if (inp.pressed.up && realNow - this.lastPush > P.pushCooldown) this.wantPush = true;
+      else if (inp.held.up && realNow - this.lastPush > P.pushHoldInterval) this.wantPush = true;
+      if (this.wantPush) this.lastPush = realNow;
+    }
+  }
+
+  // ------------------------------------------------------------------ fixed-step update
+  update(dt) {
+    this.time += dt;
+    if (this.pushPhase >= 0) { this.pushPhase += dt * 2.2; if (this.pushPhase >= 1) this.pushPhase = -1; }
+    if (this.wantPop) {
+      const w = this.wantPop; this.wantPop = null;
+      if (this.state === 'ride') this.pop(w);
+    }
+    switch (this.state) {
+      case 'ride': this.updateRide(dt); break;
+      case 'air': this.updateAir(dt); break;
+      case 'bail': this.updateBail(dt); break;
+      case 'walk': this.updateWalk(dt); break;
+    }
+  }
+
+  // forward direction along the ground plane for a given heading
+  _tangent(heading, n, out) {
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const d = fx * n.x + fz * n.z;
+    out.set(fx - d * n.x, -d * n.y, fz - d * n.z).normalize();
+    return out;
+  }
+
+  // ------------------------------------------------------------------ RIDE
+  updateRide(dt) {
+    const inp = this.input, n = this.normal;
+    const f = this._f || (this._f = new THREE.Vector3());
+
+    // --- steering
+    const turn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+    let rate = lerp(P.turnRateLow, P.turnRateHigh, clamp(this.speed / P.pushMaxSpeed, 0, 1));
+    if (this.crouching) rate *= P.crouchTurnBonus;
+    this.heading += turn * rate * dt;
+    this.lean = turn * clamp(this.speed / 4, 0.3, 1);
+
+    // --- gravity pulls the board's direction downhill on side slopes (carving)
+    const lx = Math.cos(this.heading), lz = -Math.sin(this.heading);   // "left" vector
+    const ln = lx * n.x + lz * n.z;
+    if (n.y < 0.999) this.heading += clamp(P.gravity * ln * n.y / Math.max(this.speed, 1.5), -4, 4) * dt;
+
+    // --- push / brake / powerslide
+    if (this.wantPush) {
+      this.wantPush = false;
+      if (this.speed < P.pushMaxSpeed && n.y > 0.97) {
+        this.speed = Math.min(P.pushMaxSpeed, this.speed + P.pushImpulse);
+        this.pushPhase = 0;
+        this.emit('push');
+      }
+    }
+    const braking = inp.held.down && !this.crouching;
+    const wasSliding = this.powersliding;
+    this.powersliding = braking && (this.speed > P.powerslideMinSpeed || (wasSliding && this.speed > 1.5));
+    if (braking) this.speed -= (this.powersliding ? P.powerslideDecel : P.brakeDecel) * dt;
+    if (this.powersliding) this.slideTime += dt;
+    else if (wasSliding) { this.emit('powerslideEnd', { time: this.slideTime }); this.slideTime = 0; }
+
+    // --- rolling resistance (never reverses you)
+    this.speed = Math.max(0, this.speed - (this.speed * P.rollFriction + P.rollDrag) * dt);
+
+    // --- gravity along the slope
+    this._tangent(this.heading, n, f);
+    this.speed += -P.gravity * f.y * dt;
+    if (this.speed < 0) { // rolling backwards → you're now riding fakie
+      this.heading += Math.PI; this.fakie = !this.fakie; this.speed = -this.speed;
+      this._tangent(this.heading, n, f);
+    }
+    // pumping: hold W on a ramp transition while dropping in to gain speed
+    if (inp.held.up && !this.crouching && n.y < 0.985 && f.y < -0.05) this.speed += P.pumpAccel * dt;
+    this.speed = Math.min(this.speed, P.maxSpeed);
+    this.vel.copy(f).multiplyScalar(this.speed);
+
+    this._moveGrounded(dt);
+  }
+
+  // move along the ground with wall + launch handling (used by ride)
+  _moveGrounded(dt) {
+    const col = this.col;
+    let nx = this.pos.x + this.vel.x * dt, ny = this.pos.y + this.vel.y * dt, nz = this.pos.z + this.vel.z * dt;
+    let maxY = Math.max(this.pos.y, ny) + P.stepUp;
+    const blk = col.blocker(nx, nz, maxY);
+    if (blk) {
+      if (this._hitWall(blk)) return;
+      nx = this.pos.x + this.vel.x * dt; ny = this.pos.y + this.vel.y * dt; nz = this.pos.z + this.vel.z * dt;
+      maxY = Math.max(this.pos.y, ny) + P.stepUp;
+      if (col.blocker(nx, nz, maxY)) { nx = this.pos.x; nz = this.pos.z; ny = this.pos.y; this.speed *= 0.5; }
+    }
+    const g = col.ground(nx, nz, maxY);
+    if (ny > g.h + P.launchTolerance) {
+      // the ground fell away (lip of a ramp, edge of a stair) → airborne
+      this.pos.set(nx, ny, nz);
+      this.launch(false);
+      return;
+    }
+    this.pos.set(nx, g.h, nz);
+    this.normal.set(g.nx, g.ny, g.nz);
+    this.groundTag = g.tag;
+    this.groundVert = g.vert; this.gvx = g.vx; this.gvz = g.vz;
+
+    // remember a "stable" spot for bail respawns
+    this.safeTimer += dt;
+    if (this.safeTimer > 0.5 && g.ny > 0.97 && this.state === 'ride') {
+      this.safeTimer = 0;
+      this.lastSafe = { x: this.pos.x, y: this.pos.y, z: this.pos.z, heading: this.modelYaw() };
+    }
+  }
+
+  // returns true if the move should be aborted (bailed)
+  _hitWall(blk) {
+    const nrm = this.col.wallNormal(blk, this.pos.x, this.pos.z, this._wn || (this._wn = {}));
+    const vn = this.vel.x * nrm.x + this.vel.z * nrm.z;
+    if (vn < 0) {
+      if (-vn > P.wallBailSpeed && this.state !== 'walk') { this.bail('Hit a wall!'); return true; }
+      // slide along the wall; a near head-on hit just stops you
+      const vh = Math.hypot(this.vel.x, this.vel.z);
+      this.vel.x -= vn * nrm.x * 1.05; this.vel.z -= vn * nrm.z * 1.05;
+      if (-vn > 0.8 * vh) { this.vel.x *= 0.2; this.vel.z *= 0.2; }
+      if (this.state === 'ride') {
+        const h = Math.hypot(this.vel.x, this.vel.z);
+        if (h > 0.4) this.heading = Math.atan2(this.vel.x, this.vel.z);
+        this.speed = h * 0.85;
+        this.vel.x *= 0.85; this.vel.z *= 0.85;
+      }
+      this.emit('wall', { speed: -vn });
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------------ POP / LAUNCH
+  pop(popInfo) {
+    const t = clamp(popInfo.hold / P.popChargeTime, 0, 1);
+    const pop = lerp(P.popMin, P.popMax, t);
+    const n = this.normal;
+    this.vel.x += n.x * pop; this.vel.y += n.y * pop; this.vel.z += n.z * pop;
+    this.launch(true);
+    this.emit('pop', { strength: t });
+    this.startPopTrick(popInfo);
+  }
+
+  // hook for tricks (filled in by the trick stage)
+  startPopTrick(popInfo) {
+    this.air.tricks.push({ name: 'Ollie', points: 100 });
+  }
+
+  launch(popped) {
+    const wasVert = this.groundVert && !popped;
+    if (wasVert) {
+      // vert launch: kill the outward part so you fly straight up and come back down
+      const vx = this.gvx, vz = this.gvz;
+      const out = this.vel.x * vx + this.vel.z * vz;
+      this.vel.x -= vx * (out + P.vertInwardSpeed);
+      this.vel.z -= vz * (out + P.vertInwardSpeed);
+      this.pos.x -= vx * 0.06; this.pos.z -= vz * 0.06;
+    }
+    if (this.powersliding) { this.powersliding = false; this.slideTime = 0; }
+    this.state = 'air';
+    this.air = {
+      yaw: this.modelYaw(), spin: 0, time: 0,
+      takeoffTag: this.groundTag, takeoffY: this.pos.y, maxY: this.pos.y, vert: wasVert,
+      tricks: [], trick: null, flipAngle: 0, shuvAngle: 0,
+      grab: null, grabTime: 0,
+    };
+  }
+
+  // ------------------------------------------------------------------ AIR
+  updateAir(dt) {
+    const inp = this.input, A = this.air;
+    A.time += dt;
+    this.vel.y -= P.gravity * dt;
+    const drag = 1 - P.airDrag * dt;
+    this.vel.x *= drag; this.vel.z *= drag;
+
+    // spin with A/D (not while Shift is held — that's for shuvits)
+    if (!inp.held.shift) {
+      const spin = ((inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0)) * P.airSpinRate * dt;
+      A.yaw += spin; A.spin += spin;
+    }
+    this.updateAirTricks(dt);
+
+    const nx = this.pos.x + this.vel.x * dt, ny = this.pos.y + this.vel.y * dt, nz = this.pos.z + this.vel.z * dt;
+    const maxY = this.pos.y + P.stepUp;
+    const blk = this.col.blocker(nx, nz, Math.max(maxY, ny + P.stepUp));
+    if (blk) {
+      if (this._hitWall(blk)) return;
+      this.pos.y = ny;
+      return; // stay at old xz this step
+    }
+    if (this.checkRails && this.checkRails(nx, ny, nz)) return;
+    const g = this.col.ground(nx, nz, Math.max(maxY, ny + P.stepUp));
+    if (ny <= g.h) { this.pos.set(nx, g.h, nz); this.land(g); return; }
+    this.pos.set(nx, ny, nz);
+    if (ny > A.maxY) A.maxY = ny;
+  }
+
+  updateAirTricks(dt) { /* flip & grab animation — trick stage */ }
+
+  // ------------------------------------------------------------------ LANDING
+  land(g) {
+    const A = this.air, v = this.vel;
+    const n = this._ln || (this._ln = new THREE.Vector3());
+    n.set(g.nx, g.ny, g.nz);
+    const vn = v.dot(n);
+    const vtx = v.x - vn * n.x, vty = v.y - vn * n.y, vtz = v.z - vn * n.z;
+    const impact = -vn;
+    this.normal.copy(n);
+    this.groundTag = g.tag; this.groundVert = g.vert; this.gvx = g.vx; this.gvz = g.vz;
+
+    const fail = this.landingProblem(impact, vtx, vtz);
+    if (fail) { this.bail(fail); return; }
+
+    const vth = Math.hypot(vtx, vtz);
+    if (vth > 0.8) {
+      const travel = Math.atan2(vtx, vtz);
+      const diff = Math.abs(wrapAngle(A.yaw - travel));
+      this.heading = travel;
+      this.fakie = diff > Math.PI / 2;
+    } else {
+      this.heading = A.yaw; this.fakie = false;
+    }
+    this.speed = Math.hypot(vtx, vty, vtz) * P.landSpeedKeep;
+    this.state = 'ride';
+    this._tangent(this.heading, n, this.vel).multiplyScalar(this.speed);
+    const info = this.landInfo(g, impact);
+    this.air = null;
+    // landing with Space still held → keep the crouch for the next pop
+    if (this.input.held.pop) { this.crouching = true; this.spaceStart = performance.now() / 1000; }
+    this.emit('land', info);
+  }
+
+  // returns a bail reason string, or null if the landing is clean
+  landingProblem(impact, vtx, vtz) {
+    const A = this.air;
+    if (impact > P.maxLandingImpact) return 'Too much impact!';
+    const vth = Math.hypot(vtx, vtz);
+    if (vth > 0.8) {
+      const travel = Math.atan2(vtx, vtz);
+      const d = Math.abs(wrapAngle(A.yaw - travel));
+      const off = Math.min(d, Math.PI - d);              // forward or fakie are both fine
+      if (off > P.landAngleTolerance * Math.PI / 180) return 'Landed sideways!';
+    }
+    return null;
+  }
+
+  landInfo(g, impact) {
+    const A = this.air;
+    return {
+      tricks: A.tricks.slice(), airTime: A.time, spin: A.spin,
+      takeoffTag: A.takeoffTag, landTag: g.tag, zones: this.col.zonesAt(this.pos.x, this.pos.z),
+      height: A.maxY - A.takeoffY, impact,
+    };
+  }
+
+  // ------------------------------------------------------------------ BAIL
+  bail(reason) {
+    if (this.state === 'bail') return;
+    this.state = 'bail';
+    this.crouching = false; this.powersliding = false;
+    this.bailInfo = { reason, start: performance.now() / 1000, t: 0, vx: this.vel.x, vy: Math.max(this.vel.y, 0), vz: this.vel.z, yaw: this.modelYaw() };
+    this.air = null;
+    this.emit('bail', { reason });
+  }
+
+  updateBail(dt) {
+    const B = this.bailInfo;
+    B.t += dt;
+    const fr = Math.exp(-2.5 * dt);
+    B.vx *= fr; B.vz *= fr;
+    B.vy -= P.gravity * dt;
+    let nx = this.pos.x + B.vx * dt, nz = this.pos.z + B.vz * dt, ny = this.pos.y + B.vy * dt;
+    if (this.col.blocker(nx, nz, this.pos.y + P.stepUp)) { nx = this.pos.x; nz = this.pos.z; B.vx = B.vz = 0; }
+    const g = this.col.ground(nx, nz, this.pos.y + P.stepUp);
+    if (ny <= g.h) { ny = g.h; B.vy = 0; this.normal.set(g.nx, g.ny, g.nz); }
+    this.pos.set(nx, ny, nz);
+    if (performance.now() / 1000 - B.start > P.bailRespawnDelay) {
+      const s = this.lastSafe || this.spawn;
+      this.respawnAt(s);
+    }
+  }
+
+  // ------------------------------------------------------------------ WALK
+  enterWalk() {
+    this.state = 'walk'; this.speed = 0; this.walkVy = 0;
+    this.heading = this.modelYaw(); this.fakie = false;
+    this.emit('walk', { on: true });
+  }
+  exitWalk() {
+    this.state = 'ride'; this.speed = 0; this.fakie = false;
+    this.emit('walk', { on: false });
+  }
+  updateWalk(dt) {
+    const inp = this.input;
+    const turn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+    this.heading += turn * P.walkTurnRate * dt;
+    const move = (inp.held.up ? 1 : 0) - (inp.held.down ? 0.6 : 0);
+    const spd = move * (inp.held.shift ? P.runSpeed : P.walkSpeed);
+    this.walkSpeed = Math.abs(spd);
+    this.walkVy -= P.gravity * dt;
+    const nx = this.pos.x + Math.sin(this.heading) * spd * dt;
+    const nz = this.pos.z + Math.cos(this.heading) * spd * dt;
+    const maxY = this.pos.y + P.walkStepUp;
+    if (this.col.blocker(nx, nz, maxY)) { this.walkSpeed = 0; return; }
+    const g = this.col.ground(nx, nz, maxY);
+    let ny = this.pos.y + this.walkVy * dt;
+    if (ny <= g.h || (this.walkVy <= 0 && ny - g.h < 0.08)) { ny = g.h; this.walkVy = 0; }
+    this.pos.set(nx, ny, nz);
+    this.normal.set(0, 1, 0);
+  }
+
+  // ------------------------------------------------------------------ RENDER SYNC
+  // Called once per rendered frame after physics.
+  sync(dt) {
+    const sk = this.skater;
+    let yaw = this.modelYaw();
+    const up = this._up || (this._up = new THREE.Vector3(0, 1, 0));
+    let n = this.normal, rate = 14;
+    if (this.state === 'air') { n = up; rate = 3; }
+    if (this.state === 'walk') n = up;
+    if (this.state === 'bail') yaw = this.bailInfo.yaw;
+    if (this.state === 'ride' && this.powersliding) yaw += (this.fakie ? -1 : 1) * 1.25;
+    sk.setTransform(this.pos, yaw, n, dt, rate);
+    const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
+    sk.setBlob(this.pos.x, g.h, this.pos.z, this.pos.y - g.h);
+    sk.animate(this.animState(), dt);
+  }
+
+  animState() {
+    const A = this.air;
+    return {
+      mode: this.state,
+      crouch: this.crouching ? 1 : (this.powersliding ? 0.5 : 0),
+      lean: this.state === 'ride' ? this.lean : 0,
+      pushPhase: this.pushPhase,
+      flipAngle: A ? A.flipAngle : 0,
+      shuvAngle: A ? A.shuvAngle : 0,
+      boardLift: A ? 0.12 * Math.min(1, A.time * 6) : 0,
+      grab: !!(A && A.grab), grabHand: A && A.grab ? A.grab.hand : 'front',
+      sideways: false, manualPitch: 0,
+      bailTime: this.bailInfo ? this.bailInfo.t : 0,
+      boardSlide: this.bailInfo ? Math.min(3, this.bailInfo.t * 4) : 0,
+      walkSpeed: this.walkSpeed,
+    };
+  }
+
+  // speed for the HUD (m/s)
+  displaySpeed() {
+    if (this.state === 'ride') return this.speed;
+    if (this.state === 'walk') return this.walkSpeed;
+    return Math.hypot(this.vel.x, this.vel.y, this.vel.z);
+  }
+}
