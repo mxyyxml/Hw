@@ -224,7 +224,10 @@ export class Player {
       if (col.blocker(nx, nz, maxY)) { nx = this.pos.x; nz = this.pos.z; ny = this.pos.y; this.speed *= 0.5; }
     }
     const g = col.ground(nx, nz, maxY);
-    if (ny > g.h + P.launchTolerance) {
+    // launch if the ground drops away, or on a sharp convex edge (e.g. the lip of
+    // a quarter-pipe) where we'd be moving away from the new surface
+    const away = this.vel.x * g.nx + this.vel.y * g.ny + this.vel.z * g.nz;
+    if (ny > g.h + P.launchTolerance || away > P.lipLaunchSpeed) {
       // the ground fell away (lip of a ramp, edge of a stair) → airborne
       this.pos.set(nx, ny, nz);
       this.launch(false);
@@ -443,10 +446,12 @@ export class Player {
     const tricks = A.tricks.slice();
     // spins: prefix the first trick ("BS 180 Kickflip") or add a plain spin
     const sp = spinLabel(A.spin);
+    let spinName = null;
     if (sp.halfTurns > 0) {
       const bonus = SPIN_POINTS_PER_180 * sp.halfTurns;
       if (tricks.length) { tricks[0] = { ...tricks[0], name: sp.label + ' ' + tricks[0].name, points: tricks[0].points + bonus }; }
       else tricks.push({ name: sp.label, base: 'Spin', points: bonus });
+      spinName = tricks[0].name;
     }
     if (A.time >= BIG_AIR.minAirTime && tricks.length) tricks.push({ name: BIG_AIR.name, base: BIG_AIR.name, points: BIG_AIR.points });
     // gaps: took off from one tagged spot and landed in another
@@ -459,7 +464,7 @@ export class Player {
       }
     }
     return {
-      tricks, gaps, airTime: A.time, spin: A.spin,
+      tricks, gaps, spinName, airTime: A.time, spin: A.spin,
       takeoffTag: A.takeoffTag, landTag: g.tag, zones,
       height: A.maxY - A.takeoffY, impact,
     };
@@ -472,9 +477,9 @@ export class Player {
     if (this.vel.y > 1.5 || A.time < 0.06) return false;
     const hit = this.col.findRail({ x: nx, y: ny, z: nz }, this.vel, this.time, GRIND);
     if (!hit) return false;
-    // an unfinished flip means you land on the rail with the board upside down
+    // board still flipping → can't lock in yet (it will snap once the flip is done)
     if (A.trick) {
-      if (A.trick.t / A.trick.def.time < P.flipCompleteThreshold) { this.bail('Didn\'t finish the ' + A.trick.def.name + '!'); return true; }
+      if (A.trick.t / A.trick.def.time < P.flipCompleteThreshold) return false;
       A.trick = null; A.flipAngle = 0; A.shuvAngle = 0;
     }
     const r = hit.rail;

@@ -19,7 +19,7 @@ export const PHYSICS = {
   pushCooldown: 0.38,       // min seconds between pushes when tapping
   pushHoldInterval: 0.75,   // seconds between pushes when W is HELD
   pushMaxSpeed: 8.5,        // pushing cannot take you above this speed
-  pumpAccel: 5.0,           // m/s² gained holding W while dropping down a ramp (pumping)
+  pumpAccel: 10.0,          // m/s² gained holding W while dropping down a ramp (pumping)
   maxSpeed: 24,             // absolute cap (gravity can take you past pushMaxSpeed)
 
   // Rolling resistance
@@ -42,6 +42,7 @@ export const PHYSICS = {
   stepUp: 0.12,             // highest curb you can roll up without an ollie
   walkStepUp: 0.36,         // highest step you can walk up
   launchTolerance: 0.035,   // how far the ground can drop away before you go airborne
+  lipLaunchSpeed: 1.6,      // speed (m/s) away from the ground at a sharp edge that launches you
   vertSlope: 2.6,           // ground steepness (rise/run) that counts as "vert" (≈69°)
   vertInwardSpeed: 0.55,    // on a vert launch, drift this fast back over the ramp
   landSpeedKeep: 0.96,      // fraction of speed kept on a clean landing
@@ -183,7 +184,7 @@ export const CHALLENGES = [
   { id: 'c6',  text: 'Boardslide a handrail',                type: 'grind', rail: 'handrail', grind: 'Boardslide', seconds: 0.4 },
   { id: 'c7',  text: 'Hold a manual for 4 seconds',          type: 'manual', seconds: 4 },
   { id: 'c8',  text: 'Clear the plaza gap',                  type: 'gap', gap: 'Plaza Gap' },
-  { id: 'c9',  text: 'Get 2m of air out of the halfpipe',    type: 'air', takeoff: 'halfpipe', height: 2 },
+  { id: 'c9',  text: 'Get 1.5m of air out of the halfpipe',  type: 'air', takeoff: 'halfpipe', height: 1.5 },
   { id: 'c10', text: 'Land a 5,000 point combo',             type: 'combo', points: 5000 },
 ];
 

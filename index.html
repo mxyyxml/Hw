@@ -12,6 +12,65 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+
+  <!-- ============================== HUD ============================== -->
+  <div id="hud" class="hidden">
+    <div id="hud-challenges" class="panel-sm">
+      <div class="hud-label">Challenges <span id="ch-count">0/10</span></div>
+      <ul id="ch-next"></ul>
+    </div>
+    <div id="hud-score" class="panel-sm">
+      <div id="lunch-timer" class="hidden">2:00</div>
+      <div class="hud-label">Score</div>
+      <div id="score">0</div>
+      <div class="hud-sub">Best combo <span id="best-combo">0</span></div>
+    </div>
+    <div id="popups"></div>
+    <div id="toast" class="hidden"></div>
+    <div id="balance" class="hidden"><div id="balance-mark"></div></div>
+    <div id="combo" class="hidden">
+      <div id="combo-chain"></div>
+      <div id="combo-points"><span id="combo-sum">0</span> <span class="x">x<span id="combo-mult">1</span></span></div>
+      <div id="combo-timer"><div id="combo-timer-fill"></div></div>
+    </div>
+    <div id="hud-speed" class="panel-sm">
+      <div class="hud-label">Speed <span id="speed-num">0</span> km/h</div>
+      <div id="speed-bar"><div id="speed-fill"></div></div>
+    </div>
+    <div id="hud-hint">H help · P pause · C camera</div>
+  </div>
+
+  <!-- ============================== HELP OVERLAY (H) ============================== -->
+  <div id="help" class="hidden">
+    <div class="card">
+      <h2>Controls</h2>
+      <div id="help-body"></div>
+      <p class="muted">Press <kbd>H</kbd> to close</p>
+    </div>
+  </div>
+
+  <!-- ============================== TITLE SCREEN ============================== -->
+  <div id="title" class="screen">
+    <div class="title-card">
+      <div class="logo"><span class="l1">Lunch Break</span><span class="l2">SKATE</span></div>
+      <p class="tagline">Free-roam the plaza. Flick tricks. Be back before the bell.</p>
+      <div class="menu-buttons">
+        <button data-act="play" class="primary">Play</button>
+        <button data-act="lunch">Lunch Session <small>2 min</small></button>
+        <button data-act="challenges">Challenges</button>
+        <button data-act="controls">Controls</button>
+        <button data-act="settings">Settings</button>
+      </div>
+      <p class="muted" id="title-best"></p>
+    </div>
+  </div>
+
+  <!-- ============================== MENU PANEL (pause, settings, etc.) ============================== -->
+  <div id="menu" class="screen hidden">
+    <div class="card" id="menu-card"></div>
+  </div>
+
+  <noscript>Lunch Break Skate needs JavaScript.</noscript>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

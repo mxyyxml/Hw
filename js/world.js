@@ -280,7 +280,7 @@ export class World {
     }
 
     // long flat rail (challenge rail)
-    this.rail([-10, 0.5, 18], [10, 0.5, 18], 'longrail');
+    this.rail([-15, 0.5, 18], [15, 0.5, 18], 'longrail');
 
     // ledges
     this.ledge({ x: -14, z: 2, w: 0.7, d: 8, h: 0.45 });
