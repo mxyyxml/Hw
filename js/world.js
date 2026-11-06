@@ -14,30 +14,57 @@
 // =============================================================================
 import * as THREE from 'three';
 import { CollisionWorld } from './physics.js';
+import { getTexture, TEX_SCALE } from './textures.js';
 
-// ---- colour palette ---------------------------------------------------------
+// ---- colour palette (natural, slightly muted tones) --------------------------
 const C = {
-  ground:   0xa9a59c, plaza: 0xd9cdb8, plazaDark: 0xc4b59c, grass: 0x86b46b,
-  concrete: 0xbdb7ab, concreteSide: 0x9c968b,
-  ledge:    0xe07a5f, ledgeSide: 0xb85d45,
-  pad:      0x81b29a, padSide: 0x5f8b75,
-  ramp:     0x4ea1d3, rampSide: 0x2f6f99,
-  wood:     0xd4a373, woodSide: 0xa47148,
-  metal:    0x3d405b, rail: 0xf2c14e, coping: 0xd0d0d0,
-  kicker:   0xf4a261, kickerSide: 0xc97c3f,
-  mega:     0xe76f51, megaSide: 0xb04f36,
-  street:   0x55575e, streetSide: 0x6d6f75, line: 0xf5f3ea,
-  bowl:     0x8ecae6, bowlDeck: 0xcfc6b2,
-  trunk:    0x7a5230, leaf: 0x4f8a3c, leaf2: 0x6aa84f,
-  bench:    0x9b5de5,
+  ground:   0x9a978f, plaza: 0xcbbfa8, plazaDark: 0xb9ab92, grass: 0x6f9a52,
+  concrete: 0xb4afa5, concreteSide: 0x958f85,
+  ledge:    0xa86450, ledgeSide: 0x8a503f,           // red granite ledges
+  pad:      0x9aa294, padSide: 0x7a8274,
+  ramp:     0x5d6166, rampSide: 0xc19a6b,           // grey skatelite top, plywood sides
+  wood:     0xc8a273, woodSide: 0x9c7650,
+  metal:    0x4a4e57, rail: 0xd9a93a, coping: 0xc8ccd0,
+  kicker:   0x6a5f57, kickerSide: 0xb58e60,
+  mega:     0x6b625a, megaSide: 0x8f6a44,
+  street:   0x4a4c51, streetSide: 0x8f8a82, line: 0xeeeae0,
+  bowl:     0xb7c2c6, bowlDeck: 0xc2b9a6,
+  trunk:    0x6b4a2e, leaf: 0x3f6f32, leaf2: 0x587f3f,
+  bench:    0x8a6a4a,
 };
-const BUILDING_COLORS = [0xf6bd60, 0xf7ede2, 0xf5cac3, 0x84a59d, 0xf28482, 0xa2d2ff, 0xcdb4db, 0xffd6a5];
+const BUILDING_COLORS = [0xc9b79c, 0xb5654f, 0xd8d2c4, 0x8c9a9e, 0xa86b4f, 0xcfc0a5, 0x9e8f7e, 0xbfae95];
+
+// Which procedural texture each colour uses (see textures.js). Unlisted = plain.
+const CAT = new Map();
+const setCat = (name, list) => list.forEach((h) => CAT.set(h, name));
+setCat('concrete', [C.ground, C.concrete, C.concreteSide, C.ledge, C.ledgeSide, C.pad, C.padSide, C.streetSide, C.bowl, 0xd6d0c4, 0xc9c2b4, 0xa7b3b8]);
+setCat('tiles', [C.plaza, C.plazaDark, C.bowlDeck, 0xcfc3ad, 0xe0d2c0]);
+setCat('asphalt', [C.street]);
+setCat('wood', [C.wood, C.woodSide, C.rampSide, C.kickerSide, C.megaSide, C.trunk, C.bench]);
+setCat('ramp', [C.ramp, C.kicker, C.mega, 0x8d9aa3]);
+setCat('grass', [C.grass, C.leaf, C.leaf2]);
+setCat('building', BUILDING_COLORS);
 
 // =============================================================================
-//  GeoBuilder — accumulates flat-shaded, vertex-coloured triangles
+//  GeoBuilder — accumulates flat-shaded, vertex-coloured, textured triangles,
+//  bucketed by texture category (one draw call per category).
 // =============================================================================
 class GeoBuilder {
-  constructor() { this.pos = []; this.nor = []; this.col = []; this._c = new THREE.Color(); }
+  constructor() { this.buckets = {}; this._c = new THREE.Color(); }
+  _bucket(cat) { return this.buckets[cat] || (this.buckets[cat] = { pos: [], nor: [], col: [], uv: [] }); }
+
+  // push one vertex: world-space planar UVs + fake ambient occlusion near the ground
+  _vert(B, cat, x, y, z, nx, ny, nz) {
+    const s = 1 / TEX_SCALE[cat];
+    const ax = Math.abs(nx), ay = Math.abs(ny), az = Math.abs(nz);
+    if (ay >= ax && ay >= az) B.uv.push(x * s, z * s);
+    else if (ax >= az) B.uv.push(z * s, y * s);
+    else B.uv.push(x * s, y * s);
+    let ao = 1;
+    if (ay < 0.6 && y > -0.05) ao = 0.6 + 0.4 * Math.min(1, Math.max(0, y) / 1.4);
+    B.pos.push(x, y, z); B.nor.push(nx, ny, nz);
+    B.col.push(this._c.r * ao, this._c.g * ao, this._c.b * ao);
+  }
 
   // a, b, c: [x,y,z]. hint: rough outward direction, fixes winding automatically
   tri(a, b, c, color, hint) {
@@ -50,12 +77,10 @@ class GeoBuilder {
     if (hint && nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) {
       const t = b; b = c; c = t; nx = -nx; ny = -ny; nz = -nz;
     }
+    const cat = CAT.get(color) || 'plain';
+    const B = this._bucket(cat);
     this._c.setHex(color);
-    for (const p of [a, b, c]) {
-      this.pos.push(p[0], p[1], p[2]);
-      this.nor.push(nx, ny, nz);
-      this.col.push(this._c.r, this._c.g, this._c.b);
-    }
+    for (const p of [a, b, c]) this._vert(B, cat, p[0], p[1], p[2], nx, ny, nz);
   }
   quad(a, b, c, d, color, hint) { this.tri(a, b, c, color, hint); this.tri(a, c, d, color, hint); }
 
@@ -95,21 +120,29 @@ class GeoBuilder {
     g.applyMatrix4(matrix);
     g.computeVertexNormals();
     const p = g.attributes.position.array, n = g.attributes.normal.array;
+    const cat = CAT.get(color) || 'plain';
+    const B = this._bucket(cat);
     this._c.setHex(color);
-    for (let i = 0; i < p.length; i += 3) {
-      this.pos.push(p[i], p[i + 1], p[i + 2]);
-      this.nor.push(n[i], n[i + 1], n[i + 2]);
-      this.col.push(this._c.r, this._c.g, this._c.b);
-    }
+    for (let i = 0; i < p.length; i += 3) this._vert(B, cat, p[i], p[i + 1], p[i + 2], n[i], n[i + 1], n[i + 2]);
   }
 
-  build(material) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
-    g.computeBoundingSphere();
-    return new THREE.Mesh(g, material);
+  // one mesh per texture category
+  build() {
+    const group = new THREE.Group();
+    for (const [cat, B] of Object.entries(this.buckets)) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(B.pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(B.nor, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(B.col, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(B.uv, 2));
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g);
+      mesh.userData.cat = cat;
+      mesh.receiveShadow = true;
+      mesh.castShadow = cat !== 'grass' && cat !== 'tiles';
+      group.add(mesh);
+    }
+    return group;
   }
 }
 
@@ -234,12 +267,26 @@ export class World {
     this._decor();
     this.col.linkRails();
 
-    // ---------------------------------------------------------------- mesh
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this.mesh = g.build(mat);
-    this.mesh.receiveShadow = true;
-    this.mesh.castShadow = true;
+    // ---------------------------------------------------------------- meshes
+    this.mesh = g.build();
     this.scene.add(this.mesh);
+    this.setQuality('low');
+  }
+
+  // Low = cheap Lambert shading. High = physically based (MeshStandardMaterial)
+  // with sharper (anisotropic) textures. Materials are cached per level.
+  setQuality(level) {
+    this._mats = this._mats || {};
+    for (const mesh of this.mesh.children) {
+      const cat = mesh.userData.cat, key = level + cat;
+      if (!this._mats[key]) {
+        const map = getTexture(cat, level === 'high' ? 8 : 1);
+        this._mats[key] = level === 'high'
+          ? new THREE.MeshStandardMaterial({ vertexColors: true, map, roughness: cat === 'plain' ? 0.45 : 0.92, metalness: cat === 'plain' ? 0.35 : 0 })
+          : new THREE.MeshLambertMaterial({ vertexColors: true, map });
+      }
+      mesh.material = this._mats[key];
+    }
   }
 
   // ---------------------------------------------------------------- bowl (west)
@@ -259,7 +306,7 @@ export class World {
         const a = ring((k / K) * Math.PI / 2), c = ring(((k + 1) / K) * Math.PI / 2);
         const tm = (t0 + t1) / 2;
         const hint = [-Math.cos(tm), 0.6, -Math.sin(tm)];
-        g.quad(P(a.r, a.y, t0), P(a.r, a.y, t1), P(c.r, c.y, t1), P(c.r, c.y, t0), k % 3 === 2 ? 0x7dbbd8 : C.bowl, hint);
+        g.quad(P(a.r, a.y, t0), P(a.r, a.y, t1), P(c.r, c.y, t1), P(c.r, c.y, t0), k % 3 === 2 ? 0xa7b3b8 : C.bowl, hint);
       }
       // deck between the round rim and the square hole in the ground
       const sq0 = SQ / Math.max(Math.abs(Math.cos(t0)), Math.abs(Math.sin(t0)));
@@ -310,11 +357,11 @@ export class World {
     this.box({ x: 31.5, z: 24, w: 4, d: 6, h: 0.9, tag: 'gapB' }, C.concrete, C.concreteSide);
     this.wedge({ x: 35.5, z: 24, w: 4, d: 6, h0: 0.9, h1: 0, yaw: H, tag: 'gapB' }, C.ramp, C.rampSide);
     this.col.addZone({ x: 33.5, z: 24, w: 8, d: 6, tag: 'gapB' });
-    this.patch(26, 21, 29.5, 27, 0xe9c46a, 0.016); // paint in the gap
+    this.patch(26, 21, 29.5, 27, 0xd9b45a, 0.016); // paint in the gap
 
     // benches (grindable)
     for (const [x, z, yaw] of [[-27, 8, 0], [27, -8, 0], [-10, -22, H], [10, 30, H]]) {
-      this.ledge({ x, z, w: 0.6, d: 2.4, h: 0.45, yaw, tag: 'bench' }, C.bench, 0x7b3fc4, 'bench');
+      this.ledge({ x, z, w: 0.6, d: 2.4, h: 0.45, yaw, tag: 'bench' }, C.bench, C.metal, 'bench');
     }
   }
 
@@ -380,7 +427,7 @@ export class World {
         const x = cx + sgn * (flat / 2 + L + 0.02);
         this.rail([x, lipW + 0.02, cz - width / 2 + 0.2], [x, lipW + 0.02, cz + width / 2 - 0.2], 'coping', C.coping, false);
       }
-      this.patch(cx - flat / 2, cz - width / 2, cx + flat / 2, cz + width / 2, 0x9fb7c9);
+      this.patch(cx - flat / 2, cz - width / 2, cx + flat / 2, cz + width / 2, 0x8d9aa3);
     }
     // Mini-ramp
     {
@@ -458,14 +505,10 @@ export class World {
     for (let x = b.minX; x < b.maxX; x += 22) { ring.push([x + 11, b.minZ - 9]); ring.push([x + 11, b.maxZ + 9]); }
     for (let z = b.minZ; z < b.maxZ; z += 22) { ring.push([b.minX - 9, z + 11]); ring.push([b.maxX + 9, z + 11]); }
     for (const [x, z] of ring) {
-      const h = 8 + ((k * 7919) % 17);
+      const h = 8 + 4 * ((k * 7919) % 5); // whole floors (texture = 4 m per floor)
       const col = BUILDING_COLORS[k % BUILDING_COLORS.length];
       this.geo.prism({ x, z, w: 18, d: 16, yaw: 0 }, [h, h, h, h], 0, col, col);
-      // window strips
-      for (let y = 2.5; y < h - 1; y += 3) {
-        this.geo.prism({ x, z, w: 18.1, d: 16.1 }, [y + 0.9, y + 0.9, y + 0.9, y + 0.9], y, 0x3a506b, 0x3a506b);
-      }
-      this.geo.prism({ x, z, w: 18.3, d: 16.3 }, [h + 0.4, h + 0.4, h + 0.4, h + 0.4], h, 0x6c757d, 0x6c757d);
+      this.geo.prism({ x, z, w: 18.3, d: 16.3 }, [h + 0.4, h + 0.4, h + 0.4, h + 0.4], h, 0x6c6f72, 0x6c6f72); // roof edge
       k++;
     }
     // trees (trunk is solid, crown is decoration)
@@ -473,8 +516,12 @@ export class World {
       [-20, 60], [20, 60], [-20, 100], [20, 100], [90, -40], [95, 60], [40, 90], [-60, 90], [-25, -70], [10, -75], [50, -70]];
     for (const [x, z] of trees) {
       this.box({ x, z, w: 0.5, d: 0.5, h: 3, tag: 'tree' }, C.trunk, C.trunk);
-      const crown = new THREE.ConeGeometry(1.8, 3.6, 7);
-      this.geo.addGeometry(crown, new THREE.Matrix4().makeTranslation(x, 4.4, z), (x + z) % 2 ? C.leaf : C.leaf2);
+      // leafy crown made of a few low-poly blobs
+      const blobs = [[0, 4.2, 0, 1.9], [0.9, 3.6, 0.4, 1.3], [-0.8, 3.7, -0.5, 1.3], [0.1, 5.3, 0.2, 1.2]];
+      blobs.forEach(([bx, by, bz, r], i) => {
+        const crown = new THREE.IcosahedronGeometry(r, 0);
+        this.geo.addGeometry(crown, new THREE.Matrix4().makeTranslation(x + bx, by, z + bz), (i + x) % 2 ? C.leaf : C.leaf2);
+      });
     }
     // lamp posts
     for (const [x, z] of [[-30, 0], [30, 0], [-30, 30], [30, 30], [12, -30], [-50, -10], [63, -10], [63, 42]]) {

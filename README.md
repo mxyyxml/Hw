@@ -10,6 +10,15 @@ loaded from a CDN. No build step, no install.
 
 ---
 
+## ▶️ Easiest way: double-click `play.html`
+
+`play.html` is the whole game in **one file** (three.js and all the code are inside it).
+Download the repo (**Code → Download ZIP**), unzip it, and double-click `play.html`.
+It works offline and on school networks that block CDNs. Chrome is recommended.
+
+(`play.html` is generated from the source in `js/` by `node tools/build-play.mjs` —
+re-run that after editing the code, see the script for the two npm packages it needs.)
+
 ## ▶️ Play it on GitHub Pages
 
 1. Push this repository to GitHub (the files must be on the `main` branch).
@@ -17,7 +26,7 @@ loaded from a CDN. No build step, no install.
 3. Under **Build and deployment** → **Source** choose **Deploy from a branch**.
 4. Pick branch **`main`** and folder **`/ (root)`**, then click **Save**.
 5. Wait ~1 minute. Your game will be live at
-   `https://<your-username>.github.io/<repo-name>/`
+   `https://<your-username>.github.io/<repo-name>/` (or `/play.html` for the single-file version)
 
 > Opening `index.html` straight from your hard drive (`file://`) won't work in most browsers
 > because ES modules need a web server. GitHub Pages is the easiest option; locally you can
@@ -93,6 +102,9 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | `js/audio.js` | Web Audio sound effects |
 | `js/ui.js` | HUD, pop-ups, menus |
 | `js/storage.js` | Safe localStorage helper |
+| `js/textures.js` | Procedural canvas textures (concrete, tiles, asphalt, wood, windows…) |
+| `play.html` | Built single-file version of the whole game |
+| `tools/build-play.mjs` | Builds `play.html` |
 
 ## Originality
 

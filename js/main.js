@@ -16,6 +16,30 @@ import { Audio } from './audio.js';
 import { UI } from './ui.js';
 import { Storage } from './storage.js';
 
+// Gradient sky dome (vertex colours, no texture) that follows the camera.
+function makeSky(horizonHex) {
+  const geo = new THREE.SphereGeometry(380, 24, 12);
+  const zenith = new THREE.Color(0x3f7fc4), horizon = new THREE.Color(horizonHex), ground = new THREE.Color(0xb8b0a0);
+  const pos = geo.attributes.position, cols = [], c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const h = pos.getY(i) / 380;
+    if (h >= 0) c.copy(horizon).lerp(zenith, Math.pow(h, 0.6));
+    else c.copy(horizon).lerp(ground, Math.min(1, -h * 4));
+    cols.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+  const sky = new THREE.Mesh(geo, mat);
+  sky.renderOrder = -1;
+  // a soft sun glow
+  const sunGeo = new THREE.CircleGeometry(14, 20);
+  const sun = new THREE.Mesh(sunGeo, new THREE.MeshBasicMaterial({ color: 0xfff6dc, fog: false, transparent: true, opacity: 0.9, depthWrite: false }));
+  sun.position.set(150, 260, 100).setLength(360);
+  sun.lookAt(0, 0, 0);
+  sky.add(sun);
+  return sky;
+}
+
 class Game {
   constructor() {
     // ---------------------------------------------------------------- settings & saves
@@ -26,15 +50,21 @@ class Game {
     // ---------------------------------------------------------------- renderer & scene
     this.canvas = document.getElementById('game');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
+    // filmic tone mapping = softer highlights, more natural colour
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x9fd3f0);
-    this.scene.fog = new THREE.Fog(0x9fd3f0, 60, GRAPHICS.low.fogFar);
+    const HORIZON = 0xcfe0ea;
+    this.scene.background = new THREE.Color(HORIZON);
+    this.scene.fog = new THREE.Fog(HORIZON, 70, GRAPHICS.low.fogFar);
+    this.sky = makeSky(HORIZON);
+    this.scene.add(this.sky);
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, GRAPHICS.low.drawDistance);
 
     // simple, cheap lighting: sky/ground hemisphere + one sun
-    this.hemi = new THREE.HemisphereLight(0xdff3ff, 0x8a7f6a, 1.6);
+    this.hemi = new THREE.HemisphereLight(0xd6ebff, 0x7d7260, 1.9);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xfff1d6, 2.0);
+    this.sun = new THREE.DirectionalLight(0xffe9c9, 2.6);
     this.sun.position.set(30, 60, 20);
     this.scene.add(this.sun, this.sun.target);
 
@@ -85,11 +115,13 @@ class Game {
     const g = GRAPHICS[level] || GRAPHICS.low;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, g.pixelRatio));
     this.renderer.shadowMap.enabled = g.shadows;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.world.setQuality(level);
     this.sun.castShadow = g.shadows;
     if (g.shadows) {
       this.sun.shadow.mapSize.set(g.shadowMapSize, g.shadowMapSize);
       const c = this.sun.shadow.camera;
-      c.left = -25; c.right = 25; c.top = 25; c.bottom = -25; c.near = 1; c.far = 150;
+      c.left = -35; c.right = 35; c.top = 35; c.bottom = -35; c.near = 1; c.far = 160;
       c.updateProjectionMatrix();
       this.sun.shadow.bias = -0.0008;
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
@@ -297,6 +329,7 @@ class Game {
     // keep the shadow camera centred on the player
     this.sun.position.set(p.pos.x + 30, p.pos.y + 60, p.pos.z + 20);
     this.sun.target.position.copy(p.pos);
+    this.sky.position.copy(this.camera.position);
   }
 
   // slow orbit over the plaza behind the title screen
@@ -305,6 +338,7 @@ class Game {
     const a = this.titleAngle;
     this.camera.position.set(8 + Math.cos(a) * 34, 13, 4 + Math.sin(a) * 34);
     this.camera.lookAt(8, 0, 2);
+    this.sky.position.copy(this.camera.position);
     this.player.sync(dt);
   }
 }

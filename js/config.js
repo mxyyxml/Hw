@@ -201,8 +201,8 @@ export const CAMERA = {
 //  GRAPHICS presets (toggle in Settings)
 // -----------------------------------------------------------------------------
 export const GRAPHICS = {
-  low:  { pixelRatio: 1,   shadows: false, fogFar: 170, drawDistance: 260 },
-  high: { pixelRatio: 2,   shadows: true,  fogFar: 260, drawDistance: 400, shadowMapSize: 1024 },
+  low:  { pixelRatio: 1,   shadows: false, fogFar: 200, drawDistance: 420 },
+  high: { pixelRatio: 2,   shadows: true,  fogFar: 300, drawDistance: 420, shadowMapSize: 2048 },
 };
 
 // -----------------------------------------------------------------------------
