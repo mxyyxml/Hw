@@ -2,13 +2,16 @@
 //  player.js — the skater controller (physics + state machine).
 //  States:
 //    ride  : wheels on the ground (steer, push, brake, crouch, pop)
-//    air   : airborne (spin, tricks, grabs) → land or bail
+//    air   : airborne (spin, tricks, grabs) → land, grind or bail
+//    grind : locked onto a rail / ledge edge
+//    (manual is a sub-mode of ride: this.manual != null)
 //    bail  : tumble, slow-mo, then respawn at the last stable spot
 //    walk  : off the board (E)
 //  All tuning numbers come from config.js.
 // =============================================================================
 import * as THREE from 'three';
-import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE } from './config.js';
+import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE,
+  GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
 
 const TAU = Math.PI * 2;
@@ -43,6 +46,8 @@ export class Player {
     this.time = 0;           // game time (affected by slow-mo)
 
     this.air = null;
+    this.grind = null;
+    this.manual = null;
     this.bailInfo = null;
     this.walkVy = 0; this.walkSpeed = 0;
 
@@ -66,7 +71,7 @@ export class Player {
     this.heading = spot.heading; this.fakie = false;
     this.speed = 0; this.vel.set(0, 0, 0);
     this.state = 'ride';
-    this.air = null; this.bailInfo = null;
+    this.air = null; this.bailInfo = null; this.grind = null; this.manual = null;
     this.crouching = false; this.wantPop = null; this.powersliding = false;
     this.lastSafe = { x: this.pos.x, y: this.pos.y, z: this.pos.z, heading: this.heading };
     this.timeScale = 1;
@@ -83,6 +88,7 @@ export class Player {
 
   modelYaw() {
     if (this.state === 'air' && this.air) return this.air.yaw;
+    // (grind: heading follows the rail; sideways slides are drawn by the skater)
     return this.heading + (this.fakie ? Math.PI : 0);
   }
 
@@ -96,7 +102,7 @@ export class Player {
     if (inp.pressed.respawn && this.state !== 'bail') this.respawnLast();
     if (inp.pressed.setSpot) this.emit('spotSet', { ok: this.setCustomSpot() });
 
-    const canPop = this.state === 'ride';
+    const canPop = this.state === 'ride' || this.state === 'grind';
     if (inp.pressed.pop) { this.spaceStart = realNow; this.crouching = true; }
     if (!inp.held.pop && this.crouching && inp.released.pop) {
       this.crouching = false;
@@ -107,7 +113,15 @@ export class Player {
     }
     if (!inp.held.pop) this.crouching = false;
 
-    if (this.state === 'ride' && !this.crouching) {
+    // L = manual on / off (L + ↑ = nose manual); in the air it queues a manual for landing
+    if (inp.pressed.manual) {
+      if (this.state === 'ride') {
+        if (this.manual) this.endManual();
+        else if (this.speed > 0.8) this.startManual(inp.held.up);
+      } else if (this.state === 'air') this.air.manualQueued = true;
+    }
+
+    if (this.state === 'ride' && !this.crouching && !this.manual) {
       if (inp.pressed.up && realNow - this.lastPush > P.pushCooldown) this.wantPush = true;
       else if (inp.held.up && realNow - this.lastPush > P.pushHoldInterval) this.wantPush = true;
       if (this.wantPush) this.lastPush = realNow;
@@ -120,11 +134,13 @@ export class Player {
     if (this.pushPhase >= 0) { this.pushPhase += dt * 2.2; if (this.pushPhase >= 1) this.pushPhase = -1; }
     if (this.wantPop) {
       const w = this.wantPop; this.wantPop = null;
-      if (this.state === 'ride') this.pop(w);
+      if (this.state === 'ride') { if (this.manual) this.endManual(); this.pop(w); }
+      else if (this.state === 'grind') this.popFromGrind(w);
     }
     switch (this.state) {
       case 'ride': this.updateRide(dt); break;
       case 'air': this.updateAir(dt); break;
+      case 'grind': this.updateGrind(dt); break;
       case 'bail': this.updateBail(dt); break;
       case 'walk': this.updateWalk(dt); break;
     }
@@ -155,6 +171,9 @@ export class Player {
     const ln = lx * n.x + lz * n.z;
     if (n.y < 0.999) this.heading += clamp(P.gravity * ln * n.y / Math.max(this.speed, 1.5), -4, 4) * dt;
 
+    // --- manual balance (W / S lean)
+    if (this.manual) { if (this.updateManual(dt)) return; }
+
     // --- push / brake / powerslide
     if (this.wantPush) {
       this.wantPush = false;
@@ -164,7 +183,7 @@ export class Player {
         this.emit('push');
       }
     }
-    const braking = inp.held.down && !this.crouching;
+    const braking = inp.held.down && !this.crouching && !this.manual;
     const wasSliding = this.powersliding;
     this.powersliding = braking && (this.speed > P.powerslideMinSpeed || (wasSliding && this.speed > 1.5));
     if (braking) this.speed -= (this.powersliding ? P.powerslideDecel : P.brakeDecel) * dt;
@@ -185,7 +204,7 @@ export class Player {
       this._tangent(this.heading, n, f);
     }
     // pumping: hold W on a ramp transition while dropping in to gain speed
-    if (inp.held.up && !this.crouching && n.y < 0.985 && f.y < -0.05) this.speed += P.pumpAccel * dt;
+    if (inp.held.up && !this.crouching && !this.manual && n.y < 0.985 && f.y < -0.05) this.speed += P.pumpAccel * dt;
     this.speed = Math.min(this.speed, P.maxSpeed);
     this.vel.copy(f).multiplyScalar(this.speed);
 
@@ -281,12 +300,13 @@ export class Player {
       this.pos.x -= vx * 0.06; this.pos.z -= vz * 0.06;
     }
     if (this.powersliding) { this.powersliding = false; this.slideTime = 0; }
+    if (this.manual) this.endManual();
     this.state = 'air';
     this.air = {
       yaw: this.modelYaw(), spin: 0, time: 0,
       takeoffTag: this.groundTag, takeoffY: this.pos.y, maxY: this.pos.y, vert: wasVert,
       tricks: [], trick: null, flipAngle: 0, shuvAngle: 0,
-      grab: null, grabTime: 0,
+      grab: null, grabTime: 0, manualQueued: false,
     };
   }
 
@@ -299,7 +319,7 @@ export class Player {
     this.vel.x *= drag; this.vel.z *= drag;
 
     // spin with A/D (not while Shift is held — that's for shuvits)
-    if (!inp.held.shift) {
+    if (!inp.held.shift && !inp.held.grind) { // K + ←/→ picks a slide instead of spinning
       // a direction used to pick a grab doesn't also spin you until released
       const lock = A.grab ? A.grab.lockDir : null;
       if (lock && !inp.held[lock] && A.grab) A.grab.lockDir = null;
@@ -392,7 +412,9 @@ export class Player {
     this.air = null;
     // landing with Space still held → keep the crouch for the next pop
     if (this.input.held.pop) { this.crouching = true; this.spaceStart = performance.now() / 1000; }
+    const queued = A.manualQueued || this.input.held.manual;
     this.emit('land', info);
+    if (queued && this.speed > 0.8) this.startManual(this.input.held.up);
   }
 
   // returns a bail reason string, or null if the landing is clean
@@ -443,13 +465,121 @@ export class Player {
     };
   }
 
+  // ------------------------------------------------------------------ GRIND
+  // called from updateAir with the next position; returns true if we snapped on
+  checkRails(nx, ny, nz) {
+    const A = this.air;
+    if (this.vel.y > 1.5 || A.time < 0.06) return false;
+    const hit = this.col.findRail({ x: nx, y: ny, z: nz }, this.vel, this.time, GRIND);
+    if (!hit) return false;
+    // an unfinished flip means you land on the rail with the board upside down
+    if (A.trick) {
+      if (A.trick.t / A.trick.def.time < P.flipCompleteThreshold) { this.bail('Didn\'t finish the ' + A.trick.def.name + '!'); return true; }
+      A.trick = null; A.flipAngle = 0; A.shuvAngle = 0;
+    }
+    const r = hit.rail;
+    let s = this.vel.x * r.dx + this.vel.y * r.dy + this.vel.z * r.dz;
+    if (Math.abs(s) < 1) s = (s < 0 ? -1 : 1) * 1;
+    const def = this.input.held.grind ? (GRINDS[this.input.heldDir()] || GRINDS.none) : GRINDS.auto;
+    // record the air's tricks as "landed" onto the rail
+    const fake = { tag: r.tag, nx: 0, ny: 1, nz: 0 };
+    this.pos.set(r.ax + r.dx * hit.t, r.ay + r.dy * hit.t, r.az + r.dz * hit.t);
+    const info = this.landInfo(fake, 0);
+    info.onRail = true;
+    this.state = 'grind';
+    this.air = null;
+    this.grind = { rail: r, t: hit.t, s, def, time: 0 };
+    this.heading = Math.atan2(r.dx * s, r.dz * s);
+    this._updateGrindYaw();
+    this.emit('land', info);
+    this.emit('grindStart', { name: def.name, tag: r.tag });
+    return true;
+  }
+
+  _updateGrindYaw() {
+    const G = this.grind, r = G.rail;
+    const h = Math.hypot(r.dx, r.dz);
+    if (h > 0.05) this.heading = Math.atan2(r.dx * Math.sign(G.s), r.dz * Math.sign(G.s));
+  }
+
+  updateGrind(dt) {
+    const G = this.grind, r = G.rail;
+    G.time += dt;
+    G.s += -P.gravity * r.dy * dt;                 // sloped rails speed you up / slow you down
+    G.s *= 1 - GRIND.friction * dt;
+    G.t += G.s * dt;
+    // flow onto a connected rail segment
+    if (G.t > r.len && r.next) { G.t -= r.len; G.rail = r.next; return this.updateGrind(0); }
+    if (G.t < 0 && r.prev) { G.rail = r.prev; G.t += r.prev.len; return this.updateGrind(0); }
+    this._updateGrindYaw();
+    this.vel.set(r.dx * G.s, r.dy * G.s, r.dz * G.s);
+    this.pos.set(r.ax + r.dx * G.t, r.ay + r.dy * G.t, r.az + r.dz * G.t);
+    this.normal.set(0, 1, 0);
+    if (G.t < 0 || G.t > r.len || Math.abs(G.s) < GRIND.minSpeed) this.exitGrind(false);
+  }
+
+  exitGrind(popped) {
+    const G = this.grind;
+    G.rail.lastLeft = this.time;
+    const pts = Math.round(GRIND_POINTS.base + GRIND_POINTS.perSecond * G.time);
+    this.grind = null;
+    this.groundTag = G.rail.tag; this.groundVert = false;
+    if (!popped) this.vel.y += GRIND.exitPop;
+    this.state = 'air';   // so modelYaw() is computed for the air
+    this.launch(popped);
+    this.emit('grindEnd', { name: G.def.name, base: G.def.name, time: G.time, tag: G.rail.tag, points: pts });
+  }
+
+  popFromGrind(popInfo) {
+    const t = clamp(popInfo.hold / P.popChargeTime, 0, 1);
+    this.vel.y += lerp(P.popMin, P.popMax, t);
+    this.exitGrind(true);
+    this.emit('pop', { strength: t });
+    this.startPopTrick(popInfo);
+  }
+
+  // ------------------------------------------------------------------ MANUAL
+  startManual(nose) {
+    if (this.manual || this.state !== 'ride') return;
+    this.powersliding = false;
+    this.manual = { nose: !!nose, def: nose ? MANUALS.nose : MANUALS.normal, b: (Math.random() - 0.5) * 0.1, bv: 0, time: 0, noise: 0, noiseT: 0 };
+    this.emit('manualStart', { name: this.manual.def.name });
+  }
+
+  // returns true if the manual made you bail
+  updateManual(dt) {
+    const M = this.manual, inp = this.input;
+    M.time += dt;
+    M.noiseT -= dt;
+    if (M.noiseT <= 0) { M.noise = (Math.random() * 2 - 1); M.noiseT = 0.3 + Math.random() * 0.4; }
+    const inst = MB.instability + MB.growth * M.time;
+    const lean = (inp.held.up ? 1 : 0) - (inp.held.down ? 1 : 0); // W = weight forward
+    M.bv += (inst * M.b + M.noise * MB.drift - lean * MB.control) * dt;
+    M.bv *= 1 - MB.damping * dt;
+    M.b += M.bv * dt;
+    if (Math.abs(M.b) >= 1) { this.bail('Lost your balance!'); return true; }
+    if (this.speed < 0.5) this.endManual();
+    return false;
+  }
+
+  endManual() {
+    const M = this.manual;
+    if (!M) return;
+    this.manual = null;
+    const pts = Math.round(MANUAL_POINTS.base + MANUAL_POINTS.perSecond * M.time);
+    this.emit('manualEnd', { name: M.def.name, base: M.def.name, time: M.time, points: pts, counts: M.time >= MANUAL_POINTS.minTime });
+  }
+
+  // true while a combo should stay "open" (in the air, grinding, manualling)
+  isHoldingCombo() { return this.state === 'air' || this.state === 'grind' || !!this.manual; }
+
   // ------------------------------------------------------------------ BAIL
   bail(reason) {
     if (this.state === 'bail') return;
     this.state = 'bail';
     this.crouching = false; this.powersliding = false;
     this.bailInfo = { reason, start: performance.now() / 1000, t: 0, vx: this.vel.x, vy: Math.max(this.vel.y, 0), vz: this.vel.z, yaw: this.modelYaw() };
-    this.air = null;
+    this.air = null; this.grind = null; this.manual = null;
     this.emit('bail', { reason });
   }
 
@@ -506,10 +636,11 @@ export class Player {
     let yaw = this.modelYaw();
     const up = this._up || (this._up = new THREE.Vector3(0, 1, 0));
     let n = this.normal, rate = 14;
-    if (this.state === 'air') { n = up; rate = 3; }
+    if (this.state === 'air' || this.state === 'grind') { n = up; rate = this.state === 'grind' ? 10 : 3; }
     if (this.state === 'walk') n = up;
     if (this.state === 'bail') yaw = this.bailInfo.yaw;
     if (this.state === 'ride' && this.powersliding) yaw += (this.fakie ? -1 : 1) * 1.25;
+    if (this.state === 'grind' && this.grind.def.sideways) yaw += (this.grind.def.name === 'Lipslide' ? -1 : 1) * Math.PI / 2;
     sk.setTransform(this.pos, yaw, n, dt, rate);
     const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
     sk.setBlob(this.pos.x, g.h, this.pos.z, this.pos.y - g.h);
@@ -519,7 +650,7 @@ export class Player {
   animState() {
     const A = this.air;
     return {
-      mode: this.state,
+      mode: this.manual ? 'manual' : this.state,
       crouch: this.crouching ? 1 : (this.powersliding ? 0.5 : 0),
       lean: this.state === 'ride' ? this.lean : 0,
       pushPhase: this.pushPhase,
@@ -527,7 +658,8 @@ export class Player {
       shuvAngle: A ? A.shuvAngle : 0,
       boardLift: A ? (A.trick ? 0.22 : 0.12) * Math.min(1, A.time * 6) : 0,
       grab: !!(A && A.grab), grabHand: A && A.grab ? A.grab.hand : 'front',
-      sideways: false, manualPitch: 0,
+      sideways: !!(this.grind && this.grind.def.sideways),
+      manualPitch: this.grind ? -this.grind.def.pitch : (this.manual ? (this.manual.nose ? -0.3 : 0.3) + this.manual.b * 0.12 : 0),
       bailTime: this.bailInfo ? this.bailInfo.t : 0,
       boardSlide: this.bailInfo ? Math.min(3, this.bailInfo.t * 4) : 0,
       walkSpeed: this.walkSpeed,

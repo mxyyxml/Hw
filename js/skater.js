@@ -144,7 +144,7 @@ export class Skater {
     a.armsOut = damp(a.armsOut, (mode === 'grind' || mode === 'manual') ? 1 : 0.35, 6, dt);
 
     // ---------------- board flip / shuv / slide
-    this.board.rotation.y = (st.shuvAngle || 0) + a.slide * Math.PI / 2;
+    this.board.rotation.y = (st.shuvAngle || 0); // (slides rotate the whole skater, see Player.sync)
     this.board.rotation.z = st.flipAngle || 0;
     this.board.position.y = DECK_Y - 0.012 + (st.boardLift || 0);
 

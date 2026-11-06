@@ -232,6 +232,7 @@ export class World {
     this._megaRamp();
     this._street();
     this._decor();
+    this.col.linkRails();
 
     // ---------------------------------------------------------------- mesh
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -349,13 +350,13 @@ export class World {
     }
     // bank up to the platform from behind
     this.wedge({ x: xc, z: zTop - PD - 3.5, w: PW, d: 7, h0: 0, h1: H, tag: tag + '_bank' }, C.ramp, C.rampSide);
-    // handrails following the nosing line, 0.7 m above it
+    // handrails following the nosing line, 0.6 m above it
     const slope = stepH / stepD;
     const z0 = zTop - 0.3, z1 = zTop + run + 0.35;
     for (const sgn of rails) {
       const rx = xc + sgn * (W / 2 - 0.6);
-      const y = (z) => H + 0.7 - Math.max(0, z - zTop) * slope;
-      this.rail([rx, H + 0.7, z0 - 0.8], [rx, y(zTop), zTop], 'handrail_flat');
+      const y = (z) => H + 0.6 - Math.max(0, z - zTop) * slope;
+      this.rail([rx, H + 0.6, z0 - 0.8], [rx, y(zTop), zTop], 'handrail_flat');
       this.rail([rx, y(zTop), zTop], [rx, y(z1), z1], 'handrail');
     }
     // landing zone for gap detection

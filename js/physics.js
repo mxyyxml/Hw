@@ -53,6 +53,18 @@ export class CollisionWorld {
     return rail;
   }
 
+  // Connect rails whose ends touch (e.g. the flat top of a handrail → its slope)
+  // so a grind flows from one segment into the next.
+  linkRails() {
+    const near = (x1, y1, z1, x2, y2, z2) => Math.hypot(x1 - x2, y1 - y2, z1 - z2) < 0.08;
+    for (const r of this.rails) {
+      const bx = r.ax + r.dx * r.len, by = r.ay + r.dy * r.len, bz = r.az + r.dz * r.len;
+      for (const o of this.rails) {
+        if (o !== r && near(bx, by, bz, o.ax, o.ay, o.az)) { r.next = o; o.prev = r; }
+      }
+    }
+  }
+
   // ---- local coordinates of a world point inside a footprint -------------------
   // returns local x,z in this._lx / this._lz
   _toLocal(r, x, z) {
