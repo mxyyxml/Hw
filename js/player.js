@@ -8,7 +8,8 @@
 //  All tuning numbers come from config.js.
 // =============================================================================
 import * as THREE from 'three';
-import { PHYSICS as P } from './config.js';
+import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE } from './config.js';
+import { resolveFlick, spinLabel } from './tricks.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -168,7 +169,10 @@ export class Player {
     this.powersliding = braking && (this.speed > P.powerslideMinSpeed || (wasSliding && this.speed > 1.5));
     if (braking) this.speed -= (this.powersliding ? P.powerslideDecel : P.brakeDecel) * dt;
     if (this.powersliding) this.slideTime += dt;
-    else if (wasSliding) { this.emit('powerslideEnd', { time: this.slideTime }); this.slideTime = 0; }
+    else if (wasSliding) {
+      if (this.slideTime >= POWERSLIDE.minTime) this.emit('powerslide', { name: POWERSLIDE.name, points: POWERSLIDE.points, time: this.slideTime });
+      this.slideTime = 0;
+    }
 
     // --- rolling resistance (never reverses you)
     this.speed = Math.max(0, this.speed - (this.speed * P.rollFriction + P.rollDrag) * dt);
@@ -252,9 +256,18 @@ export class Player {
     this.startPopTrick(popInfo);
   }
 
-  // hook for tricks (filled in by the trick stage)
+  // Flick input → trick. The trick is "performed" now (board starts flipping)
+  // and only counts if you land it.
   startPopTrick(popInfo) {
-    this.air.tricks.push({ name: 'Ollie', points: 100 });
+    const def = resolveFlick(popInfo.dirs);
+    this.startAirTrick(def);
+  }
+
+  startAirTrick(def) {
+    const A = this.air;
+    A.tricks.push({ name: def.name, base: def.name, points: def.points });
+    if (def.time > 0) A.trick = { def, t: 0 };
+    this.emit('trick', { name: def.name });
   }
 
   launch(popped) {
@@ -287,7 +300,11 @@ export class Player {
 
     // spin with A/D (not while Shift is held — that's for shuvits)
     if (!inp.held.shift) {
-      const spin = ((inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0)) * P.airSpinRate * dt;
+      // a direction used to pick a grab doesn't also spin you until released
+      const lock = A.grab ? A.grab.lockDir : null;
+      if (lock && !inp.held[lock] && A.grab) A.grab.lockDir = null;
+      const l = inp.held.left && lock !== 'left', r = inp.held.right && lock !== 'right';
+      const spin = ((l ? 1 : 0) - (r ? 1 : 0)) * P.airSpinRate * dt;
       A.yaw += spin; A.spin += spin;
     }
     this.updateAirTricks(dt);
@@ -307,7 +324,43 @@ export class Player {
     if (ny > A.maxY) A.maxY = ny;
   }
 
-  updateAirTricks(dt) { /* flip & grab animation — trick stage */ }
+  updateAirTricks(dt) {
+    const A = this.air, inp = this.input;
+    // --- board rotation of the current flip / shuvit
+    if (A.trick) {
+      A.trick.t += dt;
+      const p = Math.min(1, A.trick.t / A.trick.def.time);
+      const e = 1 - (1 - p) * (1 - p) * 0.35 - 0.65 * (1 - p); // slightly eased
+      A.flipAngle = A.trick.def.flips * TAU * e;
+      A.shuvAngle = A.trick.def.shuv * Math.PI * e;
+      if (p >= 1) { A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; }
+    }
+    // --- Shift + ← / → = shuvit (one at a time, not while grabbing)
+    if (!A.trick && !A.grab && inp.held.shift && (inp.pressed.left || inp.pressed.right)) {
+      this.startAirTrick(inp.pressed.left ? SHUVITS.left : SHUVITS.right);
+    }
+    // --- J = grab (direction held picks which grab)
+    if (inp.pressed.grab && !A.grab && !A.trick) {
+      const dir = inp.heldDir();
+      const def = GRABS[dir] || GRABS.none;
+      A.grab = { def, time: 0, hand: dir === 'down' || dir === 'right' ? 'back' : 'front', lockDir: dir === 'left' || dir === 'right' ? dir : null };
+      this.emit('grabStart', { name: def.name });
+    }
+    if (A.grab) {
+      A.grab.time += dt;
+      if (!inp.held.grab) this.endGrab();
+    }
+  }
+
+  endGrab() {
+    const A = this.air, G = A.grab;
+    if (!G) return;
+    A.grab = null;
+    if (G.time >= GRAB_POINTS.minTime) {
+      A.tricks.push({ name: G.def.name, base: G.def.name, points: Math.round(GRAB_POINTS.base + GRAB_POINTS.perSecond * G.time) });
+      this.emit('trick', { name: G.def.name, grab: true, time: G.time });
+    }
+  }
 
   // ------------------------------------------------------------------ LANDING
   land(g) {
@@ -346,6 +399,12 @@ export class Player {
   landingProblem(impact, vtx, vtz) {
     const A = this.air;
     if (impact > P.maxLandingImpact) return 'Too much impact!';
+    if (A.trick) {
+      const p = A.trick.t / A.trick.def.time;
+      if (p < P.flipCompleteThreshold) return 'Didn\'t finish the ' + A.trick.def.name + '!';
+      A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; // close enough — snap it
+    }
+    if (A.grab && P.bailIfGrabbingOnLand) return 'Still grabbing!';
     const vth = Math.hypot(vtx, vtz);
     if (vth > 0.8) {
       const travel = Math.atan2(vtx, vtz);
@@ -358,9 +417,28 @@ export class Player {
 
   landInfo(g, impact) {
     const A = this.air;
+    if (A.grab) this.endGrab();
+    const tricks = A.tricks.slice();
+    // spins: prefix the first trick ("BS 180 Kickflip") or add a plain spin
+    const sp = spinLabel(A.spin);
+    if (sp.halfTurns > 0) {
+      const bonus = SPIN_POINTS_PER_180 * sp.halfTurns;
+      if (tricks.length) { tricks[0] = { ...tricks[0], name: sp.label + ' ' + tricks[0].name, points: tricks[0].points + bonus }; }
+      else tricks.push({ name: sp.label, base: 'Spin', points: bonus });
+    }
+    if (A.time >= BIG_AIR.minAirTime && tricks.length) tricks.push({ name: BIG_AIR.name, base: BIG_AIR.name, points: BIG_AIR.points });
+    // gaps: took off from one tagged spot and landed in another
+    const zones = this.col.zonesAt(this.pos.x, this.pos.z);
+    if (g.tag) zones.push(g.tag);
+    const gaps = [];
+    for (const gp of GAPS) {
+      if (A.takeoffTag === gp.from && zones.includes(gp.to) && !gaps.find((x) => x.name === gp.name)) {
+        gaps.push({ name: gp.name, base: gp.name, points: gp.points, gap: true });
+      }
+    }
     return {
-      tricks: A.tricks.slice(), airTime: A.time, spin: A.spin,
-      takeoffTag: A.takeoffTag, landTag: g.tag, zones: this.col.zonesAt(this.pos.x, this.pos.z),
+      tricks, gaps, airTime: A.time, spin: A.spin,
+      takeoffTag: A.takeoffTag, landTag: g.tag, zones,
       height: A.maxY - A.takeoffY, impact,
     };
   }
@@ -447,7 +525,7 @@ export class Player {
       pushPhase: this.pushPhase,
       flipAngle: A ? A.flipAngle : 0,
       shuvAngle: A ? A.shuvAngle : 0,
-      boardLift: A ? 0.12 * Math.min(1, A.time * 6) : 0,
+      boardLift: A ? (A.trick ? 0.22 : 0.12) * Math.min(1, A.time * 6) : 0,
       grab: !!(A && A.grab), grabHand: A && A.grab ? A.grab.hand : 'front',
       sideways: false, manualPitch: 0,
       bailTime: this.bailInfo ? this.bailInfo.t : 0,
