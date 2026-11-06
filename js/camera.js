@@ -23,7 +23,12 @@ export class CameraRig {
     this.desired = new THREE.Vector3();
     this.look = new THREE.Vector3();
     this.first = true;
+    this.shake = 0;
+    this._shakeOff = new THREE.Vector3();
   }
+
+  // camera jolt (e.g. on a hard landing)
+  addShake(amount) { this.shake = Math.min(0.35, this.shake + amount); }
 
   toggle() { this.mode = this.mode === 'follow' ? 'filmer' : 'follow'; return this.mode; }
   snap() { this.first = true; }
@@ -53,13 +58,21 @@ export class CameraRig {
 
     if (this.first) this.camera.position.copy(this.desired);
     else this.camera.position.lerp(this.desired, 1 - Math.exp(-9 * dt));
+    // small camera shake that dies away quickly
+    if (this.shake > 0.001) {
+      this._shakeOff.set((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).multiplyScalar(this.shake);
+      this.camera.position.add(this._shakeOff);
+      this.shake *= Math.exp(-9 * dt);
+    }
     this.look.set(p.x, p.y + cfg.lookHeight, p.z);
     if (this.first) this.target.copy(this.look);
     else this.target.lerp(this.look, 1 - Math.exp(-16 * dt));
     this.camera.lookAt(this.target);
 
-    if (Math.abs(this.camera.fov - cfg.fov) > 0.1) {
-      this.camera.fov += (cfg.fov - this.camera.fov) * (1 - Math.exp(-4 * dt));
+    // field of view widens a little with speed (sense of speed)
+    const fov = cfg.fov + Math.min(12, player.displaySpeed() * 0.55);
+    if (Math.abs(this.camera.fov - fov) > 0.05) {
+      this.camera.fov += (fov - this.camera.fov) * (1 - Math.exp(-3 * dt));
       this.camera.updateProjectionMatrix();
     }
     this.first = false;

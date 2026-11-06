@@ -233,4 +233,47 @@ export const DEFAULT_SETTINGS = {
   graphics: 'low',          // 'low' | 'high'
   volume: 0.7,              // 0..1
   camSensitivity: 1.0,      // 0.3..2 — how fast the camera swings behind you
+  touch: 'auto',            // 'auto' | 'on' | 'off' — on-screen touch controls
+};
+
+// -----------------------------------------------------------------------------
+//  EXTRA PHYSICS (realism)
+// -----------------------------------------------------------------------------
+export const PHYSICS2 = {
+  carveScrub: 0.07,         // speed lost per second while turning hard (tyres scrub)
+  spinAccel: 32,            // rad/s² — how fast an air spin winds up
+  spinDecay: 12,            // how fast the spin stops when you let go (per second)
+  hardLandingImpact: 7,     // m/s — above this, landings cost extra speed
+  hardLandingLoss: 0.035,   // fraction of speed lost per m/s of impact above that
+  maxBank: 0.32,            // rad — max lean into a carve
+  // surface grip: multiplies rolling resistance (tags come from world.js)
+  surfaceFriction: { street: 1.45, street_top: 1.2, halfpipe: 0.7, miniramp: 0.7, quarter: 0.7,
+    mega_rollin: 0.65, mega_kicker: 0.65, mega_land: 0.7, mega_quarter: 0.7, bowl: 0.75 },
+  // grind friction per grind type (fraction of speed lost per second)
+  grindFriction: { '50-50': 0.05, 'Smith Grind': 0.07, 'Nosegrind': 0.07, '5-0': 0.06, 'Boardslide': 0.13, 'Lipslide': 0.13 },
+  // bail ragdoll-lite
+  bodyBounce: 0.25, boardBounce: 0.35, boardFriction: 2.2,
+};
+
+// -----------------------------------------------------------------------------
+//  CLOSET — clothing & board options (Closet menu). Colours are hex numbers.
+// -----------------------------------------------------------------------------
+export const OUTFIT_OPTIONS = {
+  hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat']],
+  top:    [['hoodie', 'Hoodie'], ['tee', 'T-shirt'], ['jacket', 'Jacket'], ['flannel', 'Flannel']],
+  pants:  [['jeans', 'Jeans'], ['cargo', 'Cargos'], ['shorts', 'Shorts']],
+  backpack: [[true, 'Yes'], [false, 'No']],
+};
+export const OUTFIT_COLORS = {
+  hatColor:   [0xf4743b, 0x1d1d1d, 0xe63946, 0x2a9d8f, 0xf2c14e, 0xffffff, 0x457b9d, 0x6a4c93],
+  topColor:   [0x2a9d8f, 0x1d1d1d, 0xe63946, 0xf2f2f2, 0x457b9d, 0xf4a261, 0x6a994e, 0x9b5de5, 0x8d6e63, 0xffafcc],
+  pantsColor: [0x3d5a80, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
+  shoeColor:  [0xf1f1f1, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63],
+  skin:       [0xf3d2b3, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a21],
+  hairColor:  [0x2b1d14, 0x5a3825, 0xa0522d, 0xe6c35c, 0x1d1d1d, 0xb0b0b0, 0xd94f8a],
+  deckColor:  [0xe9c46a, 0xe63946, 0x2a9d8f, 0x6a4c93, 0xf4a261, 0x1d1d1d, 0xffffff, 0x90be6d],
+};
+export const DEFAULT_OUTFIT = {
+  hat: 'beanie', hatColor: 0xf4743b, top: 'hoodie', topColor: 0x2a9d8f, pants: 'jeans', pantsColor: 0x3d5a80,
+  shoeColor: 0xf1f1f1, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0xe9c46a, backpack: true,
 };

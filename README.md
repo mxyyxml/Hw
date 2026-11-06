@@ -53,6 +53,21 @@ re-run that after editing the code, see the script for the two npm packages it n
 | **H** | Help overlay |
 | **P / Esc** | Pause menu (teleport, challenges, settings) |
 
+### 📱 Phones & tablets
+Touch controls turn on automatically on touch-screen devices (Settings → Touch controls: Auto / On / Off).
+Hold your phone sideways.
+
+| Touch | Action |
+| --- | --- |
+| **Left joystick** | Steer / spin. Up = push & pump, down = brake |
+| **POP pad** (right) | Touch & hold = crouch, release = ollie. While holding, **swipe** ↓ then ← = Kickflip, ↓ then → = Heelflip, ↓ ↑ ← = 360 Flip, ↑ ↓ = Nollie |
+| **GRAB / GRIND / MANUAL / SHUV** | Same as J / K / L / Shift+arrow (the joystick picks the direction) |
+| **? · CAM · WALK · ↺ · ❚❚** | Help, camera, walk, respawn, pause |
+
+### 👕 Closet
+Title screen or Pause → **Closet**: hats, tops (hoodie, tee, jacket, flannel), jeans / cargos / shorts,
+colours for everything, skin tone, hair, backpack and board colour. Saved in your browser.
+
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
 in the air. Land with the board straight (forward or fakie) and your flip finished, or you
 bail. Tricks chain into a combo while you keep landing within ~1.5 s — the combo total is
@@ -102,6 +117,7 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | `js/audio.js` | Web Audio sound effects |
 | `js/ui.js` | HUD, pop-ups, menus |
 | `js/storage.js` | Safe localStorage helper |
+| `js/touch.js` | Phone / tablet touch controls and device detection |
 | `js/textures.js` | Procedural canvas textures (concrete, tiles, asphalt, wood, windows…) |
 | `play.html` | Built single-file version of the whole game |
 | `tools/build-play.mjs` | Builds `play.html` |

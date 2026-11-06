@@ -3,7 +3,8 @@
 //  The game object passed in provides: startFree(), startLunch(), resume(),
 //  quitToTitle(), teleport(i), applySetting(key, value), settings, challenges...
 // =============================================================================
-import { CHALLENGES } from './config.js';
+import { CHALLENGES, OUTFIT_OPTIONS, OUTFIT_COLORS } from './config.js';
+import { TOUCH_HELP } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
@@ -40,9 +41,9 @@ const CONTROLS = [
   ['<kbd>P</kbd> / <kbd>Esc</kbd>', 'Pause menu'],
 ];
 
-export function controlsHTML() {
+export function controlsHTML(rows = CONTROLS) {
   let h = '<div class="controls">';
-  for (const row of CONTROLS) {
+  for (const row of rows) {
     if (row.length === 1) h += `<div class="ctl-section">${row[0]}</div>`;
     else h += `<div class="ctl-row"><span>${row[0]}</span><span>${row[1]}</span></div>`;
   }
@@ -61,7 +62,7 @@ export class UI {
       const act = b.dataset.act;
       if (act === 'play') this.game.startFree();
       else if (act === 'lunch') this.game.startLunch();
-      else this.openMenu(act, true);
+      else { this.showTitle(false); this.openMenu(act, true); }
     });
     this._toastTimer = 0;
     this._lastCombo = '';
@@ -77,10 +78,13 @@ export class UI {
   }
   toggleHelp(force) {
     const el = $('help');
+    $('help-body').innerHTML = controlsHTML(this.game.touchOn ? TOUCH_HELP : CONTROLS);
+    el.querySelector('.muted').innerHTML = this.game.touchOn ? 'Tap <b>?</b> to close' : 'Press <kbd>H</kbd> to close';
     const show = force !== undefined ? force : el.classList.contains('hidden');
     el.classList.toggle('hidden', !show);
   }
   get menuOpen() { return !$('menu').classList.contains('hidden'); }
+  get topMenu() { const t = this.menuStack[this.menuStack.length - 1]; return t && !$('menu').classList.contains('hidden') ? t.name : null; }
 
   // name: pause | settings | controls | challenges | teleport | results
   openMenu(name, fromTitle = false, data) {
@@ -109,14 +113,34 @@ export class UI {
           <button class="primary" data-act="resume">Resume</button>
           <button data-act="teleport">Teleport to a spot</button>
           <button data-act="challenges">Challenges (${g.challenges.count}/10)</button>
+          <button data-act="closet">Closet (clothes &amp; board)</button>
           <button data-act="settings">Settings</button>
           <button data-act="controls">Controls</button>
           ${g.mode === 'lunch' ? '<button data-act="lunch">Restart Lunch Session</button>' : '<button data-act="lunch">Start a Lunch Session</button>'}
           <button data-act="title">Quit to title</button></div>`;
         break;
       case 'controls':
-        h = `<h2>Controls</h2>${controlsHTML()}${backBtn}`;
+        h = `<h2>Controls</h2>${g.touchOn ? '<p class="muted center">Touch controls are on. Keyboard controls below the touch guide.</p>' + controlsHTML(TOUCH_HELP) : ''}${controlsHTML()}${backBtn}`;
         break;
+      case 'closet': {
+        const o = g.outfit;
+        const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
+          hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
+          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board' };
+        h = `<h2>Closet</h2><div class="closet">`;
+        for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
+          h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +
+            opts.map(([v, name]) => `<button class="chip ${o[k] === v ? 'sel' : ''}" data-outfit="${k}" data-val="${v}">${name}</button>`).join('') +
+            `</span></div>`;
+        }
+        for (const [k, cols] of Object.entries(OUTFIT_COLORS)) {
+          h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="swatches">` +
+            cols.map((c) => `<button class="swatch ${o[k] === c ? 'sel' : ''}" style="background:#${c.toString(16).padStart(6, '0')}" data-outfit="${k}" data-color="${c}" aria-label="${labels[k]} colour"></button>`).join('') +
+            `</span></div>`;
+        }
+        h += `</div>${backBtn}`;
+        break;
+      }
       case 'settings': {
         const s = g.settings;
         h = `<h2>Settings</h2>
@@ -128,6 +152,10 @@ export class UI {
             <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-range="volume"></div>
           <div class="setting"><span>Camera sensitivity <b id="sens-val">${s.camSensitivity.toFixed(1)}</b></span>
             <input type="range" min="0.3" max="2" step="0.1" value="${s.camSensitivity}" data-range="camSensitivity"></div>
+          <div class="setting"><span>Touch controls</span><span class="row-buttons">
+            <button data-set="touch" data-val="auto" class="${(s.touch || 'auto') === 'auto' ? 'sel' : ''}">Auto</button>
+            <button data-set="touch" data-val="on" class="${s.touch === 'on' ? 'sel' : ''}">On</button>
+            <button data-set="touch" data-val="off" class="${s.touch === 'off' ? 'sel' : ''}">Off</button></span></div>
           <div class="setting"><span>Camera</span><span class="row-buttons">
             <button data-set="camera" data-val="follow" class="${g.rig.mode === 'follow' ? 'sel' : ''}">Follow</button>
             <button data-set="camera" data-val="filmer" class="${g.rig.mode === 'filmer' ? 'sel' : ''}">Filmer</button></span></div>
@@ -179,6 +207,16 @@ export class UI {
     if (b.dataset.set) {
       g.applySetting(b.dataset.set, b.dataset.val);
       this._renderMenu();
+      return;
+    }
+    if (b.dataset.outfit) {
+      const k = b.dataset.outfit;
+      let v = b.dataset.color !== undefined ? parseInt(b.dataset.color, 10) : b.dataset.val;
+      if (v === 'true') v = true; else if (v === 'false') v = false;
+      g.setOutfit(k, v);
+      const scroll = $('menu-card').scrollTop;
+      this._renderMenu();
+      $('menu-card').scrollTop = scroll;
       return;
     }
     if (b.dataset.tp !== undefined) { this.closeMenu(); g.teleport(+b.dataset.tp); return; }

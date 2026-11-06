@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#1d2433">
   <title>Lunch Break Skate</title>
   <link rel="stylesheet" href="css/style.css">
   <!-- three.js pinned to an exact version from a CDN — no build step needed -->
@@ -37,7 +40,7 @@
       <div class="hud-label">Speed <span id="speed-num">0</span> km/h</div>
       <div id="speed-bar"><div id="speed-fill"></div></div>
     </div>
-    <div id="hud-hint">H help · P pause · C camera</div>
+    <div id="hud-hint">H help · P pause · C camera · Closet in the pause menu</div>
   </div>
 
   <!-- ============================== HELP OVERLAY (H) ============================== -->
@@ -58,6 +61,7 @@
         <button data-act="play" class="primary">Play</button>
         <button data-act="lunch">Lunch Session <small>2 min</small></button>
         <button data-act="challenges">Challenges</button>
+        <button data-act="closet">Closet</button>
         <button data-act="controls">Controls</button>
         <button data-act="settings">Settings</button>
       </div>

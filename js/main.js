@@ -14,6 +14,8 @@ import { ComboSystem } from './tricks.js';
 import { Challenges } from './challenges.js';
 import { Audio } from './audio.js';
 import { UI } from './ui.js';
+import { TouchControls, isTouchDevice } from './touch.js';
+import { DEFAULT_OUTFIT } from './config.js';
 import { Storage } from './storage.js';
 
 // Gradient sky dome (vertex colours, no texture) that follows the camera.
@@ -37,6 +39,25 @@ function makeSky(horizonHex) {
   sun.position.set(150, 260, 100).setLength(360);
   sun.lookAt(0, 0, 0);
   sky.add(sun);
+  // soft clouds: one procedural canvas texture on a handful of sprites
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  for (let i = 0; i < 14; i++) {
+    const x = 20 + Math.random() * 88, y = 22 + Math.random() * 20, r = 10 + Math.random() * 16;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  for (let i = 0; i < 14; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: false, depthWrite: false, transparent: true, opacity: 0.75 + Math.random() * 0.25 }));
+    const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3, el = 0.12 + Math.random() * 0.35;
+    sp.position.set(Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)).multiplyScalar(340);
+    const sc = 70 + Math.random() * 70;
+    sp.scale.set(sc * 2, sc, 1);
+    sky.add(sp);
+  }
   return sky;
 }
 
@@ -79,6 +100,13 @@ class Game {
     this.combo = new ComboSystem();
     this.challenges = new Challenges((c) => this.onChallenge(c));
     this.ui = new UI(this);
+    // outfit (Closet)
+    this.outfit = { ...DEFAULT_OUTFIT, ...Storage.get('outfit', {}) };
+    this.skater.applyOutfit(this.outfit);
+    // touch controls for phones / tablets
+    this.touch = new TouchControls(this.input, this);
+    this.isTouch = isTouchDevice();
+    this.updateTouch();
 
     this.mode = 'title';
     this.paused = false;
@@ -107,6 +135,7 @@ class Game {
     else if (key === 'volume') this.audio.setVolume(value);
     else if (key === 'camSensitivity') this.rig.sensitivity = value;
     else if (key === 'camera') { this.rig.mode = value; return; }
+    else if (key === 'touch') { this.settings.touch = value; this.updateTouch(); }
     this.settings[key] = value;
     Storage.set('settings', this.settings);
   }
@@ -135,6 +164,29 @@ class Game {
     this.resize();
   }
 
+  updateTouch() {
+    if (!this.touch) return;
+    const m = this.settings.touch || 'auto';
+    this.touch.setEnabled(m === 'on' || (m === 'auto' && this.isTouch));
+  }
+  get touchOn() { return this.touch && this.touch.enabled; }
+
+  setOutfit(key, value) {
+    this.outfit[key] = value;
+    this.skater.applyOutfit(this.outfit);
+    Storage.set('outfit', this.outfit);
+  }
+
+  // phones: go fullscreen when the game starts (ignored if the browser refuses)
+  _fullscreen() {
+    if (!this.touchOn) return;
+    try {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req && !document.fullscreenElement) { const p = req.call(el); if (p && p.catch) p.catch(() => {}); }
+    } catch (e) { /* not allowed here */ }
+  }
+
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h, false);
@@ -148,6 +200,7 @@ class Game {
     const fromTitle = this.mode === 'title';
     this.mode = 'free'; this.paused = false;
     this.ui.showTitle(false); this.ui.closeMenu(); this.ui.showHUD(true);
+    this._fullscreen();
     if (fromTitle || this.lunch.over) this.player.teleport(this.world.spots[0]);
     this.lunch.over = false;
     this.rig.snap();
@@ -160,6 +213,7 @@ class Game {
     this.combo.tricks = []; this.ui.showCombo(this.combo);
     this.lunch = { score: 0, time: SCORING.lunchSessionSeconds, bestCombo: 0, over: false };
     this.ui.showTitle(false); this.ui.closeMenu(); this.ui.showHUD(true);
+    this._fullscreen();
     this.player.teleport(this.world.spots[0]);
     this.rig.snap();
     this.ui.toast('🔔 Lunch Session! Score as much as you can in 2 minutes', '', 3000);
@@ -215,6 +269,7 @@ class Game {
       case 'trick': ui.popup(d.name, d.grab ? 'small' : ''); au.trick(); break;
       case 'grabStart': break;
       case 'land':
+        if (d.impact > 5.5) this.rig.addShake((d.impact - 5.5) * 0.03);
         for (const t of d.tricks) this.combo.add(t);
         for (const gp of d.gaps) { this.combo.add(gp); ui.popup(gp.name + '!', 'good'); }
         if (d.spinName) ui.popup(d.spinName, 'small');
@@ -281,7 +336,8 @@ class Game {
 
     const inp = this.input;
     if (this.mode === 'title') {
-      this.titleCam(realDt);
+      if (this.ui.topMenu === 'closet') this.closetCam(realDt);
+      else this.titleCam(realDt);
     } else {
       // menu keys work even while paused
       if (inp.pressed.pause) {
@@ -293,7 +349,9 @@ class Game {
       }
       if (inp.pressed.help) this.ui.toggleHelp();
       if (!this.paused) this.step(realDt);
+      else if (this.ui.topMenu === 'closet') this.closetCam(realDt);
     }
+    if (this.touch) this.touch.setVisible(this.mode !== 'title' && !this.paused);
     inp.endFrame();
     this.renderer.render(this.scene, this.camera);
   }
@@ -333,7 +391,19 @@ class Game {
   }
 
   // slow orbit over the plaza behind the title screen
+  // close-up turntable of the skater while the Closet is open
+  closetCam(dt) {
+    this.closetAngle = (this.closetAngle || 0) + dt * 0.5;
+    const p = this.player.pos, a = this.closetAngle;
+    this.camera.position.set(p.x + Math.cos(a) * 2.6, p.y + 1.35, p.z + Math.sin(a) * 2.6);
+    this.camera.lookAt(p.x, p.y + 0.9, p.z);
+    if (this.camera.fov !== 50) { this.camera.fov = 50; this.camera.updateProjectionMatrix(); }
+    this.sky.position.copy(this.camera.position);
+    this.player.sync(dt);
+  }
+
   titleCam(dt) {
+    if (this.camera.fov !== 62) { this.camera.fov = 62; this.camera.updateProjectionMatrix(); }
     this.titleAngle += dt * 0.06;
     const a = this.titleAngle;
     this.camera.position.set(8 + Math.cos(a) * 34, 13, 4 + Math.sin(a) * 34);

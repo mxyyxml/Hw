@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE,
   GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
+import { PHYSICS2 as P2 } from './config.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -164,7 +165,10 @@ export class Player {
     let rate = lerp(P.turnRateLow, P.turnRateHigh, clamp(this.speed / P.pushMaxSpeed, 0, 1));
     if (this.crouching) rate *= P.crouchTurnBonus;
     this.heading += turn * rate * dt;
+    this.yawRate = turn * rate;
     this.lean = turn * clamp(this.speed / 4, 0.3, 1);
+    // hard carving at speed scrubs a little speed off (wheels slip sideways)
+    if (turn && this.speed > 3) this.speed -= Math.abs(turn) * this.speed * P2.carveScrub * dt;
 
     // --- gravity pulls the board's direction downhill on side slopes (carving)
     const lx = Math.cos(this.heading), lz = -Math.sin(this.heading);   // "left" vector
@@ -194,7 +198,9 @@ export class Player {
     }
 
     // --- rolling resistance (never reverses you)
-    this.speed = Math.max(0, this.speed - (this.speed * P.rollFriction + P.rollDrag) * dt);
+    // different surfaces roll differently (rough street vs. smooth ramps)
+    const grip = P2.surfaceFriction[this.groundTag] ?? 1;
+    this.speed = Math.max(0, this.speed - (this.speed * P.rollFriction + P.rollDrag) * grip * dt);
 
     // --- gravity along the slope
     this._tangent(this.heading, n, f);
@@ -306,7 +312,7 @@ export class Player {
     if (this.manual) this.endManual();
     this.state = 'air';
     this.air = {
-      yaw: this.modelYaw(), spin: 0, time: 0,
+      yaw: this.modelYaw(), spin: 0, spinVel: 0, time: 0,
       takeoffTag: this.groundTag, takeoffY: this.pos.y, maxY: this.pos.y, vert: wasVert,
       tricks: [], trick: null, flipAngle: 0, shuvAngle: 0,
       grab: null, grabTime: 0, manualQueued: false,
@@ -327,8 +333,17 @@ export class Player {
       const lock = A.grab ? A.grab.lockDir : null;
       if (lock && !inp.held[lock] && A.grab) A.grab.lockDir = null;
       const l = inp.held.left && lock !== 'left', r = inp.held.right && lock !== 'right';
-      const spin = ((l ? 1 : 0) - (r ? 1 : 0)) * P.airSpinRate * dt;
+      // spins wind up and wind down (angular momentum) instead of starting instantly
+      const dir = (l ? 1 : 0) - (r ? 1 : 0);
+      if (dir) {
+        const target = dir * P.airSpinRate;
+        A.spinVel += clamp(target - A.spinVel, -P2.spinAccel * dt, P2.spinAccel * dt);
+      } else A.spinVel *= Math.exp(-P2.spinDecay * dt);
+      const spin = A.spinVel * dt;
       A.yaw += spin; A.spin += spin;
+    } else {
+      A.spinVel *= Math.exp(-P2.spinDecay * dt);
+      A.yaw += A.spinVel * dt; A.spin += A.spinVel * dt;
     }
     this.updateAirTricks(dt);
 
@@ -409,6 +424,9 @@ export class Player {
       this.heading = A.yaw; this.fakie = false;
     }
     this.speed = Math.hypot(vtx, vty, vtz) * P.landSpeedKeep;
+    // big impacts: knees absorb it and you lose some speed
+    if (impact > P2.hardLandingImpact) this.speed *= Math.max(0.5, 1 - P2.hardLandingLoss * (impact - P2.hardLandingImpact));
+    this.landDip = clamp(impact / 9, 0.12, 1);
     this.state = 'ride';
     this._tangent(this.heading, n, this.vel).multiplyScalar(this.speed);
     const info = this.landInfo(g, impact);
@@ -511,7 +529,7 @@ export class Player {
     const G = this.grind, r = G.rail;
     G.time += dt;
     G.s += -P.gravity * r.dy * dt;                 // sloped rails speed you up / slow you down
-    G.s *= 1 - GRIND.friction * dt;
+    G.s *= 1 - (P2.grindFriction[G.def.name] ?? GRIND.friction) * dt;
     G.t += G.s * dt;
     // flow onto a connected rail segment
     if (G.t > r.len && r.next) { G.t -= r.len; G.rail = r.next; return this.updateGrind(0); }
@@ -583,7 +601,20 @@ export class Player {
     if (this.state === 'bail') return;
     this.state = 'bail';
     this.crouching = false; this.powersliding = false;
-    this.bailInfo = { reason, start: performance.now() / 1000, t: 0, vx: this.vel.x, vy: Math.max(this.vel.y, 0), vz: this.vel.z, yaw: this.modelYaw() };
+    const h = Math.hypot(this.vel.x, this.vel.z);
+    const bq = this.skater.root.quaternion.clone();
+    this.bailInfo = {
+      reason, start: performance.now() / 1000, t: 0,
+      vx: this.vel.x, vy: Math.max(this.vel.y, 0) + 1.2, vz: this.vel.z,
+      yaw: this.modelYaw(),
+      // the body rolls forward faster the faster you were going
+      roll: 0, rollVel: Math.min(12, 1.5 + h / 0.7),
+      // the board flies off on its own
+      boardPos: this.pos.clone().add(new THREE.Vector3(0, 0.15, 0)),
+      boardVel: new THREE.Vector3(this.vel.x * 1.15 + (Math.random() - 0.5) * 2, Math.max(this.vel.y, 0) + 2 + Math.random() * 1.5, this.vel.z * 1.15 + (Math.random() - 0.5) * 2),
+      boardQuat: bq,
+      boardSpin: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 18),
+    };
     this.air = null; this.grind = null; this.manual = null;
     this.emit('bail', { reason });
   }
@@ -597,11 +628,61 @@ export class Player {
     let nx = this.pos.x + B.vx * dt, nz = this.pos.z + B.vz * dt, ny = this.pos.y + B.vy * dt;
     if (this.col.blocker(nx, nz, this.pos.y + P.stepUp)) { nx = this.pos.x; nz = this.pos.z; B.vx = B.vz = 0; }
     const g = this.col.ground(nx, nz, this.pos.y + P.stepUp);
-    if (ny <= g.h) { ny = g.h; B.vy = 0; this.normal.set(g.nx, g.ny, g.nz); }
+    let grounded = false;
+    if (ny <= g.h) {
+      ny = g.h; grounded = true;
+      B.vy = B.vy < -2 ? -B.vy * P2.bodyBounce : 0;
+      this.normal.set(g.nx, g.ny, g.nz);
+      B.vx *= Math.exp(-3 * dt); B.vz *= Math.exp(-3 * dt);   // sliding on the ground
+    }
     this.pos.set(nx, ny, nz);
+    // body roll: tumbles while fast, then settles lying down
+    B.roll += B.rollVel * dt;
+    if (grounded) B.rollVel *= Math.exp(-4 * dt);
+    if (grounded && Math.abs(B.rollVel) < 1.5) {
+      const target = Math.round((B.roll - Math.PI / 2) / Math.PI) * Math.PI + Math.PI / 2;
+      B.roll += (target - B.roll) * (1 - Math.exp(-6 * dt));
+    }
+    this._updateLooseBoard(dt);
     if (performance.now() / 1000 - B.start > P.bailRespawnDelay) {
       const s = this.lastSafe || this.spawn;
       this.respawnAt(s);
+    }
+  }
+
+  // the board flies, bounces and slides on its own after a bail
+  _updateLooseBoard(dt) {
+    const B = this.bailInfo, p = B.boardPos, v = B.boardVel, w = B.boardSpin;
+    v.y -= P.gravity * dt;
+    const nx = p.x + v.x * dt, nz = p.z + v.z * dt;
+    if (this.col.blocker(nx, nz, p.y + 0.1)) { v.x *= -0.4; v.z *= -0.4; }
+    else { p.x = nx; p.z = nz; }
+    p.y += v.y * dt;
+    const g = this.col.ground(p.x, p.z, p.y + 0.3);
+    const rest = g.h + 0.075;
+    let onGround = false;
+    if (p.y <= rest) {
+      p.y = rest; onGround = true;
+      if (v.y < 0) { v.y = -v.y * P2.boardBounce; if (v.y < 0.8) v.y = 0; w.multiplyScalar(0.55); }
+      const f = Math.exp(-P2.boardFriction * dt);
+      v.x *= f; v.z *= f;
+    }
+    // integrate spin
+    const ang = w.length();
+    if (ang > 1e-4) {
+      const dq = this._dq || (this._dq = new THREE.Quaternion());
+      dq.setFromAxisAngle(this._ax ? this._ax.copy(w).divideScalar(ang) : (this._ax = w.clone().divideScalar(ang)), ang * dt);
+      B.boardQuat.premultiply(dq);
+    }
+    // once it's resting, settle flat (wheels up or down, whichever is closer)
+    if (onGround && v.y === 0) {
+      w.multiplyScalar(Math.exp(-6 * dt));
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(B.boardQuat);
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(B.boardQuat);
+      const yaw = Math.atan2(fwd.x, fwd.z);
+      const target = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      if (up.y < 0) target.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI));
+      B.boardQuat.slerp(target, 1 - Math.exp(-8 * dt));
     }
   }
 
@@ -646,7 +727,21 @@ export class Player {
     if (this.state === 'bail') yaw = this.bailInfo.yaw;
     if (this.state === 'ride' && this.powersliding) yaw += (this.fakie ? -1 : 1) * 1.25;
     if (this.state === 'grind' && this.grind.def.sideways) yaw += (this.grind.def.name === 'Lipslide' ? -1 : 1) * Math.PI / 2;
-    sk.setTransform(this.pos, yaw, n, dt, rate);
+    // lean into carves: bank angle from the sideways (centripetal) acceleration
+    let bank = 0;
+    if (this.state === 'ride' && !this.powersliding) {
+      bank = -Math.atan2(this.speed * (this.yawRate || 0), P.gravity);
+      bank = clamp(bank, -P2.maxBank, P2.maxBank) * (this.fakie ? -1 : 1);
+    }
+    this.bankSmooth = (this.bankSmooth || 0) + (bank - (this.bankSmooth || 0)) * (1 - Math.exp(-8 * dt));
+    if (this.state === 'bail') { n = up; rate = 20; }
+    sk.setTransform(this.pos, yaw, n, dt, rate, this.bankSmooth);
+    if (this.state === 'bail') sk.setLooseBoard(true, this.bailInfo.boardPos, this.bailInfo.boardQuat);
+    else sk.setLooseBoard(false);
+    // wheels keep spinning in the air and slowly stop
+    if (this.state === 'ride') this.wheelSpeed = this.speed;
+    else if (this.state === 'grind' || this.state === 'walk') this.wheelSpeed = 0;
+    else this.wheelSpeed = (this.wheelSpeed || 0) * Math.exp(-1.5 * dt);
     const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
     sk.setBlob(this.pos.x, g.h, this.pos.z, this.pos.y - g.h);
     sk.animate(this.animState(), dt);
@@ -666,9 +761,13 @@ export class Player {
       sideways: !!(this.grind && this.grind.def.sideways),
       manualPitch: this.grind ? -this.grind.def.pitch : (this.manual ? (this.manual.nose ? -0.3 : 0.3) + this.manual.b * 0.12 : 0),
       bailTime: this.bailInfo ? this.bailInfo.t : 0,
-      boardSlide: this.bailInfo ? Math.min(3, this.bailInfo.t * 4) : 0,
+      bailRoll: this.bailInfo ? this.bailInfo.roll : 0,
       walkSpeed: this.walkSpeed,
+      wheelSpeed: this.wheelSpeed || 0,
+      landDip: this._takeDip(),
     };
+  }
+  _takeDip() { const d = this.landDip || 0; this.landDip = 0; return d;
   }
 
   // speed for the HUD (m/s)

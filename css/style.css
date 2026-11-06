@@ -119,3 +119,57 @@ ul.challenge-list li.done { background: rgba(42,157,143,0.35); }
 ul.challenge-list li .tick { display: inline-block; width: 22px; }
 .big-score { font-size: 54px; font-weight: 900; color: var(--gold); text-align: center; margin: 6px 0; }
 .center { text-align: center; }
+
+/* ---------------------------------------------------------------- Closet */
+#menu:has(.closet) { background: rgba(10, 14, 22, 0.15); justify-content: flex-end; }
+#menu:has(.closet) .card { margin-right: 16px; max-width: 460px; }
+.closet-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.closet-label { width: 96px; flex: none; font-size: 13px; opacity: 0.85; }
+.closet .row-buttons { justify-content: flex-start; }
+button.chip { min-width: 0; padding: 6px 10px; font-size: 13px; box-shadow: 0 2px 0 #b9b3a5; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+button.swatch { min-width: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); box-shadow: none; }
+button.swatch.sel { outline: 3px solid var(--gold); border-color: #fff; }
+
+/* ---------------------------------------------------------------- touch controls */
+body.touch, body.touch * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.touch #game { touch-action: none; }
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; touch-action: none; }
+#touch > * { pointer-events: auto; }
+#t-stick-zone { position: absolute; left: 0; bottom: 0; width: 45vw; height: 62vh; }
+#t-stick-base { position: absolute; left: 22%; top: 62%; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.35); }
+#t-stick-base.active { background: rgba(255,255,255,0.2); }
+#t-stick-knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; transform: translate(-50%, -50%); border-radius: 50%;
+  background: rgba(255,255,255,0.75); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.t-hint { position: absolute; left: 12px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 11px; opacity: 0.6; }
+#t-pad { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  width: 136px; height: 136px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(244, 116, 59, 0.55); border: 3px solid rgba(255,255,255,0.6); font-weight: 900; font-size: 22px; color: #fff; }
+#t-pad small { font-size: 9px; font-weight: normal; opacity: 0.85; }
+#t-pad.active { background: rgba(244, 116, 59, 0.85); transform: scale(0.96); }
+#t-buttons { position: absolute; right: calc(176px + env(safe-area-inset-right, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: repeat(2, 72px); gap: 10px; }
+.t-btn, .t-sm { min-width: 0; padding: 0; color: #fff; background: rgba(20, 26, 38, 0.55); border: 2px solid rgba(255,255,255,0.45);
+  box-shadow: none; font: bold 12px system-ui, sans-serif; border-radius: 14px; }
+.t-btn { height: 52px; }
+.t-btn.active, .t-sm.active { background: rgba(42, 157, 143, 0.85); transform: none; }
+#t-top { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.t-sm { width: 46px; height: 36px; border-radius: 10px; }
+#t-rotate { display: none; position: absolute; top: 50px; left: 50%; transform: translateX(-50%); background: rgba(20,26,38,0.8);
+  padding: 8px 14px; border-radius: 16px; font-size: 13px; white-space: nowrap; pointer-events: none; }
+@media (orientation: portrait) { #t-rotate { display: block; } }
+
+/* smaller HUD on touch screens so the thumbs have room */
+body.touch #hud-hint { display: none; }
+body.touch #hud-speed { bottom: auto; top: 14px; left: 50%; transform: translateX(-50%); width: 150px; padding: 6px 10px; display: none; }
+body.touch #hud-challenges { transform: scale(0.82); transform-origin: top left; }
+body.touch #hud-score { transform: scale(0.82); transform-origin: top right; }
+body.touch #combo { bottom: 170px; }
+body.touch #balance { top: 40%; }
+body.touch .popup { font-size: 26px; }
+@media (max-height: 460px) {
+  .logo .l2 { font-size: 56px; } .logo .l1 { font-size: 24px; }
+  .menu-buttons { gap: 6px; margin: 10px 0; } button { padding: 8px 18px; font-size: 15px; }
+  .tagline { display: none; }
+}

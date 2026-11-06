@@ -45,12 +45,50 @@ setCat('ramp', [C.ramp, C.kicker, C.mega, 0x8d9aa3]);
 setCat('grass', [C.grass, C.leaf, C.leaf2]);
 setCat('building', BUILDING_COLORS);
 
+// Direction TOWARD the sun (matches the DirectionalLight offset in main.js)
+export const SUN = { x: 30, y: 60, z: 20 };
+
+// convex hull of 2D points (monotone chain) — used for the fake ground shadows
+function hull2D(pts) {
+  pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const p of pts) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
+
 // =============================================================================
 //  GeoBuilder — accumulates flat-shaded, vertex-coloured, textured triangles,
 //  bucketed by texture category (one draw call per category).
 // =============================================================================
 class GeoBuilder {
-  constructor() { this.buckets = {}; this._c = new THREE.Color(); }
+  constructor() { this.buckets = {}; this._c = new THREE.Color(); this.shadowPos = []; }
+
+  // Fake ground shadow: project 3D points along the sun direction onto y = baseY
+  // and fill their convex hull with a dark transparent polygon (Low graphics).
+  castShadow(points, baseY = 0) {
+    const sx = SUN.x / SUN.y, sz = SUN.z / SUN.y;
+    const proj = points.map(([x, y, z]) => [x - sx * Math.max(0, y - baseY), z - sz * Math.max(0, y - baseY)]);
+    const h = hull2D(proj);
+    if (h.length < 3) return;
+    const y = baseY + 0.022;
+    for (let i = 1; i < h.length - 1; i++) {
+      this.shadowPos.push(h[0][0], y, h[0][1], h[i + 1][0], y, h[i + 1][1], h[i][0], y, h[i][1]);
+    }
+  }
+  // corners of a (possibly sloped) prism, for shadows
+  static prismPoints(r, tops, base) {
+    const yaw = r.yaw || 0, c = Math.cos(yaw), s = Math.sin(yaw), hx = r.w / 2, hz = r.d / 2;
+    const L = [[-hx, -hz], [hx, -hz], [hx, hz], [-hx, hz]];
+    const out = [];
+    L.forEach(([lx, lz], i) => {
+      const x = r.x + lx * c + lz * s, z = r.z - lx * s + lz * c;
+      out.push([x, base, z], [x, tops[i], z]);
+    });
+    return out;
+  }
   _bucket(cat) { return this.buckets[cat] || (this.buckets[cat] = { pos: [], nor: [], col: [], uv: [] }); }
 
   // push one vertex: world-space planar UVs + fake ambient occlusion near the ground
@@ -83,6 +121,24 @@ class GeoBuilder {
     for (const p of [a, b, c]) this._vert(B, cat, p[0], p[1], p[2], nx, ny, nz);
   }
   quad(a, b, c, d, color, hint) { this.tri(a, b, c, color, hint); this.tri(a, c, d, color, hint); }
+
+  // triangle with per-vertex normals (smooth shading for curved ramps / bowl)
+  triN(a, b, c, na, nb, nc, color) {
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    if (Math.hypot(fx, fy, fz) < 1e-9) return;
+    if (fx * (na[0] + nb[0] + nc[0]) + fy * (na[1] + nb[1] + nc[1]) + fz * (na[2] + nb[2] + nc[2]) < 0) {
+      let t = b; b = c; c = t; t = nb; nb = nc; nc = t;
+    }
+    const cat = CAT.get(color) || 'plain';
+    const B = this._bucket(cat);
+    this._c.setHex(color);
+    this._vert(B, cat, a[0], a[1], a[2], na[0], na[1], na[2]);
+    this._vert(B, cat, b[0], b[1], b[2], nb[0], nb[1], nb[2]);
+    this._vert(B, cat, c[0], c[1], c[2], nc[0], nc[1], nc[2]);
+  }
+  quadN(a, b, c, d, na, nb, nc, nd, color) { this.triN(a, b, c, na, nb, nc, color); this.triN(a, c, d, na, nc, nd, color); }
 
   // A rectangular prism whose 4 top corners can have different heights.
   // r = {x,z,w,d,yaw}; tops = [hA,hB,hC,hD] for local corners
@@ -168,10 +224,13 @@ export class World {
   box(o, top, side) {
     this.col.addBox(o);
     this.geo.prism(o, [o.h, o.h, o.h, o.h], o.base ?? -0.05, top, side);
+    const b = Math.max(0, o.base ?? 0);
+    if (o.h - b > 0.1 && !o.noShadow) this.geo.castShadow(GeoBuilder.prismPoints(o, [o.h, o.h, o.h, o.h], b), b);
   }
   wedge(o, top, side) { // h0 at local -Z edge, h1 at local +Z edge
     this.col.addWedge(o);
     this.geo.prism(o, [o.h0, o.h0, o.h1, o.h1], o.base ?? -0.05, top, side);
+    if (!o.noShadow) this.geo.castShadow(GeoBuilder.prismPoints(o, [o.h0, o.h0, o.h1, o.h1], 0), 0);
   }
   // quarter pipe rising toward local +Z. Returns the lip height.
   quarter(o, top, side) {
@@ -190,17 +249,25 @@ export class World {
       const d = len * t;
       prof.push([d - hz, base + R - Math.sqrt(Math.max(R * R - d * d, 0))]);
     }
+    // analytic surface normal at each profile point → smooth shading
+    const nAt = (i) => {
+      const d = len * Math.sin((i / N) * Math.PI / 2);
+      const slope = Math.min(d / Math.sqrt(Math.max(R * R - d * d, 1e-6)), 12);
+      const h = dir(0, -slope), inv = 1 / Math.hypot(h[0], 1, h[2]);
+      return [h[0] * inv, inv, h[2] * inv];
+    };
     for (let i = 0; i < N; i++) {
       const [z0, y0] = prof[i], [z1, y1] = prof[i + 1];
       // riding surface
-      const nrm = dir(0, -1); nrm[1] = 1;
-      this.geo.quad(W(-hx, y0, z0), W(hx, y0, z0), W(hx, y1, z1), W(-hx, y1, z1), top, [nrm[0] * 0.3, 1, nrm[2] * 0.3]);
+      const n0 = nAt(i), n1 = nAt(i + 1);
+      this.geo.quadN(W(-hx, y0, z0), W(hx, y0, z0), W(hx, y1, z1), W(-hx, y1, z1), n0, n0, n1, n1, top);
       // side walls
       this.geo.quad(W(-hx, base, z0), W(-hx, base, z1), W(-hx, y1, z1), W(-hx, y0, z0), side, dir(-1, 0));
       this.geo.quad(W(hx, base, z0), W(hx, base, z1), W(hx, y1, z1), W(hx, y0, z0), side, dir(1, 0));
     }
     const lip = prof[N][1];
     this.geo.quad(W(-hx, base, hz), W(hx, base, hz), W(hx, lip, hz), W(-hx, lip, hz), side, dir(0, 1));
+    this.geo.castShadow([W(-hx, base, -hz), W(hx, base, -hz), W(-hx, base, hz), W(hx, base, hz), W(-hx, lip, hz), W(hx, lip, hz), W(-hx, lip * 0.5, hz - len * 0.25), W(hx, lip * 0.5, hz - len * 0.25)], base);
     return lip;
   }
   rail(a, b, tag, color = C.rail, posts = true) {
@@ -270,6 +337,16 @@ export class World {
     // ---------------------------------------------------------------- meshes
     this.mesh = g.build();
     this.scene.add(this.mesh);
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(g.shadowPos, 3));
+    this.fakeShadows = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({
+      color: 0x1c2333, transparent: true, opacity: 0.26, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      // stencil: each pixel is darkened only once, even where shadows overlap
+      stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+    }));
+    this.fakeShadows.renderOrder = 1;
+    this.scene.add(this.fakeShadows);
     this.setQuality('low');
   }
 
@@ -287,6 +364,8 @@ export class World {
       }
       mesh.material = this._mats[key];
     }
+    // real shadow maps on High; cheap painted-on shadows on Low
+    if (this.fakeShadows) this.fakeShadows.visible = level !== 'high';
   }
 
   // ---------------------------------------------------------------- bowl (west)
@@ -304,9 +383,10 @@ export class World {
       // walls
       for (let k = 0; k < K; k++) {
         const a = ring((k / K) * Math.PI / 2), c = ring(((k + 1) / K) * Math.PI / 2);
-        const tm = (t0 + t1) / 2;
-        const hint = [-Math.cos(tm), 0.6, -Math.sin(tm)];
-        g.quad(P(a.r, a.y, t0), P(a.r, a.y, t1), P(c.r, c.y, t1), P(c.r, c.y, t0), k % 3 === 2 ? 0xa7b3b8 : C.bowl, hint);
+        const p0 = (k / K) * Math.PI / 2, p1 = ((k + 1) / K) * Math.PI / 2;
+        const N = (phi, th) => [-Math.sin(phi) * Math.cos(th), Math.cos(phi), -Math.sin(phi) * Math.sin(th)];
+        g.quadN(P(a.r, a.y, t0), P(a.r, a.y, t1), P(c.r, c.y, t1), P(c.r, c.y, t0),
+          N(p0, t0), N(p0, t1), N(p1, t1), N(p1, t0), k % 3 === 2 ? 0xa7b3b8 : C.bowl);
       }
       // deck between the round rim and the square hole in the ground
       const sq0 = SQ / Math.max(Math.abs(Math.cos(t0)), Math.abs(Math.sin(t0)));
@@ -383,7 +463,7 @@ export class World {
     // stairs (n-1 treads below the platform)
     for (let i = 1; i < n; i++) {
       const z0 = zTop + (i - 1) * stepD;
-      this.box({ x: xc, z: z0 + stepD / 2, w: W, d: stepD, h: H - i * stepH, tag: tag + '_steps' },
+      this.box({ x: xc, z: z0 + stepD / 2, w: W, d: stepD, h: H - i * stepH, tag: tag + '_steps', noShadow: true },
         i % 2 ? 0xd6d0c4 : 0xc9c2b4, C.concreteSide);
     }
     // side blocks next to the stairs, flush with platform (gives a hubba-like edge)
@@ -508,6 +588,7 @@ export class World {
       const h = 8 + 4 * ((k * 7919) % 5); // whole floors (texture = 4 m per floor)
       const col = BUILDING_COLORS[k % BUILDING_COLORS.length];
       this.geo.prism({ x, z, w: 18, d: 16, yaw: 0 }, [h, h, h, h], 0, col, col);
+      this.geo.castShadow(GeoBuilder.prismPoints({ x, z, w: 18, d: 16 }, [h, h, h, h], 0), 0);
       this.geo.prism({ x, z, w: 18.3, d: 16.3 }, [h + 0.4, h + 0.4, h + 0.4, h + 0.4], h, 0x6c6f72, 0x6c6f72); // roof edge
       k++;
     }
@@ -518,6 +599,9 @@ export class World {
       this.box({ x, z, w: 0.5, d: 0.5, h: 3, tag: 'tree' }, C.trunk, C.trunk);
       // leafy crown made of a few low-poly blobs
       const blobs = [[0, 4.2, 0, 1.9], [0.9, 3.6, 0.4, 1.3], [-0.8, 3.7, -0.5, 1.3], [0.1, 5.3, 0.2, 1.2]];
+      const cp = [];
+      for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; cp.push([x + Math.cos(t) * 1.9, 4.3, z + Math.sin(t) * 1.9], [x + Math.cos(t) * 1.2, 5.6, z + Math.sin(t) * 1.2]); }
+      this.geo.castShadow(cp, 0);
       blobs.forEach(([bx, by, bz, r], i) => {
         const crown = new THREE.IcosahedronGeometry(r, 0);
         this.geo.addGeometry(crown, new THREE.Matrix4().makeTranslation(x + bx, by, z + bz), (i + x) % 2 ? C.leaf : C.leaf2);
@@ -528,5 +612,43 @@ export class World {
       this.box({ x, z, w: 0.2, d: 0.2, h: 4.5, tag: 'lamp' }, C.metal, C.metal);
       this.geo.prism({ x, z, w: 0.6, d: 0.6 }, [4.8, 4.8, 4.8, 4.8], 4.5, 0xfff3b0, 0xfff3b0);
     }
+    this._props();
+  }
+
+  // ---------------------------------------------------------------- street furniture
+  _props() {
+    // trash cans
+    for (const [x, z] of [[-18, 30], [18, -28], [-33, 10], [33, 12], [5, 34], [-45, -5], [56, 20]]) {
+      this.col.addBox({ x, z, w: 0.6, d: 0.6, h: 0.95, tag: 'bin' });
+      const can = new THREE.CylinderGeometry(0.3, 0.27, 0.9, 10);
+      this.geo.addGeometry(can, new THREE.Matrix4().makeTranslation(x, 0.45, z), 0x3e5641);
+      const lid = new THREE.CylinderGeometry(0.33, 0.33, 0.06, 10);
+      this.geo.addGeometry(lid, new THREE.Matrix4().makeTranslation(x, 0.93, z), 0x2f3d31);
+      const pts = []; for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; pts.push([x + Math.cos(t) * 0.3, 0, z + Math.sin(t) * 0.3], [x + Math.cos(t) * 0.3, 0.95, z + Math.sin(t) * 0.3]); }
+      this.geo.castShadow(pts, 0);
+    }
+    // planters with bushes (their edges are grindable)
+    for (const [x, z] of [[-26, -18], [26, 17], [-12, 36], [40, -10]]) {
+      this.ledge({ x, z, w: 1.6, d: 1.6, h: 0.5, tag: 'planter' }, C.concrete, C.concreteSide, 'planter');
+      for (const [bx, bz, r] of [[0, 0, 0.6], [0.3, 0.25, 0.4], [-0.3, -0.2, 0.45]]) {
+        this.geo.addGeometry(new THREE.IcosahedronGeometry(r, 0), new THREE.Matrix4().makeTranslation(x + bx, 0.75 + r * 0.3, z + bz), C.leaf2);
+      }
+    }
+    // parked cars near the bottom of the hill
+    const CAR_COLORS = [0xb23a48, 0x2d4059, 0xe0e0e0, 0x3a6351];
+    [[16, 40, 0], [-16, 41, 0], [22, 47, 0.08], [-22, 38, -0.05]].forEach(([x, z, yaw], i) => {
+      const col = CAR_COLORS[i % CAR_COLORS.length];
+      const r = { x, z, w: 1.8, d: 4.2, yaw };
+      this.col.addBox({ ...r, h: 1.0, tag: 'car' });
+      this.geo.prism(r, [0.95, 0.95, 0.95, 0.95], 0.28, col, col);                           // body
+      this.geo.prism({ x, z: z - 0.2, w: 1.6, d: 2.2, yaw }, [1.45, 1.45, 1.45, 1.45], 0.95, 0x27323d, col); // cabin (glass)
+      this.geo.prism({ x, z: z - 0.2, w: 1.5, d: 1.9, yaw }, [1.48, 1.48, 1.48, 1.48], 1.45, col, col);    // roof
+      for (const [wx, wz] of [[-0.85, 1.3], [0.85, 1.3], [-0.85, -1.3], [0.85, -1.3]]) {
+        const c = Math.cos(yaw), s = Math.sin(yaw);
+        const w = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 10).rotateZ(Math.PI / 2);
+        this.geo.addGeometry(w, new THREE.Matrix4().makeRotationY(yaw).setPosition(x + wx * c + wz * s, 0.32, z - wx * s + wz * c), 0x1b1b1b);
+      }
+      this.geo.castShadow(GeoBuilder.prismPoints(r, [1.45, 1.45, 1.45, 1.45], 0), 0);
+    });
   }
 }
