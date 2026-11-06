@@ -192,8 +192,9 @@ export const CHALLENGES = [
 //  CAMERA
 // -----------------------------------------------------------------------------
 export const CAMERA = {
-  follow: { distance: 4.6, height: 1.9, lookHeight: 1.0, fov: 62, lag: 5.5 },
+  follow: { distance: 3.7, height: 1.45, lookHeight: 1.05, fov: 64, lag: 5.5 },
   filmer: { distance: 7.5, height: 1.2, side: 3.2, lookHeight: 0.8, fov: 74, lag: 2.6 },
+  fisheye: { distance: 2.0, height: 0.45, side: 1.1, lookHeight: 0.65, fov: 108, lag: 4.5 },
   minAboveGround: 0.6,
 };
 
@@ -263,6 +264,8 @@ export const OUTFIT_OPTIONS = {
   top:    [['hoodie', 'Hoodie'], ['tee', 'T-shirt'], ['jacket', 'Jacket'], ['flannel', 'Flannel']],
   pants:  [['jeans', 'Jeans'], ['cargo', 'Cargos'], ['shorts', 'Shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
+  stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
+  pushStyle: [['normal', 'Normal push'], ['mongo', 'Mongo (front foot)']],
 };
 export const OUTFIT_COLORS = {
   hatColor:   [0xf4743b, 0x1d1d1d, 0xe63946, 0x2a9d8f, 0xf2c14e, 0xffffff, 0x457b9d, 0x6a4c93],
@@ -276,4 +279,26 @@ export const OUTFIT_COLORS = {
 export const DEFAULT_OUTFIT = {
   hat: 'beanie', hatColor: 0xf4743b, top: 'hoodie', topColor: 0x2a9d8f, pants: 'jeans', pantsColor: 0x3d5a80,
   shoeColor: 0xf1f1f1, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0xe9c46a, backpack: true,
+  stance: 'regular', pushStyle: 'normal',
+};
+
+// -----------------------------------------------------------------------------
+//  PUSHING — each push is a real stroke: foot plants, sweeps back, lifts.
+// -----------------------------------------------------------------------------
+export const PUSH = {
+  cycle: 0.78,              // seconds for one full push stroke
+  contactStart: 0.18,       // fraction of the stroke when the foot touches the ground
+  contactEnd: 0.6,          // ...and when it leaves
+  speedPerPush: 1.9,        // m/s gained from one full stroke (at low speed)
+};
+
+// -----------------------------------------------------------------------------
+//  FLICK GESTURES — mouse (hold left button & drag) or the touch POP pad.
+//  Pull DOWN to crouch, then flick UP to pop. The flick direction picks the trick.
+//  Each gesture is converted to the key sequence used by FLIP_TRICKS above.
+// -----------------------------------------------------------------------------
+export const GESTURE = {
+  segment: 24,              // pixels of movement that count as one flick segment
+  // final flick after pulling down → keys appended after 'down'
+  finals: { up: ['up'], upleft: ['left'], upright: ['right'] },
 };

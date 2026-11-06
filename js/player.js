@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE,
   GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
-import { PHYSICS2 as P2 } from './config.js';
+import { PHYSICS2 as P2, PUSH } from './config.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -123,16 +123,16 @@ export class Player {
     }
 
     if (this.state === 'ride' && !this.crouching && !this.manual) {
-      if (inp.pressed.up && realNow - this.lastPush > P.pushCooldown) this.wantPush = true;
-      else if (inp.held.up && realNow - this.lastPush > P.pushHoldInterval) this.wantPush = true;
-      if (this.wantPush) this.lastPush = realNow;
+      // a tap starts one push stroke (or queues the next); holding keeps pushing
+      if (inp.pressed.up) { if (this.pushPhase < 0) this.wantPush = true; else this.pushQueued = true; }
+      else if (inp.held.up && this.pushPhase < 0) this.wantPush = true;
     }
   }
 
   // ------------------------------------------------------------------ fixed-step update
   update(dt) {
     this.time += dt;
-    if (this.pushPhase >= 0) { this.pushPhase += dt * 2.2; if (this.pushPhase >= 1) this.pushPhase = -1; }
+    this.updatePushStroke(dt);
     if (this.wantPop) {
       const w = this.wantPop; this.wantPop = null;
       if (this.state === 'ride') { if (this.manual) this.endManual(); this.pop(w); }
@@ -144,6 +144,28 @@ export class Player {
       case 'grind': this.updateGrind(dt); break;
       case 'bail': this.updateBail(dt); break;
       case 'walk': this.updateWalk(dt); break;
+    }
+  }
+
+  // A push is a stroke: the foot plants, sweeps back (speed builds while it's on
+  // the ground), then lifts and returns to the board. Each push adds less the
+  // faster you already go, so speed tops out naturally around pushMaxSpeed.
+  updatePushStroke(dt) {
+    if (this.pushPhase < 0) return;
+    const ok = this.state === 'ride' && !this.manual && !this.crouching && this.normal.y > 0.97;
+    if (!ok) { this.pushPhase = -1; this.pushQueued = false; return; }
+    const prev = this.pushPhase;
+    this.pushPhase += dt / PUSH.cycle;
+    const p = this.pushPhase;
+    if (prev < PUSH.contactStart && p >= PUSH.contactStart) this.emit('push');
+    if (p > PUSH.contactStart && p < PUSH.contactEnd) {
+      const falloff = Math.max(0, 1 - Math.pow(this.speed / P.pushMaxSpeed, 2));
+      this.speed += PUSH.speedPerPush / ((PUSH.contactEnd - PUSH.contactStart) * PUSH.cycle) * falloff * dt;
+    }
+    if (p >= 1) {
+      this.pushPhase = -1;
+      if (this.pushQueued || this.input.held.up) this.pushPhase = 0; // keep pushing
+      this.pushQueued = false;
     }
   }
 
@@ -181,11 +203,7 @@ export class Player {
     // --- push / brake / powerslide
     if (this.wantPush) {
       this.wantPush = false;
-      if (this.speed < P.pushMaxSpeed && n.y > 0.97) {
-        this.speed = Math.min(P.pushMaxSpeed, this.speed + P.pushImpulse);
-        this.pushPhase = 0;
-        this.emit('push');
-      }
+      if (this.pushPhase < 0 && n.y > 0.97 && !this.crouching) this.pushPhase = 0;
     }
     const braking = inp.held.down && !this.crouching && !this.manual;
     const wasSliding = this.powersliding;

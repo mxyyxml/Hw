@@ -12,11 +12,16 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 // The controls table (shown on the H overlay and in the Controls menu)
 const CONTROLS = [
   ['Riding'],
-  ['<kbd>W</kbd> / <kbd>↑</kbd>', 'Push (tap repeatedly). On a ramp: pump for speed'],
+  ['<kbd>W</kbd> / <kbd>↑</kbd>', 'Push — tap for one stroke, hold to keep pushing. On a ramp: pump. (Regular / Goofy / Mongo in the Closet)'],
   ['<kbd>S</kbd> / <kbd>↓</kbd>', 'Brake — at speed it\'s a powerslide'],
   ['<kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd>', 'Steer on the ground, spin in the air'],
   ['<kbd>Space</kbd> hold → release', 'Crouch, then ollie (longer hold = higher)'],
-  ['Flick tricks (hold Space, press keys, release)'],
+  ['Mouse flick (hold left button on the game & drag)'],
+  ['Pull ↓ then flick ↑', 'Ollie — pops the moment you flick'],
+  ['Pull ↓ then flick ↖ / ↗', 'Kickflip / Heelflip'],
+  ['Pull ↓, drag ←, flick ↑', '360 Flip  (→ then ↑ = Laser Flip)'],
+  ['Push ↑ then flick ↓', 'Nollie'],
+  ['Keyboard flick tricks (hold Space, press keys, release)'],
   ['<kbd>↓</kbd> <kbd>↑</kbd>', 'Ollie'],
   ['<kbd>↓</kbd> <kbd>←</kbd>', 'Kickflip'],
   ['<kbd>↓</kbd> <kbd>→</kbd>', 'Heelflip'],
@@ -36,7 +41,7 @@ const CONTROLS = [
   ['Other'],
   ['<kbd>E</kbd>', 'Step off / on the board (walk with WASD, Shift to run)'],
   ['<kbd>R</kbd> / <kbd>T</kbd>', 'Respawn at your spot / set a custom drop spot'],
-  ['<kbd>C</kbd>', 'Switch camera (follow / filmer)'],
+  ['<kbd>C</kbd>', 'Switch camera (follow / filmer / fisheye)'],
   ['<kbd>H</kbd>', 'Show / hide this help'],
   ['<kbd>P</kbd> / <kbd>Esc</kbd>', 'Pause menu'],
 ];
@@ -126,7 +131,7 @@ export class UI {
         const o = g.outfit;
         const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
           hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
-          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board' };
+          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing' };
         h = `<h2>Closet</h2><div class="closet">`;
         for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
           h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +
@@ -158,7 +163,8 @@ export class UI {
             <button data-set="touch" data-val="off" class="${s.touch === 'off' ? 'sel' : ''}">Off</button></span></div>
           <div class="setting"><span>Camera</span><span class="row-buttons">
             <button data-set="camera" data-val="follow" class="${g.rig.mode === 'follow' ? 'sel' : ''}">Follow</button>
-            <button data-set="camera" data-val="filmer" class="${g.rig.mode === 'filmer' ? 'sel' : ''}">Filmer</button></span></div>
+            <button data-set="camera" data-val="filmer" class="${g.rig.mode === 'filmer' ? 'sel' : ''}">Filmer</button>
+            <button data-set="camera" data-val="fisheye" class="${g.rig.mode === 'fisheye' ? 'sel' : ''}">Fisheye</button></span></div>
           ${backBtn}`;
         break;
       }

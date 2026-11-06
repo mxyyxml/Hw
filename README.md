@@ -36,9 +36,15 @@ re-run that after editing the code, see the script for the two npm packages it n
 
 ## 🎮 Controls
 
+**Mouse flick (stick-style):** hold the left mouse button on the game and drag —
+pull **down** to wind up, then flick **up** to pop. Flick **up-left** = Kickflip, **up-right** = Heelflip,
+down → left → up = 360 Flip, down → right → up = Laser Flip, up → down = Nollie.
+Letting go without a flick does a plain ollie.
+
+
 | Key | Action |
 | --- | --- |
-| **W / ↑** | Push (tap repeatedly). On a ramp: pump for speed |
+| **W / ↑** | Push — tap for one stroke, hold to keep pushing. On a ramp: pump for speed |
 | **S / ↓** | Brake — at speed it's a powerslide |
 | **A D / ← →** | Steer on the ground, spin in the air |
 | **Space** (hold → release) | Crouch, then ollie. Longer hold = higher pop |
@@ -49,7 +55,7 @@ re-run that after editing the code, see the script for the two npm packages it n
 | **L** | Manual (L + ↑ = Nose Manual). Balance with W / S. Tap L in the air to land into one |
 | **E** | Step off / on the board (walk with WASD, Shift to run) |
 | **R** / **T** | Respawn at your spot / set a custom drop spot |
-| **C** | Switch camera (close follow / wide filmer) |
+| **C** | Switch camera (close follow / wide filmer / low fisheye filmer) |
 | **H** | Help overlay |
 | **P / Esc** | Pause menu (teleport, challenges, settings) |
 
@@ -60,13 +66,14 @@ Hold your phone sideways.
 | Touch | Action |
 | --- | --- |
 | **Left joystick** | Steer / spin. Up = push & pump, down = brake |
-| **POP pad** (right) | Touch & hold = crouch, release = ollie. While holding, **swipe** ↓ then ← = Kickflip, ↓ then → = Heelflip, ↓ ↑ ← = 360 Flip, ↑ ↓ = Nollie |
+| **POP pad** (right) | Works like a flick stick: pull ↓ then flick ↑ = Ollie, ↖ = Kickflip, ↗ = Heelflip, ↓ ← ↑ = 360 Flip, ↑ ↓ = Nollie. Tap = plain ollie |
 | **GRAB / GRIND / MANUAL / SHUV** | Same as J / K / L / Shift+arrow (the joystick picks the direction) |
 | **? · CAM · WALK · ↺ · ❚❚** | Help, camera, walk, respawn, pause |
 
 ### 👕 Closet
 Title screen or Pause → **Closet**: hats, tops (hoodie, tee, jacket, flannel), jeans / cargos / shorts,
-colours for everything, skin tone, hair, backpack and board colour. Saved in your browser.
+colours for everything, skin tone, hair, backpack, board colour, **stance (Regular / Goofy)** and
+**push style (Normal / Mongo)**. Saved in your browser.
 
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
 in the air. Land with the board straight (forward or fakie) and your flip finished, or you
@@ -117,6 +124,7 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | `js/audio.js` | Web Audio sound effects |
 | `js/ui.js` | HUD, pop-ups, menus |
 | `js/storage.js` | Safe localStorage helper |
+| `js/gesture.js` | Mouse / thumb flick-stick gestures |
 | `js/touch.js` | Phone / tablet touch controls and device detection |
 | `js/textures.js` | Procedural canvas textures (concrete, tiles, asphalt, wood, windows…) |
 | `play.html` | Built single-file version of the whole game |

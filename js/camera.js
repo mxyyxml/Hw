@@ -30,7 +30,12 @@ export class CameraRig {
   // camera jolt (e.g. on a hard landing)
   addShake(amount) { this.shake = Math.min(0.35, this.shake + amount); }
 
-  toggle() { this.mode = this.mode === 'follow' ? 'filmer' : 'follow'; return this.mode; }
+  // C cycles: close follow → wide filmer → low fisheye filmer
+  toggle() {
+    const order = ['follow', 'filmer', 'fisheye'];
+    this.mode = order[(order.indexOf(this.mode) + 1) % order.length];
+    return this.mode;
+  }
   snap() { this.first = true; }
 
   update(dt, player, col) {

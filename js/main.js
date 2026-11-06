@@ -15,6 +15,7 @@ import { Challenges } from './challenges.js';
 import { Audio } from './audio.js';
 import { UI } from './ui.js';
 import { TouchControls, isTouchDevice } from './touch.js';
+import { FlickGesture } from './gesture.js';
 import { DEFAULT_OUTFIT } from './config.js';
 import { Storage } from './storage.js';
 
@@ -107,6 +108,19 @@ class Game {
     this.touch = new TouchControls(this.input, this);
     this.isTouch = isTouchDevice();
     this.updateTouch();
+    // mouse flick: hold the left button on the game view and drag (pull ↓, flick ↑)
+    this.mouseFlick = new FlickGesture(this.input);
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || this.mode === 'title' || this.paused) return;
+      this.audio.init();
+      this.mouseFlick.start(e.clientX, e.clientY);
+      try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    });
+    this.canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this.mouseFlick.move(e.clientX, e.clientY); });
+    const endFlick = (e) => { if (e.pointerType === 'mouse') this.mouseFlick.end(); };
+    this.canvas.addEventListener('pointerup', endFlick);
+    this.canvas.addEventListener('pointercancel', endFlick);
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     this.mode = 'title';
     this.paused = false;
@@ -146,6 +160,23 @@ class Game {
     this.renderer.shadowMap.enabled = g.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.world.setQuality(level);
+    // High: reflections / ambient light from the sky (image-based lighting)
+    if (level === 'high') {
+      if (!this.envMap) {
+        const pm = new THREE.PMREMGenerator(this.renderer);
+        const envScene = new THREE.Scene();
+        envScene.add(makeSky(0xcfe0ea));
+        const ground = new THREE.Mesh(new THREE.CircleGeometry(300, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8f8a80 }));
+        ground.position.y = -2; envScene.add(ground);
+        this.envMap = pm.fromScene(envScene, 0.04).texture;
+        pm.dispose();
+      }
+      this.scene.environment = this.envMap;
+      this.hemi.intensity = 1.1;
+    } else {
+      this.scene.environment = null;
+      this.hemi.intensity = 1.9;
+    }
     this.sun.castShadow = g.shadows;
     if (g.shadows) {
       this.sun.shadow.mapSize.set(g.shadowMapSize, g.shadowMapSize);
@@ -359,7 +390,7 @@ class Game {
   step(realDt) {
     const p = this.player, inp = this.input;
     const now = performance.now() / 1000;
-    if (inp.pressed.camera) this.ui.toast('Camera: ' + (this.rig.toggle() === 'follow' ? 'Follow' : 'Filmer'), '', 1200);
+    if (inp.pressed.camera) this.ui.toast('Camera: ' + { follow: 'Follow', filmer: 'Filmer', fisheye: 'Fisheye filmer' }[this.rig.toggle()], '', 1200);
     p.frameInput(now);
 
     // slow-mo during bails

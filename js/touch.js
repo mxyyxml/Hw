@@ -20,6 +20,8 @@ export function isTouchDevice() {
   } catch (e) { return false; }
 }
 
+import { FlickGesture } from './gesture.js';
+
 const KEY = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown' };
 
 export class TouchControls {
@@ -31,6 +33,7 @@ export class TouchControls {
     this.stick = null;            // { id, x0, y0 }
     this.pad = null;              // { id, x, y, lastDir }
     this.stickDirs = {};          // which directions the joystick currently wants
+    this.gesture = new FlickGesture(input);
     this._build();
   }
 
@@ -40,7 +43,7 @@ export class TouchControls {
     root.className = 'hidden';
     root.innerHTML = `
       <div id="t-stick-zone"><div id="t-stick-base"><div id="t-stick-knob"></div></div><span class="t-hint">steer · push</span></div>
-      <div id="t-pad"><span>POP</span><small>hold · swipe · release</small></div>
+      <div id="t-pad"><span>POP</span><small>pull ↓ · flick ↑</small></div>
       <div id="t-buttons">
         <button class="t-btn" data-key="KeyJ">GRAB</button>
         <button class="t-btn" data-key="KeyK">GRIND</button>
@@ -79,9 +82,9 @@ export class TouchControls {
     pad.addEventListener('touchstart', (e) => {
       e.preventDefault();
       const t = e.changedTouches[0];
-      this.pad = { id: t.identifier, x: t.clientX, y: t.clientY, lastDir: null };
+      this.pad = { id: t.identifier };
       pad.classList.add('active');
-      this._down('Space');
+      this.gesture.start(t.clientX, t.clientY);
     }, opts);
 
     // shared move / end handlers (multi-touch aware)
@@ -89,7 +92,7 @@ export class TouchControls {
       if (!this.enabled) return;
       for (const t of e.changedTouches) {
         if (this.stick && t.identifier === this.stick.id) { e.preventDefault(); this._stickMove(t.clientX, t.clientY); }
-        if (this.pad && t.identifier === this.pad.id) { e.preventDefault(); this._padMove(t.clientX, t.clientY); }
+        if (this.pad && t.identifier === this.pad.id) { e.preventDefault(); this.gesture.move(t.clientX, t.clientY); }
       }
     }, opts);
     const end = (e) => {
@@ -101,7 +104,7 @@ export class TouchControls {
         }
         if (this.pad && t.identifier === this.pad.id) {
           this.pad = null; pad.classList.remove('active');
-          this._up('Space');
+          this.gesture.end();
         }
       }
     };
@@ -148,20 +151,6 @@ export class TouchControls {
     set(KEY.down, ny > 0.55);
   }
 
-  // swipe on the pop pad = flick directions (each new direction is one "key press")
-  _padMove(x, y) {
-    const P = this.pad, dx = x - P.x, dy = y - P.y;
-    if (Math.hypot(dx, dy) < 26) return;
-    const dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
-    P.x = x; P.y = y;
-    if (dir === P.lastDir) return;
-    P.lastDir = dir;
-    const code = KEY[dir];
-    if (this.held[code]) this._up(code);      // re-press even if the stick holds it
-    this._down(code);
-    setTimeout(() => { if (!this.stickDirs[code]) this._up(code); }, 50);
-  }
-
   setEnabled(on) {
     this.enabled = on;
     this.root.classList.toggle('hidden', !on);
@@ -176,12 +165,13 @@ export class TouchControls {
 export const TOUCH_HELP = [
   ['Moving'],
   ['Left thumb – joystick', 'Left / right = steer (spin in the air). Up = push (and pump on ramps). Down = brake / powerslide'],
-  ['Right thumb – POP pad'],
-  ['Touch & hold, then let go', 'Ollie (hold longer = higher)'],
-  ['Hold, swipe ↓ then ←', 'Kickflip'],
-  ['Hold, swipe ↓ then →', 'Heelflip'],
-  ['Hold, swipe ↓ ↑ ←', '360 Flip  (↓ ↑ → = Laser Flip)'],
-  ['Hold, swipe ↑ then ↓', 'Nollie'],
+  ['Right thumb – POP pad (like a flick stick)'],
+  ['Pull ↓ then flick ↑', 'Ollie — pops the moment you flick'],
+  ['Pull ↓ then flick ↖ / ↗', 'Kickflip / Heelflip'],
+  ['Pull ↓, swipe ←, flick ↑', '360 Flip  (→ then ↑ = Laser Flip)'],
+  ['Pull ↓, swipe ←, flick ↖', 'Double Kickflip (→ ↗ = Double Heelflip)'],
+  ['Push ↑ then flick ↓', 'Nollie'],
+  ['Touch & let go', 'Plain ollie (hold longer = higher)'],
   ['Buttons'],
   ['SHUV (in the air)', 'Shuvit (hold joystick right for FS)'],
   ['GRAB (hold, in the air)', 'Grab — joystick direction picks Indy / Nosegrab / Tailgrab / Melon / Stalefish'],
