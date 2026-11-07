@@ -92,6 +92,8 @@ BONES = [
     ('legL', JB['l-upper-leg'], JB['l-knee'], 0, 1), ('kneeL', JB['l-knee'], JB['l-ankle'], 10, 1), ('footL', JB['l-ankle'], JB['l-foot-2'], 11, 1),
 ]
 CHILD = {0: 1, 1: 2, 3: 4, 5: 6, 7: 8, 8: 9, 10: 11, 11: 12}
+ZONES = {'hips': (0, 0.3), 'torso': (0.2, 0.12), 'head': (0.15, 0), 'sh': (0.22, 0.09), 'el': (0.09, 0),
+         'leg': (0.1, 0.09), 'knee': (0.09, 0.18), 'foot': (0.2, 0)}
 
 def seg_t_d(p, a, b):
     ab = [b[k] - a[k] for k in range(3)]
@@ -116,13 +118,19 @@ for p in P:
         if best is None or d < best[0]:
             best = (d, bi, t)
     d, bi, t = best
+    # Blend zones (fraction of the bone's length) where skin is shared with the
+    # parent / child bone. Short zones at knees, elbows and hips give a real crease
+    # instead of a rubbery bend; longer zones at the waist and shoulders keep the
+    # torso and deltoids smooth.
     w = {bi: 1.0}
     parent = BONES[bi][3]
-    if t < 0.22 and parent is not None:
-        k = 0.5 + t / 0.44
+    z0, z1 = ZONES[BONES[bi][0][:-1] if BONES[bi][0][-1] in 'LR' else BONES[bi][0]]
+    ss = lambda x: x * x * (3 - 2 * x)
+    if z0 and t < z0 and parent is not None:
+        k = 0.5 + 0.5 * ss(t / z0)
         w = {bi: k, parent: 1 - k}
-    elif t > 0.78 and bi in CHILD:
-        k = 0.5 + (1 - t) / 0.44
+    elif z1 and t > 1 - z1 and bi in CHILD:
+        k = 0.5 + 0.5 * ss((1 - t) / z1)
         w = {bi: k, CHILD[bi]: 1 - k}
     items = sorted(w.items(), key=lambda x: -x[1])[:4]
     while len(items) < 4:

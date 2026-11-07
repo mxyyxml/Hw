@@ -34,7 +34,7 @@ function slot(r, o) {
   }
 }
 // cloth thickness (m) per material slot
-const THICK = [0, 0.006, 0.009, 0.014, 0.005];
+const THICK = [0, 0.006, 0.009, 0.008, 0.005];
 
 // Re-shape the skeleton to the human's proportions and set the bind pose.
 // Returns the leg measurements the animation needs.
@@ -110,7 +110,14 @@ export function buildHuman(sk, mats) {
   const triReg = new Uint8Array(index.length / 3);
   for (let t = 0; t < triReg.length; t++) {
     const a = reg[index[t * 3]], b = reg[index[t * 3 + 1]], c = reg[index[t * 3 + 2]];
-    triReg[t] = (a === b || a === c) ? a : (b === c ? b : a);
+    let r = (a === b || a === c) ? a : (b === c ? b : a);
+    // clean waistline: shirt vs jeans decided by the triangle's centre height, not its corners
+    const tset = new Set([a, b, c]);
+    if (tset.has(R.torso) && tset.has(R.pelvis)) {
+      const cy = (male[index[t * 3] * 3 + 1] + male[index[t * 3 + 1] * 3 + 1] + male[index[t * 3 + 2] * 3 + 1]) / 3;
+      r = cy < HUMAN.joints['spine-4'][1] + 0.005 ? R.pelvis : R.torso;
+    }
+    triReg[t] = r;
   }
 
   const setOutfit = (o) => {

@@ -350,6 +350,9 @@ export class Skater {
 
   // Two-bone leg IK toward a foot target (tx,ty,tz) given relative to the hip, in body space
   _legIK(L, tx, ty, tz) {
+    // targets are given in body space; the legs hang from the (tilted) pelvis
+    const th = this._tilt || 0;
+    if (th) { const c = Math.cos(th), sn = Math.sin(th), y = ty, z = tz; ty = y * c + z * sn; tz = -y * sn + z * c; }
     const T = this.thigh, Sh = this.shin;
     const len = Math.min(Math.hypot(tx, ty, tz), T + Sh - 0.001);
     // knee angle from the law of cosines (works for unequal thigh / shin)
@@ -360,7 +363,7 @@ export class Skater {
     const fwd = Math.atan2(tz, Math.hypot(tx, ty));
     L.hip.rotation.set(-(k + fwd), 0, splay);
     L.knee.rotation.x = kneeBend;
-    L.foot.rotation.set(k + fwd - kneeBend, 0, -splay);   // keep the foot flat: cancels hip + knee pitch
+    L.foot.rotation.set(k + fwd - kneeBend - th, 0, -splay);   // keep the foot flat: cancels pelvis + hip + knee pitch
   }
 
   animate(st, dt) {
@@ -399,10 +402,16 @@ export class Skater {
 
     // ---------------- base pose
     const legL = this.thigh + this.shin;
-    const stand = 0.874 * legL + this.footH, low = 0.493 * legL + this.footH;
-    let hipH = lerp(stand, low, Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95) + a.dip * 0.6));
+    // athletic skate stance: knees always a little bent
+    const stand = 0.84 * legL + this.footH, low = 0.47 * legL + this.footH;
+    const bend = Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95) + a.dip * 0.6);
+    let hipH = lerp(stand, low, bend);
     hipH -= a.push * 0.17;                    // bend the standing knee so the push foot reaches the floor
     this.hips.position.set(0, hipH, 0);
+    // real crouches hinge at the hips too: the pelvis tips forward as you go down
+    // (the legs' IK and the torso compensate, so feet and shoulders stay put)
+    this._tilt = 0.1 + bend * 0.5 + a.push * 0.12 - Math.abs(a.manual) * 0.25;
+    this.hips.rotation.set(this._tilt, 0, 0);
     this.bodyBase.position.set(0, DECK_Y + (st.boardLift || 0), 0);
     this.bodyBase.rotation.set(0, 0, 0);
     // open the shoulders toward the nose while pushing
@@ -449,16 +458,19 @@ export class Skater {
     if (a.tuck > 0.01) for (const L of this.legs) { L.knee.rotation.x += a.tuck * 0.35; L.hip.rotation.x -= a.tuck * 0.15; }
 
     // torso, head, arms
-    this.torso.rotation.x = 0.15 + a.crouch * 0.35 + a.grab * 0.5 + a.lean * 0.25 + a.dip * 0.3 + a.push * 0.25;
+    // upper body: lean (minus what the pelvis already tilts), shoulders opened toward the nose
+    this.torso.rotation.x = 0.15 + a.crouch * 0.35 + a.grab * 0.5 + a.lean * 0.25 + a.dip * 0.3 + a.push * 0.25 - this._tilt * 0.8;
+    this.torso.rotation.y = -s * 0.32 * (1 - a.push);
     this.torso.rotation.z = (-a.manual * 0.9 + a.slide * 0.1) * s + (st.sketch || 0) * Math.sin(performance.now() / 70) * 0.35;
-    this.head.rotation.y = s * (-1.25 + a.lean * 0.15) * (1 - a.push * 0.3);
+    this.head.rotation.y = s * (-0.95 + a.lean * 0.15) * (1 - a.push * 0.3);
     this.head.rotation.x = -0.1 - a.crouch * 0.2;
     const t = performance.now() / 1000;
     for (const A of this.arms) {
       const wobble = (mode === 'manual' || mode === 'grind') ? Math.sin(t * 7 + A.sgn) * 0.15 : 0;
       const swing = a.push * Math.sin((st.pushPhase || 0) * Math.PI * 2 + A.sgn) * 0.5;
-      A.sh.rotation.set(0.1 + a.dip * 0.3 + swing, 0, A.sgn * (0.2 + a.armsOut * 0.75 + wobble + a.dip * 0.4) * (1 - a.push * 0.6));
-      A.el.rotation.set(-0.4 - a.push * 0.3, 0, 0);
+      // relaxed arms: hang near the body with soft elbows, spread for balance on rails / manuals
+      A.sh.rotation.set(0.12 + a.dip * 0.3 + swing + a.crouch * 0.25, 0, A.sgn * (0.1 + a.armsOut * 0.55 + wobble + a.dip * 0.35) * (1 - a.push * 0.6));
+      A.el.rotation.set(-0.45 - a.push * 0.3 - a.crouch * 0.3, 0, 0);
     }
     if (a.grab > 0.01) {
       const A = this.arms[st.grabHand === 'back' ? 1 : 0];
@@ -468,34 +480,49 @@ export class Skater {
     }
 
     // ---------------- walk / run mode (the board is left on the ground)
+    // A proper gait cycle: each thigh swings forward and back, the knee folds as
+    // the leg swings through and straightens to land on the heel, the foot rolls
+    // and pushes off, arms swing opposite to the legs, the body bobs each step
+    // and leans into a run.
     if (a.walk > 0.01) {
-      const spd = st.walkSpeed || 0, run = Math.min(1, Math.max(0, (spd - 2.6) / 2.8));
-      this.walkPhase += dt * spd * (3.0 - run * 0.6);
-      const sw0 = Math.sin(this.walkPhase), amp = Math.min(1, spd / 2) * (0.5 + run * 0.35);
+      const spd = st.walkSpeed || 0, run = Math.min(1, Math.max(0, (spd - 2.6) / 2.6));
+      const move = Math.min(1, spd / 1.2);
+      this.walkPhase += dt * spd * (2.7 - run * 0.7);            // steps per metre (runs take longer strides)
+      const ph = this.walkPhase;
       this.body.rotation.y = lerp(s * Math.PI / 2, 0, a.walk);
-      this.bodyBase.position.y = lerp(DECK_Y, 0.06 + Math.abs(Math.cos(this.walkPhase)) * 0.03 * run, a.walk);
-      this.hips.position.y = lerp(hipH, this.thigh + this.shin + this.footH - 0.03 - run * 0.03, a.walk);
+      const bob = Math.abs(Math.cos(ph)) * (0.025 + run * 0.05) * move;
+      this.bodyBase.position.y = lerp(DECK_Y, 0.02 + bob, a.walk);
+      const legH = this.thigh + this.shin + this.footH;
+      this.hips.position.y = lerp(hipH, legH - 0.035 - run * 0.06 - (1 - move) * 0.0, a.walk);
+      const hipAmp = (0.42 + run * 0.4) * move, kneeAmp = (0.95 + run * 0.9) * move;
       for (let i = 0; i < 2; i++) {
-        const L = this.legs[i], sw = (i === 0 ? sw0 : -sw0) * amp;
-        L.hip.rotation.set(lerp(L.hip.rotation.x, -sw, a.walk), 0, lerp(L.hip.rotation.z, 0, a.walk));
-        L.knee.rotation.x = lerp(L.knee.rotation.x, Math.max(0, sw) * (0.6 + run * 0.9) + 0.05, a.walk);
-        L.foot.rotation.set(lerp(L.foot.rotation.x, -0.1, a.walk), 0, 0);
+        const L = this.legs[i], p = ph + (i === 0 ? 0 : Math.PI);
+        const thigh = Math.sin(p) * hipAmp;                          // + = thigh forward
+        const kneeBendW = 0.08 + Math.max(0, Math.cos(p - 0.5)) * kneeAmp; // fold while swinging through
+        L.hip.rotation.set(lerp(L.hip.rotation.x, -thigh, a.walk), 0, lerp(L.hip.rotation.z, 0, a.walk));
+        L.hip.rotation.y = 0;
+        L.knee.rotation.x = lerp(L.knee.rotation.x, kneeBendW, a.walk);
+        // foot: flat-ish, toe pushes off at the back of the stride, toes up before heel strike
+        const footPitch = thigh - kneeBendW - this.hips.rotation.x + Math.max(0, -Math.sin(p)) * 0.35 * move - Math.max(0, Math.sin(p)) * 0.15 * move;
+        L.foot.rotation.set(lerp(L.foot.rotation.x, footPitch, a.walk), 0, 0);
       }
-      this.torso.rotation.x = lerp(this.torso.rotation.x, 0.04 + run * 0.18, a.walk);
+      this.hips.rotation.x = lerp(this._tilt, 0.04 + run * 0.12, a.walk);
+      this.torso.rotation.x = lerp(this.torso.rotation.x, 0.02 + run * 0.14, a.walk);
       this.torso.rotation.z = 0;
-      this.torso.rotation.y = sw0 * 0.08 * amp;
-      this.head.rotation.y = lerp(this.head.rotation.y, 0, a.walk);
-      this.head.rotation.x = -run * 0.1;
-      for (let i = 0; i < 2; i++) {                // arms swing opposite to the legs
-        const A = this.arms[i], sw = (i === 0 ? -sw0 : sw0) * amp * 0.9;
-        A.sh.rotation.set(sw, 0, A.sgn * 0.12);
-        A.el.rotation.set(-0.25 - run * 0.9 - Math.max(0, sw) * 0.4, 0, 0);
+      this.torso.rotation.y = Math.sin(ph) * 0.1 * move;               // shoulders counter-rotate
+      this.head.rotation.y = lerp(this.head.rotation.y, -Math.sin(ph) * 0.06 * move, a.walk);
+      this.head.rotation.x = -run * 0.12;
+      for (let i = 0; i < 2; i++) {                                     // arms swing opposite to the legs
+        const A = this.arms[i], p = ph + (i === 0 ? Math.PI : 0);
+        const sw = Math.sin(p) * (0.38 + run * 0.55) * move;
+        A.sh.rotation.set(-sw + run * 0.1, 0, A.sgn * (0.08 + run * 0.06));
+        A.el.rotation.set(-(0.25 + run * 1.15) - Math.max(0, -sw) * 0.3, 0, 0);
       }
-      if (st.walkAir) {                            // jumping: knees up, arms out
-        for (const L of this.legs) { L.hip.rotation.x -= 0.6; L.knee.rotation.x += 0.9; }
-        for (const A of this.arms) { A.sh.rotation.x -= 0.5; A.sh.rotation.z += A.sgn * 0.4; }
+      if (st.walkAir) {                                                 // jumping: knees up, arms up and out
+        for (const L of this.legs) { L.hip.rotation.x -= 0.55; L.knee.rotation.x += 0.85; L.foot.rotation.x -= 0.3; }
+        for (const A of this.arms) { A.sh.rotation.x -= 0.6; A.sh.rotation.z += A.sgn * 0.45; }
       }
-    } else this.torso.rotation.y = 0;
+    }
 
     // ---------------- bail tumble (roll angle from Player physics)
     if (mode === 'bail') {
