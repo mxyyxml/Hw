@@ -40,6 +40,7 @@ Letting go without a flick does a plain ollie.
 | **W / ↑** | Push — tap for one stroke, hold to keep pushing. On a ramp: pump for speed |
 | **S / ↓** | Brake — at speed it's a powerslide |
 | **A D / ← →** | Steer on the ground, spin in the air |
+| **Z / X / V / B** | One-key tricks: Kickflip / Heelflip / 360 Flip / Pop Shuvit (tap just after an ollie for a late flip) |
 | **Space** (hold → release) | Crouch, then ollie. Longer hold = higher pop |
 | **Hold Space + flick + release** | ↓↑ Ollie · ↓← Kickflip · ↓→ Heelflip · ↓↑← 360 Flip · ↓↑→ Laser Flip · ↓←← / ↓→→ Double flips · ←↓← / →↓→ Varials · ↑↓ Nollie |
 | **Shift + ← / →** (air) | BS / FS Shuvit |
@@ -82,7 +83,11 @@ multiplied by the number of tricks in it. A bail loses the combo.
 - **Far west** – the mega-ramp (roll-in tower → kicker → gap → landing → quarter)
 - **South** – a long downhill street with kickers and a rail
 
-Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Downhill Street.
+- **South-east – Southside Skatepark** – a fenced concrete park: quarter-pipe lines with coping, a spine,
+  a pyramid with hip corners and a top rail, a 3-step-3 with a kinked rail, a funbox with an A-frame rail,
+  manual pads, a flat bar, a euro gap, rollers, a big quarter-pipe and a flow bowl
+
+Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Downhill Street, Southside Skatepark.
 
 ## 🏆 Modes
 

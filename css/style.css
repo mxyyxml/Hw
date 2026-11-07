@@ -173,3 +173,6 @@ body.touch .popup { font-size: 26px; }
   .menu-buttons { gap: 6px; margin: 10px 0; } button { padding: 8px 18px; font-size: 15px; }
   .tagline { display: none; }
 }
+
+.t-btn small { display: block; font-size: 8px; font-weight: normal; opacity: 0.8; }
+.t-btn.t-flip { background: rgba(244, 116, 59, 0.45); }

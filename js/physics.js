@@ -37,6 +37,9 @@ export class CollisionWorld {
     const r = this._rect(o); r.type = 'quarter'; r.R = o.R; r.base = o.base || 0;
     this.surfaces.push(r); return r;
   }
+  // hip corner: square footprint, height = h * min(u, v) — two banks meeting at a
+  // diagonal ridge. Low at local (-x,-z), high at local (+x,+z).
+  addCorner(o) { const r = this._rect(o); r.type = 'corner'; r.h = o.h; this.surfaces.push(r); return r; }
   addBowl(o) { const b = { x: o.x, z: o.z, R: o.R, D: o.D, tag: o.tag || 'bowl' }; this.bowls.push(b); return b; }
   addZone(o) { const r = this._rect(o); this.zones.push(r); return r; }
 
@@ -87,6 +90,10 @@ export class CollisionWorld {
       const t = (this._lz + r.hz) / (2 * r.hz);
       out.h = r.h0 + (r.h1 - r.h0) * t;
       glz = (r.h1 - r.h0) / (2 * r.hz);
+    } else if (r.type === 'corner') {
+      const u = (this._lx + r.hx) / (2 * r.hx), v = (this._lz + r.hz) / (2 * r.hz);
+      if (v < u) { out.h = r.h * v; glz = r.h / (2 * r.hz); }
+      else { out.h = r.h * u; glx = r.h / (2 * r.hx); }
     } else { // quarter
       const d = this._lz + r.hz;
       const R = r.R;
@@ -100,7 +107,7 @@ export class CollisionWorld {
     return true;
   }
 
-  // Ground under the bowl-aware base floor
+  // Ground under the bowl-aware base floor (several bowls allowed, they must not overlap)
   _base(x, z, out) {
     out.h = 0; out.gx = 0; out.gz = 0; out.bowl = null;
     for (const b of this.bowls) {

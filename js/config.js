@@ -61,7 +61,9 @@ export const PHYSICS = {
   popMin: 3.0,              // m/s upward on a quick tap
   popMax: 4.6,              // m/s upward on a full charge
   popChargeTime: 0.55,      // seconds of holding Space for full pop
-  flickWindow: 0.6,         // seconds before release that flick keys count
+  flickWindow: 1.6,         // flick keys pressed this long before releasing Space still count
+  flickPreWindow: 0.35,     // ...and keys pressed up to this long BEFORE pressing Space count too
+  lateFlipWindow: 0.38,     // one-key tricks pressed this soon after leaving the ground = late flip
 
   // Walking (E)
   walkSpeed: 2.4,
@@ -89,6 +91,11 @@ export const FLIP_TRICKS = [
   { seq: ['down', 'up'],            name: 'Ollie',           flips: 0,  shuv: 0,  time: 0,    points: 100 },
   { seq: ['up', 'down'],            name: 'Nollie',          flips: 0,  shuv: 0,  time: 0,    points: 150 },
 ];
+// One-key tricks (Z / X / V / B, and the KICK / HEEL touch buttons)
+export const QUICK_TRICKS = {
+  kickflip: 'Kickflip', heelflip: 'Heelflip', treflip: '360 Flip',
+  popshuv: { name: 'Pop Shuvit', flips: 0, shuv: 1, time: 0.36, points: 300 },
+};
 // What you get when nothing matches (plain release of Space)
 export const DEFAULT_POP = { name: 'Ollie', flips: 0, shuv: 0, time: 0, points: 100 };
 
@@ -158,6 +165,8 @@ export const GAPS = [
   { name: '10-Stair',      from: 'stair10_top', to: 'stair10_land', points: 1000 },
   { name: 'Plaza Gap',     from: 'gapA',        to: 'gapB',         points: 600 },
   { name: 'Mega Gap',      from: 'mega_kicker', to: 'mega_land',    points: 1500 },
+  { name: 'Euro Gap',      from: 'euro_bank',   to: 'euro_land',    points: 700 },
+  { name: '3-Step-3',      from: 'kink_top',    to: 'kink_land',    points: 600 },
   { name: 'Funbox Clear',  from: 'funbox_s',    to: 'funbox_n_land', points: 250 },
   { name: 'Funbox Clear',  from: 'funbox_n',    to: 'funbox_s_land', points: 250 },
 ];
@@ -223,6 +232,10 @@ export const KEYS = {
   respawn:['KeyR'],
   setSpot:['KeyT'],
   camera: ['KeyC'],
+  kickflip: ['KeyZ'],       // one-key tricks: pop straight into it (or late flip in the air)
+  heelflip: ['KeyX'],
+  treflip: ['KeyV'],
+  popshuv: ['KeyB'],
   pause:  ['KeyP', 'Escape'],
   help:   ['KeyH'],
 };

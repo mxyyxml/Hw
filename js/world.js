@@ -234,6 +234,7 @@ export class World {
       { name: 'Stair Plaza',        x: 26,  y: 1.7, z: -50, heading: 0 },
       { name: 'Mega-Ramp Roll-in',  x: -90, y: 14, z: -95.4, heading: 0 },
       { name: 'Downhill Street',    x: 0,   y: 10, z: 146, heading: Math.PI },
+      { name: 'Southside Skatepark', x: 37.5, y: 0, z: 95, heading: Math.PI / 2 },
     ];
     this._build();
   }
@@ -326,16 +327,28 @@ export class World {
     const b = this.col.bounds;
 
     // ---------------------------------------------------------------- ground
-    const BOWL = { x: -50, z: 10, R: 8, D: 2.6 };
-    const SQ = BOWL.R + 1.5; // square hole around the bowl
+    // bowls are sunk into the ground, so the ground has a square hole around each
+    const BOWLS = [
+      { x: -50, z: 10, R: 8, D: 2.6 },          // plaza bowl
+      { x: 84, z: 121, R: 8.5, D: 2.3 },        // skatepark flow bowl
+    ];
     const E = 80; // visual ground extends beyond bounds
     const gx0 = b.minX - E, gx1 = b.maxX + E, gz0 = b.minZ - E, gz1 = b.maxZ + E;
-    const hx0 = BOWL.x - SQ, hx1 = BOWL.x + SQ, hz0 = BOWL.z - SQ, hz1 = BOWL.z + SQ;
     const up = [0, 1, 0];
-    g.quad([gx0, 0, gz0], [hx0, 0, gz0], [hx0, 0, gz1], [gx0, 0, gz1], C.ground, up);
-    g.quad([hx1, 0, gz0], [gx1, 0, gz0], [gx1, 0, gz1], [hx1, 0, gz1], C.ground, up);
-    g.quad([hx0, 0, gz0], [hx1, 0, gz0], [hx1, 0, hz0], [hx0, 0, hz0], C.ground, up);
-    g.quad([hx0, 0, hz1], [hx1, 0, hz1], [hx1, 0, gz1], [hx0, 0, gz1], C.ground, up);
+    let rects = [[gx0, gz0, gx1, gz1]];
+    for (const B of BOWLS) {
+      const SQ = B.R + 1.5, h = [B.x - SQ, B.z - SQ, B.x + SQ, B.z + SQ], next = [];
+      for (const [x0, z0, x1, z1] of rects) {
+        if (h[2] <= x0 || h[0] >= x1 || h[3] <= z0 || h[1] >= z1) { next.push([x0, z0, x1, z1]); continue; }
+        if (h[0] > x0) next.push([x0, z0, h[0], z1]);
+        if (h[2] < x1) next.push([h[2], z0, x1, z1]);
+        const ax0 = Math.max(x0, h[0]), ax1 = Math.min(x1, h[2]);
+        if (h[1] > z0) next.push([ax0, z0, ax1, h[1]]);
+        if (h[3] < z1) next.push([ax0, h[3], ax1, z1]);
+      }
+      rects = next;
+    }
+    for (const [x0, z0, x1, z1] of rects) g.quad([x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1], C.ground, up);
 
     // grass outside the playable area & some lawns
     this.patch(gx0, gz0, b.minX - 2, gz1, C.grass, 0.01);
@@ -343,12 +356,13 @@ export class World {
     this.patch(b.minX - 2, gz0, b.maxX + 2, b.minZ - 2, C.grass, 0.01);
     this.patch(b.minX - 2, b.maxZ + 2, b.maxX + 2, gz1, C.grass, 0.01);
 
-    this._bowl(BOWL, SQ);
+    for (const B of BOWLS) this._bowl(B, B.R + 1.5);
     this._plaza();
     this._stairs();
     this._eastRamps();
     this._megaRamp();
     this._street();
+    this._skatepark();
     this._decor();
     this.col.linkRails();
 
@@ -599,6 +613,149 @@ export class World {
     this.ledge({ x: -4, z: 36, w: 0.7, d: 6, h: 0.45 });
   }
 
+  // ---------------------------------------------------------------- Southside Skatepark (south-east)
+  // An original fenced concrete park: quarter-pipe lines, a spine, a pyramid with
+  // hip corners and a top rail, a 3-step-3 with a kinked rail, a funbox with an
+  // A-frame rail, manual pads, a flat bar, a euro gap, rollers, a big quarter
+  // and a flow bowl.
+  _skatepark() {
+    const X0 = 35, X1 = 100, Z0 = 50, Z1 = 140;
+    const N = Math.PI, S = 0, E = Math.PI / 2, Wd = -Math.PI / 2; // yaw that makes a ramp RISE toward -z, +z, +x, -x
+    const sin = Math.sin, cos = Math.cos;
+
+    // floor slab (cut around the flow bowl)
+    let slab = [[X0, Z0, X1, Z1]];
+    const hole = [74, 111, 94, 131];
+    slab = slab.flatMap(([x0, z0, x1, z1]) => {
+      if (hole[2] <= x0 || hole[0] >= x1 || hole[3] <= z0 || hole[1] >= z1) return [[x0, z0, x1, z1]];
+      const out = [];
+      if (hole[0] > x0) out.push([x0, z0, hole[0], z1]);
+      if (hole[2] < x1) out.push([hole[2], z0, x1, z1]);
+      if (hole[1] > z0) out.push([hole[0], z0, hole[2], hole[1]]);
+      if (hole[3] < z1) out.push([hole[0], hole[3], hole[2], z1]);
+      return out;
+    });
+    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.013);
+
+    // ---- helpers
+    const bank = (x, z, w, len, h, yaw, tag = 'bank') =>
+      this.wedge({ x, z, w, d: len, h0: 0, h1: h, yaw, tag }, C.ramp, C.rampSide);
+    const corner = (x, z, L, h, toX, toZ, tag = 'hip') => {
+      // pick the rotation whose high corner points toward (toX, toZ)
+      const yaw = [0, Math.PI / 2, Math.PI, -Math.PI / 2].find((y) => Math.sign(cos(y) + sin(y)) === Math.sign(toX) && Math.sign(cos(y) - sin(y)) === Math.sign(toZ));
+      this.col.addCorner({ x, z, w: L, d: L, h, yaw, tag });
+      const c = cos(yaw), s2 = sin(yaw), hl = L / 2;
+      const Wp = (lx, y, lz) => [x + lx * c + lz * s2, y, z - lx * s2 + lz * c];
+      const P00 = Wp(-hl, 0, -hl), P10 = Wp(hl, 0, -hl), P01 = Wp(-hl, 0, hl), P11 = Wp(hl, h, hl), P11b = Wp(hl, 0, hl);
+      this.geo.tri(P00, P10, P11, C.ramp, [0, 1, 0]);
+      this.geo.tri(P00, P11, P01, C.ramp, [0, 1, 0]);
+      this.geo.tri(P10, P11b, P11, C.rampSide, [Wp(1, 0, 0)[0] - x, 0, Wp(1, 0, 0)[2] - z]);
+      this.geo.tri(P01, P11b, P11, C.rampSide, [Wp(0, 0, 1)[0] - x, 0, Wp(0, 0, 1)[2] - z]);
+      this.geo.castShadow([P00, P10, P01, P11, P11b], 0);
+    };
+    // quarter pipe + deck + coping. maxDeg < ~69° = not "vert" (you fly over, e.g. a spine)
+    const qp = (x, z, w, R, yaw, deck, maxDeg = 80, tag = 'park_quarter') => {
+      const L = R * sin(maxDeg * Math.PI / 180);
+      const lip = this.quarter({ x, z, w, d: L, R, yaw, tag }, C.ramp, C.rampSide);
+      const dx = sin(yaw), dz = cos(yaw), px = cos(yaw), pz = -sin(yaw);
+      if (deck > 0) this.box({ x: x + dx * (L / 2 + deck / 2), z: z + dz * (L / 2 + deck / 2), w, d: deck, yaw, h: lip, tag: tag + '_deck' }, C.concrete, C.concreteSide);
+      const lx = x + dx * (L / 2 + 0.02), lz = z + dz * (L / 2 + 0.02);
+      this.rail([lx - px * (w / 2 - 0.15), lip + 0.02, lz - pz * (w / 2 - 0.15)], [lx + px * (w / 2 - 0.15), lip + 0.02, lz + pz * (w / 2 - 0.15)], 'coping', C.coping, false);
+      return lip;
+    };
+    // pyramid: flat deck + 4 banks + 4 hip corners
+    const pyramid = (px, pz, sx, sz, h, L) => {
+      this.box({ x: px, z: pz, w: sx, d: sz, h, tag: 'pyramid' }, C.concrete, C.concreteSide);
+      bank(px, pz - sz / 2 - L / 2, sx, L, h, S, 'pyramid');
+      bank(px, pz + sz / 2 + L / 2, sx, L, h, N, 'pyramid');
+      bank(px - sx / 2 - L / 2, pz, sz, L, h, E, 'pyramid');
+      bank(px + sx / 2 + L / 2, pz, sz, L, h, Wd, 'pyramid');
+      for (const ix of [-1, 1]) for (const iz of [-1, 1]) {
+        corner(px + ix * (sx / 2 + L / 2), pz + iz * (sz / 2 + L / 2), L, h, -ix, -iz);
+      }
+    };
+
+    // ---- perimeter: low concrete wall with a fence on top, entrances west & north
+    const wall = (x0, z0, x1, z1) => {
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = Math.max(0.4, x1 - x0), d = Math.max(0.4, z1 - z0);
+      this.box({ x: cx, z: cz, w, d, h: 0.9, tag: 'wall' }, C.concrete, C.concreteSide);
+      const len = Math.max(w, d), n = Math.ceil(len / 3);
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, fx = x0 + (x1 - x0) * t, fz = z0 + (z1 - z0) * t;
+        this.geo.beam([fx, 0.9, fz], [fx, 2.4, fz], 0.05, C.metal);
+      }
+      this.geo.beam([x0, 2.4, z0], [x1, 2.4, z1], 0.04, C.metal);
+      this.geo.beam([x0, 1.65, z0], [x1, 1.65, z1], 0.025, C.metal);
+    };
+    wall(X0, Z0, 60, Z0 + 0.4); wall(74, Z0, X1, Z0 + 0.4);          // north (gap x 60..74)
+    wall(X0, Z1 - 0.4, X1, Z1);                                        // south
+    wall(X0, Z0, X0 + 0.4, 88); wall(X0, 102, X0 + 0.4, Z1);          // west (gap z 88..102)
+    wall(X1 - 0.4, Z0, X1, Z1);                                        // east
+
+    // ---- north: quarter-pipe line, spine, pyramid, flat bar
+    qp(48, 53.78, 16, 2.6, N, 2);
+    qp(87, 53.78, 18, 2.6, N, 2);
+    const spineL = 2.2 * sin(65 * Math.PI / 180);
+    this.quarter({ x: 50, z: 66 + spineL / 2, w: 10, d: spineL, R: 2.2, yaw: N, tag: 'spine' }, C.ramp, C.rampSide);
+    const spineLip = this.quarter({ x: 50, z: 66 - spineL / 2, w: 10, d: spineL, R: 2.2, yaw: S, tag: 'spine' }, C.ramp, C.rampSide);
+    this.rail([45.2, spineLip + 0.02, 66], [54.8, spineLip + 0.02, 66], 'coping', C.coping, false);
+    pyramid(85, 68, 6, 4, 1.0, 3);
+    this.rail([82.6, 1.36, 68], [87.4, 1.36, 68], 'parkrail');
+    this.rail([62, 0.38, 60], [74, 0.38, 60], 'flatbar');
+
+    // ---- middle: 3-step-3 with a kinked rail (stairs go down toward +x)
+    const top = 1.02, tread = 0.38;
+    this.box({ x: 40, z: 81, w: 6, d: 8, h: top, tag: 'kink_top' }, C.concrete, C.concreteSide);
+    bank(40, 74.5, 6, 5, top, S, 'kink_bank');
+    const stepsAt = [[43, 0.85], [43 + tread, 0.68]];
+    for (const [x, h] of stepsAt) this.box({ x: x + tread / 2, z: 81, w: tread, d: 8, h, tag: 'kink_steps', noShadow: true }, 0xd6d0c4, C.concreteSide);
+    this.box({ x: 43.76 + 1.25, z: 81, w: 2.5, d: 8, h: 0.51, tag: 'kink_landing' }, C.concrete, C.concreteSide);
+    for (const [x, h] of [[46.26, 0.34], [46.26 + tread, 0.17]]) this.box({ x: x + tread / 2, z: 81, w: tread, d: 8, h, tag: 'kink_steps', noShadow: true }, 0xc9c2b4, C.concreteSide);
+    const K = [[39.5, 1.62], [43, 1.62], [43.95, 1.11], [46.26, 1.11], [47.3, 0.62]];
+    for (let i = 0; i < K.length - 1; i++) this.rail([K[i][0], K[i][1], 81], [K[i + 1][0], K[i + 1][1], 81], 'kinkrail');
+    this.ledge({ x: 40.25, z: 84.4, w: 5.5, d: 0.6, h: top + 0.4, base: top, tag: 'ledge' });
+    this.col.addZone({ x: 52, z: 81, w: 8, d: 8, tag: 'kink_land' });
+
+    // manual pads, picnic table, benches
+    this.ledge({ x: 58, z: 82, w: 2.5, d: 6, h: 0.25, tag: 'manualpad' }, C.pad, C.padSide, 'manualpad');
+    this.ledge({ x: 60, z: 94, w: 6, d: 2, h: 0.22, tag: 'manualpad' }, C.pad, C.padSide, 'manualpad');
+    this.ledge({ x: 66, z: 104, w: 2.4, d: 0.9, h: 0.75, tag: 'table' }, C.wood, C.woodSide, 'table');
+    this.ledge({ x: 45, z: 100, w: 2.4, d: 0.6, h: 0.45, tag: 'bench' }, C.bench, C.metal, 'bench');
+    this.ledge({ x: 95, z: 108, w: 0.6, d: 2.4, h: 0.45, tag: 'bench' }, C.bench, C.metal, 'bench');
+
+    // funbox with an A-frame rail and grindable box edges
+    this.box({ x: 78, z: 86, w: 4, d: 4, h: 0.8, tag: 'funbox2' }, C.concrete, C.concreteSide);
+    bank(74.5, 86, 4, 3, 0.8, E, 'funbox2');
+    bank(81.5, 86, 4, 3, 0.8, Wd, 'funbox2');
+    this.col.addRail([76.05, 0.8, 84.05], [79.95, 0.8, 84.05], 'ledge');
+    this.col.addRail([76.05, 0.8, 87.95], [79.95, 0.8, 87.95], 'ledge');
+    const A = [[73.3, 0.47], [76, 1.25], [80, 1.25], [82.7, 0.47]];
+    for (let i = 0; i < A.length - 1; i++) this.rail([A[i][0], A[i][1], 86], [A[i + 1][0], A[i + 1][1], 86], 'aframe');
+
+    // euro gap: bank → gap → block against the east wall
+    bank(89, 98, 6, 4, 1.1, E, 'euro_bank');
+    this.box({ x: 96.05, z: 98, w: 7.1, d: 6, h: 1.1, tag: 'euro_land' }, C.concrete, C.concreteSide);
+    this.patch(91, 95, 92.5, 101, 0xd9b45a, 0.016);
+
+    // ---- south: rollers, long ledge, big quarter, flow bowl
+    for (let i = 0; i < 4; i++) {
+      const bx = 40 + i * 6.2;
+      this.wedge({ x: bx + 0.8, z: 115, w: 6, d: 1.6, h0: 0, h1: 0.45, yaw: E, tag: 'roller' }, C.ramp, C.rampSide);
+      this.wedge({ x: bx + 2.4, z: 115, w: 6, d: 1.6, h0: 0, h1: 0.45, yaw: Wd, tag: 'roller' }, C.ramp, C.rampSide);
+    }
+    this.ledge({ x: 68, z: 126, w: 0.6, d: 10, h: 0.5, tag: 'ledge' }, C.ledge, C.ledgeSide);
+    qp(52, 136.7, 22, 3.2, S, 1.5);
+
+    // floodlights in the corners
+    for (const [x, z] of [[37, 52.5], [98, 52.5], [37, 138], [98, 138]]) {
+      this.box({ x, z, w: 0.3, d: 0.3, h: 8, tag: 'lamp' }, C.metal, C.metal);
+      this.geo.prism({ x, z, w: 1.4, d: 0.5 }, [8.4, 8.4, 8.4, 8.4], 7.9, 0xfff3b0, C.metal);
+    }
+    // a park sign by the west entrance
+    this.box({ x: 33.6, z: 86.5, w: 0.15, d: 0.15, h: 2.6, tag: 'sign' }, C.metal, C.metal);
+    this.geo.prism({ x: 33.6, z: 86.5, w: 0.1, d: 2.6 }, [3.2, 3.2, 3.2, 3.2], 2.4, 0x2a9d8f, 0x2a9d8f);
+  }
+
   // ---------------------------------------------------------------- buildings, trees, lamps
   _decor() {
     const b = this.col.bounds;
@@ -617,7 +774,7 @@ export class World {
     }
     // trees (trunk is solid, crown is decoration)
     const trees = [[-30, 32], [30, -25], [-30, -25], [40, 40], [-40, 40], [45, -30], [-70, -20], [-70, 40],
-      [-20, 60], [20, 60], [-20, 100], [20, 100], [90, -40], [95, 60], [40, 90], [-60, 90], [-25, -70], [10, -75], [50, -70]];
+      [-20, 60], [20, 60], [-20, 100], [20, 100], [90, -40], [105, 45], [30, 90], [-60, 90], [-25, -70], [10, -75], [50, -70]];
     for (const [x, z] of trees) {
       this.box({ x, z, w: 0.5, d: 0.5, h: 3, tag: 'tree' }, C.trunk, C.trunk);
       // leafy crown made of a few low-poly blobs

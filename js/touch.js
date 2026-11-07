@@ -49,6 +49,8 @@ export class TouchControls {
         <button class="t-btn" data-key="KeyK">GRIND</button>
         <button class="t-btn" data-key="KeyL">MANUAL</button>
         <button class="t-btn" data-act="shuv">SHUV</button>
+        <button class="t-btn t-flip" data-key="KeyZ">KICK<small>flip</small></button>
+        <button class="t-btn t-flip" data-key="KeyX">HEEL<small>flip</small></button>
       </div>
       <div id="t-top">
         <button class="t-sm" data-key="KeyH" aria-label="Help">?</button>
@@ -173,6 +175,7 @@ export const TOUCH_HELP = [
   ['Push ↑ then flick ↓', 'Nollie'],
   ['Touch & let go', 'Plain ollie (hold longer = higher)'],
   ['Buttons'],
+  ['KICK / HEEL', 'Kickflip / Heelflip straight away (tap just after an ollie = late flip)'],
   ['SHUV (in the air)', 'Shuvit (hold joystick right for FS)'],
   ['GRAB (hold, in the air)', 'Grab — joystick direction picks Indy / Nosegrab / Tailgrab / Melon / Stalefish'],
   ['GRIND (hold as you land on a rail)', 'Joystick ↑ Nosegrind · ↓ 5-0 · ← Boardslide · → Lipslide'],

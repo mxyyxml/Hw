@@ -10,6 +10,7 @@
 //  All tuning numbers come from config.js.
 // =============================================================================
 import * as THREE from 'three';
+import { QUICK_TRICKS, FLIP_TRICKS } from './config.js';
 import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE,
   GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
@@ -109,11 +110,25 @@ export class Player {
     if (!inp.held.pop && this.crouching && inp.released.pop) {
       this.crouching = false;
       if (canPop) {
-        const dirs = inp.dirEvents.filter((e) => e.t >= this.spaceStart && e.t >= realNow - P.flickWindow).map((e) => e.dir);
+        // forgiving flicks: keys pressed a moment before Space, together with it, or slowly all count
+        const dirs = inp.dirEvents.filter((e) => e.t >= this.spaceStart - P.flickPreWindow && e.t >= realNow - P.flickWindow).map((e) => e.dir);
         this.wantPop = { hold: realNow - this.spaceStart, dirs };
       }
     }
     if (!inp.held.pop) this.crouching = false;
+
+    // one-key tricks: on the ground they pop straight into the trick; just after
+    // take-off they turn the ollie into a late flip
+    for (const key of Object.keys(QUICK_TRICKS)) {
+      if (!inp.pressed[key]) continue;
+      const q = QUICK_TRICKS[key];
+      const def = typeof q === 'string' ? FLIP_TRICKS.find((t) => t.name === q) : q;
+      if (canPop) {
+        const hold = this.crouching ? realNow - this.spaceStart : 0.45;
+        this.crouching = false;
+        this.wantPop = { hold, dirs: [], forced: def };
+      } else if (this.state === 'air') this.air.lateTrick = def;
+    }
 
     // L = manual on / off (L + ↑ = nose manual); in the air it queues a manual for landing
     if (inp.pressed.manual) {
@@ -306,7 +321,7 @@ export class Player {
   // Flick input → trick. The trick is "performed" now (board starts flipping)
   // and only counts if you land it.
   startPopTrick(popInfo) {
-    const def = resolveFlick(popInfo.dirs);
+    const def = popInfo.forced || resolveFlick(popInfo.dirs);
     this.startAirTrick(def);
   }
 
@@ -391,6 +406,15 @@ export class Player {
       A.flipAngle = A.trick.def.flips * TAU * e;
       A.shuvAngle = A.trick.def.shuv * Math.PI * e;
       if (p >= 1) { A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; }
+    }
+    // --- late flip: a one-key trick right after take-off replaces the plain ollie
+    if (A.lateTrick) {
+      const def = A.lateTrick; A.lateTrick = null;
+      const plain = A.tricks.length === 0 || (A.tricks.length === 1 && (A.tricks[0].name === 'Ollie' || A.tricks[0].name === 'Nollie'));
+      if (!A.trick && !A.grab && A.time <= P.lateFlipWindow && plain) {
+        A.tricks = [];
+        this.startAirTrick(def);
+      }
     }
     // --- Shift + ← / → = shuvit (one at a time, not while grabbing)
     if (!A.trick && !A.grab && inp.held.shift && (inp.pressed.left || inp.pressed.right)) {
