@@ -235,6 +235,9 @@ export class World {
       { name: 'Mega-Ramp Roll-in',  x: -90, y: 14, z: -95.4, heading: 0 },
       { name: 'Downhill Street',    x: 0,   y: 10, z: 146, heading: Math.PI },
       { name: 'Southside Skatepark', x: 37.5, y: 0, z: 95, heading: Math.PI / 2 },
+      { name: 'Mega Park – The Drop (12 m)', x: 123, y: 12, z: 26, heading: Math.PI / 2 },
+      { name: 'Mega Park – Big Bank & Rail', x: 122, y: 6, z: 56, heading: Math.PI / 2 },
+      { name: 'Mega Park – Mega Bowl', x: 160, y: 0, z: -60, heading: Math.PI / 2 },
     ];
     this._build();
   }
@@ -331,6 +334,7 @@ export class World {
     const BOWLS = [
       { x: -50, z: 10, R: 8, D: 2.6 },          // plaza bowl
       { x: 84, z: 121, R: 8.5, D: 2.3 },        // skatepark flow bowl
+      { x: 176, z: -60, R: 11, D: 4 },          // Mega Park deep bowl
     ];
     const E = 80; // visual ground extends beyond bounds
     const gx0 = b.minX - E, gx1 = b.maxX + E, gz0 = b.minZ - E, gz1 = b.maxZ + E;
@@ -363,6 +367,9 @@ export class World {
     this._megaRamp();
     this._street();
     this._skatepark();
+    this._megaPark();
+    this._cityDetail();
+    this._terrain();
     this._decor();
     this.col.linkRails();
 
@@ -613,6 +620,232 @@ export class World {
     this.ledge({ x: -4, z: 36, w: 0.7, d: 6, h: 0.45 });
   }
 
+  // ---------------------------------------------------------------- reusable ramp builders
+  // yaw makes a ramp RISE toward: -z = PI, +z = 0, +x = PI/2, -x = -PI/2
+  _bank(x, z, w, len, h, yaw, tag = 'bank') {
+    this.wedge({ x, z, w, d: len, h0: 0, h1: h, yaw, tag }, C.ramp, C.rampSide);
+  }
+  _corner(x, z, L, h, toX, toZ, tag = 'hip') {
+    const yaw = [0, Math.PI / 2, Math.PI, -Math.PI / 2].find((y) => Math.sign(Math.cos(y) + Math.sin(y)) === Math.sign(toX) && Math.sign(Math.cos(y) - Math.sin(y)) === Math.sign(toZ));
+    this.col.addCorner({ x, z, w: L, d: L, h, yaw, tag });
+    const c = Math.cos(yaw), s2 = Math.sin(yaw), hl = L / 2;
+    const Wp = (lx, y, lz) => [x + lx * c + lz * s2, y, z - lx * s2 + lz * c];
+    const P00 = Wp(-hl, 0, -hl), P10 = Wp(hl, 0, -hl), P01 = Wp(-hl, 0, hl), P11 = Wp(hl, h, hl), P11b = Wp(hl, 0, hl);
+    this.geo.tri(P00, P10, P11, C.ramp, [0, 1, 0]);
+    this.geo.tri(P00, P11, P01, C.ramp, [0, 1, 0]);
+    this.geo.tri(P10, P11b, P11, C.rampSide, [Wp(1, 0, 0)[0] - x, 0, Wp(1, 0, 0)[2] - z]);
+    this.geo.tri(P01, P11b, P11, C.rampSide, [Wp(0, 0, 1)[0] - x, 0, Wp(0, 0, 1)[2] - z]);
+    this.geo.castShadow([P00, P10, P01, P11, P11b], 0);
+  }
+  _qp(x, z, w, R, yaw, deck, maxDeg = 80, tag = 'park_quarter') {
+    const L = R * Math.sin(maxDeg * Math.PI / 180);
+    const lip = this.quarter({ x, z, w, d: L, R, yaw, tag }, C.ramp, C.rampSide);
+    const dx = Math.sin(yaw), dz = Math.cos(yaw), px = Math.cos(yaw), pz = -Math.sin(yaw);
+    if (deck > 0) this.box({ x: x + dx * (L / 2 + deck / 2), z: z + dz * (L / 2 + deck / 2), w, d: deck, yaw, h: lip, tag: tag + '_deck' }, C.concrete, C.concreteSide);
+    const lx = x + dx * (L / 2 + 0.02), lz = z + dz * (L / 2 + 0.02);
+    this.rail([lx - px * (w / 2 - 0.15), lip + 0.02, lz - pz * (w / 2 - 0.15)], [lx + px * (w / 2 - 0.15), lip + 0.02, lz + pz * (w / 2 - 0.15)], 'coping', C.coping, false);
+    return { lip, L };
+  }
+  _pyramid(px, pz, sx, sz, h, L, tag = 'pyramid') {
+    this.box({ x: px, z: pz, w: sx, d: sz, h, tag }, C.concrete, C.concreteSide);
+    this._bank(px, pz - sz / 2 - L / 2, sx, L, h, 0, tag);
+    this._bank(px, pz + sz / 2 + L / 2, sx, L, h, Math.PI, tag);
+    this._bank(px - sx / 2 - L / 2, pz, sz, L, h, Math.PI / 2, tag);
+    this._bank(px + sx / 2 + L / 2, pz, sz, L, h, -Math.PI / 2, tag);
+    for (const ix of [-1, 1]) for (const iz of [-1, 1]) this._corner(px + ix * (sx / 2 + L / 2), pz + iz * (sz / 2 + L / 2), L, h, -ix, -iz, tag);
+  }
+  _fence(x0, z0, x1, z1, h = 0.9) {
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = Math.max(0.4, x1 - x0), d = Math.max(0.4, z1 - z0);
+    this.box({ x: cx, z: cz, w, d, h, tag: 'wall' }, C.concrete, C.concreteSide);
+    const len = Math.max(w, d), n = Math.ceil(len / 3);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, fx = x0 + (x1 - x0) * t, fz = z0 + (z1 - z0) * t;
+      this.geo.beam([fx, h, fz], [fx, h + 1.5, fz], 0.05, C.metal);
+    }
+    this.geo.beam([x0, h + 1.5, z0], [x1, h + 1.5, z1], 0.04, C.metal);
+    this.geo.beam([x0, h + 0.75, z0], [x1, h + 0.75, z1], 0.025, C.metal);
+  }
+  _floodlight(x, z, h = 10) {
+    this.box({ x, z, w: 0.35, d: 0.35, h, tag: 'lamp' }, C.metal, C.metal);
+    this.geo.prism({ x, z, w: 1.8, d: 0.6 }, [h + 0.5, h + 0.5, h + 0.5, h + 0.5], h - 0.1, 0xfff3b0, C.metal);
+  }
+
+  // ---------------------------------------------------------------- MEGA PARK (far east)
+  // Big-air zone: a 12 m drop-in tower into a giant roll-in, an 18 m kicker gap
+  // to a long landing, a 6 m vert quarter, a 6 m bank with a 30 m down-rail,
+  // a 4 m deep bowl, a giant spine, a big pyramid, bleachers and floodlights.
+  _megaPark() {
+    const X0 = 116, X1 = 230, Z0 = -100, Z1 = 100;
+    let slab = [[X0, Z0, X1, Z1]];
+    const hole = [163.5, -72.5, 188.5, -47.5];
+    slab = slab.flatMap(([x0, z0, x1, z1]) => {
+      if (hole[2] <= x0 || hole[0] >= x1 || hole[3] <= z0 || hole[1] >= z1) return [[x0, z0, x1, z1]];
+      const out = [];
+      if (hole[0] > x0) out.push([x0, z0, hole[0], z1]);
+      if (hole[2] < x1) out.push([hole[2], z0, x1, z1]);
+      if (hole[1] > z0) out.push([hole[0], z0, hole[2], hole[1]]);
+      if (hole[3] < z1) out.push([hole[0], hole[3], hole[2], z1]);
+      return out;
+    });
+    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.013);
+    const E = Math.PI / 2, Wd = -Math.PI / 2;
+
+    // ---- THE DROP: 12 m tower → giant curved roll-in (heading +x)
+    const zc = 26, lane = 12;
+    this.box({ x: 121, z: zc, w: 10, d: lane, h: 12, tag: 'drop_tower' }, C.wood, C.woodSide);
+    const R = 18.2, L = R * Math.sin(70 * Math.PI / 180);
+    const lip = this.quarter({ x: 126 + L / 2, z: zc, w: lane, d: L, R, yaw: Wd, tag: 'drop_rollin' }, C.ramp, C.rampSide);
+    this.rail([126.02, lip + 0.02, zc - lane / 2 + 0.2], [126.02, lip + 0.02, zc + lane / 2 - 0.2], 'coping', C.coping, false);
+    for (let x = 117; x <= 125; x += 4) for (const sz of [-1, 1]) this.geo.beam([x, 12, zc + sz * (lane / 2 - 0.1)], [x, 13.1, zc + sz * (lane / 2 - 0.1)], 0.06, C.metal);
+    this.geo.beam([116.2, 13.1, zc - lane / 2], [116.2, 13.1, zc + lane / 2], 0.06, C.metal);
+    // giant kicker → 18 m gap → long landing → 6 m vert quarter
+    this.wedge({ x: 164, z: zc, w: lane, d: 8, h0: 0, h1: 3.5, yaw: E, tag: 'mega2_kicker' }, C.ramp, C.rampSide);
+    this.wedge({ x: 189, z: zc, w: lane + 2, d: 30, h0: 2.6, h1: 0, yaw: E, tag: 'mega2_land' }, C.ramp, C.rampSide);
+    this.col.addZone({ x: 189, z: zc, w: 30, d: lane + 2, tag: 'mega2_land' });
+    this.patch(168, zc - lane / 2, 174, zc + lane / 2, 0xd9b45a, 0.016);
+    this._qp(221.5 - 1, zc, lane + 2, 6.6, E, 3, 85, 'mega2_quarter');
+
+    // ---- BIG BANK & 30 m DOWN-RAIL (heading +x)
+    const zb = 56;
+    this.box({ x: 122, z: zb, w: 8, d: 12, h: 6, tag: 'bigbank_top' }, C.concrete, C.concreteSide);
+    this.wedge({ x: 141, z: zb, w: 12, d: 30, h0: 0, h1: 6, yaw: Wd, tag: 'bigbank' }, C.ramp, C.rampSide);
+    const bankH = (x) => 6 * (1 - (x - 126) / 30);
+    this.rail([126.5, bankH(126.5) + 0.55, zb + 2], [155.5, bankH(155.5) + 0.55, zb + 2], 'megarail');
+    this.rail([118.5, 6.55, zb + 2], [126.5, bankH(126.5) + 0.55, zb + 2], 'megarail_flat');
+    // hubba ledge down the other side of the bank
+    this.wedge({ x: 141, z: zb - 5.7, w: 0.6, d: 30, h0: 0.45, h1: 6.45, yaw: Wd, tag: 'hubba' }, C.ledge, C.ledgeSide);
+    this.col.addRail([126, 6.45, zb - 5.42], [156, 0.45, zb - 5.42], 'hubba');
+    this.col.addRail([126, 6.45, zb - 5.98], [156, 0.45, zb - 5.98], 'hubba');
+
+    // ---- MEGA BOWL rim deck + giant spine + big pyramid + quarter wall
+    const spineL = 4.6 * Math.sin(65 * Math.PI / 180);
+    this.quarter({ x: 150, z: -20 + spineL / 2, w: 16, d: spineL, R: 4.6, yaw: Math.PI, tag: 'spine' }, C.ramp, C.rampSide);
+    const sLip = this.quarter({ x: 150, z: -20 - spineL / 2, w: 16, d: spineL, R: 4.6, yaw: 0, tag: 'spine' }, C.ramp, C.rampSide);
+    this.rail([142.2, sLip + 0.02, -20], [157.8, sLip + 0.02, -20], 'coping', C.coping, false);
+    this._pyramid(205, -45, 10, 8, 2.2, 5, 'megapyramid');
+    this.rail([201, 2.6, -45], [209, 2.6, -45], 'parkrail');
+    for (const [x, w] of [[132, 18], [214, 18]]) this._qp(x, -95.3, w, 4.2, Math.PI, 2.5, 82, 'park_quarter');
+
+    // ---- perimeter, floodlights, bleachers, banners
+    this._fence(X0, Z0, X1, Z0 + 0.4);
+    this._fence(X0, Z1 - 0.4, X1, Z1);
+    this._fence(X1 - 0.4, Z0, X1, Z1);
+    this._fence(X0, Z0, X0 + 0.4, -10); this._fence(X0, 76, X0 + 0.4, Z1);
+    for (const [x, z] of [[118, -98], [228, -98], [118, 98], [228, 98], [172, -2], [172, 82]]) this._floodlight(x, z, 12);
+    for (let r = 0; r < 4; r++) {                    // bleachers facing the big-air lane
+      this.box({ x: 190, z: 4 - r * 1.1, w: 26, d: 1.1, h: 0.45 * (r + 1), tag: 'bleacher' }, C.concrete, C.concreteSide);
+    }
+    for (let i = 0; i < 5; i++) {                    // banners on the bleachers
+      const bx = 180 + i * 5, col = [0xf4743b, 0x2a9d8f, 0xf2c14e, 0x457b9d, 0xe63946][i];
+      this.geo.prism({ x: bx, z: 0.2, w: 3.5, d: 0.05 }, [3.6, 3.6, 3.6, 3.6], 2.2, col, col);
+      this.geo.beam([bx - 1.75, 0, 0.2], [bx - 1.75, 3.6, 0.2], 0.05, C.metal);
+      this.geo.beam([bx + 1.75, 0, 0.2], [bx + 1.75, 3.6, 0.2], 0.05, C.metal);
+    }
+  }
+
+  // ---------------------------------------------------------------- city detail
+  // roads with markings, curbs, lawns, more trees / bushes, hydrants, bus stop,
+  // parked cars, rooftop units — makes the world feel lived-in
+  _cityDetail() {
+    const asphalt = C.street;
+    // an east–west avenue south of the plaza + a north–south road to the Mega Park
+    const road = (x0, z0, x1, z1, alongX) => {
+      this.patch(x0, z0, x1, z1, asphalt, 0.011);
+      const mid = alongX ? (z0 + z1) / 2 : (x0 + x1) / 2;
+      if (alongX) for (let x = x0 + 1; x < x1 - 3; x += 6) this.patch(x, mid - 0.08, x + 3, mid + 0.08, C.line, 0.0125);
+      else for (let z = z0 + 1; z < z1 - 3; z += 6) this.patch(mid - 0.08, z, mid + 0.08, z + 3, C.line, 0.0125);
+    };
+    road(-108, 38, 112, 44, true);
+    road(106, -105, 112, 38, false);
+    // crosswalk stripes where the avenue meets the downhill street
+    for (let i = 0; i < 6; i++) this.patch(-6 + i * 2, 38.2, -5 + i * 2, 43.8, C.line, 0.0126);
+    // rideable curbs along the avenue (low enough to roll up)
+    for (const z of [37.85, 44.15]) {
+      for (const [x0, x1] of [[-108, -7], [7, 33], [101, 112]]) {
+        this.box({ x: (x0 + x1) / 2, z, w: x1 - x0, d: 0.3, h: 0.11, tag: 'curb', noShadow: true }, C.concrete, C.concreteSide);
+      }
+    }
+    // lawns
+    for (const [x0, z0, x1, z1] of [[-105, 46, -20, 105], [-105, 108, -20, 150], [100, 46, 112, 150], [-28, -105, 100, -78], [40, -66, 100, -40]]) {
+      this.patch(x0, z0, x1, z1, C.grass, 0.012);
+    }
+    // more trees & bushes on the lawns (deterministic scatter)
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const tree = (x, z, s = 1) => {
+      this.box({ x, z, w: 0.45 * s, d: 0.45 * s, h: 3 * s, tag: 'tree' }, C.trunk, C.trunk);
+      const blobs = [[0, 4.2, 0, 1.9], [0.9, 3.6, 0.4, 1.3], [-0.8, 3.7, -0.5, 1.3], [0.1, 5.3, 0.2, 1.2]];
+      blobs.forEach(([bx, by, bz, r], i) => this.geo.addGeometry(new THREE.IcosahedronGeometry(r * s, 1), new THREE.Matrix4().makeTranslation(x + bx * s, by * s, z + bz * s), i % 2 ? C.leaf : C.leaf2));
+      const cp = []; for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; cp.push([x + Math.cos(t) * 1.9 * s, 4.3 * s, z + Math.sin(t) * 1.9 * s]); }
+      this.geo.castShadow(cp, 0);
+    };
+    for (const [x0, z0, x1, z1, n] of [[-100, 50, -25, 100, 26], [-100, 112, -25, 148, 14], [-25, -102, 95, -82, 16], [44, -64, 96, -44, 10]]) {
+      for (let i = 0; i < n; i++) {
+        const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0);
+        if (rnd() < 0.7) tree(x, z, 0.8 + rnd() * 0.5);
+        else for (const [bx, bz, r] of [[0, 0, 0.7], [0.5, 0.3, 0.5], [-0.4, -0.3, 0.55]]) this.geo.addGeometry(new THREE.IcosahedronGeometry(r, 1), new THREE.Matrix4().makeTranslation(x + bx, r * 0.6, z + bz), C.leaf2);
+      }
+    }
+    // hydrants
+    for (const [x, z] of [[-30, 36.6], [20, 36.6], [60, 45.4], [-70, 45.4], [104.5, 0]]) {
+      this.col.addBox({ x, z, w: 0.3, d: 0.3, h: 0.7, tag: 'hydrant' });
+      this.geo.addGeometry(new THREE.CylinderGeometry(0.12, 0.14, 0.6, 10), new THREE.Matrix4().makeTranslation(x, 0.3, z), 0xc0392b);
+      this.geo.addGeometry(new THREE.SphereGeometry(0.12, 10, 6), new THREE.Matrix4().makeTranslation(x, 0.62, z), 0xc0392b);
+      this.geo.addGeometry(new THREE.CylinderGeometry(0.05, 0.05, 0.34, 6).rotateZ(Math.PI / 2), new THREE.Matrix4().makeTranslation(x, 0.4, z), 0xa93226);
+    }
+    // bus shelter
+    {
+      const x = -45, z = 36;
+      this.box({ x, z: z - 0.9, w: 4, d: 0.1, h: 2.4, tag: 'shelter' }, 0x9fb3bd, C.metal);
+      this.geo.prism({ x, z, w: 4.4, d: 2 }, [2.6, 2.6, 2.6, 2.6], 2.45, C.metal, C.metal);
+      for (const sx of [-2, 2]) this.geo.beam([x + sx, 0, z + 0.9], [x + sx, 2.45, z + 0.9], 0.07, C.metal);
+      this.ledge({ x, z: z - 0.55, w: 3, d: 0.45, h: 0.45, tag: 'bench' }, C.bench, C.metal, 'bench');
+    }
+    // parked cars along the avenue
+    const CAR = [0xb23a48, 0x2d4059, 0xe0e0e0, 0x3a6351, 0x1d1d1d, 0xc9a227];
+    [[-90, 46.2], [-78, 46.2], [-60, 46.2], [52, 46.2], [66, 46.2], [92, 36], [-95, 36]].forEach(([x, z], i) => {
+      const col = CAR[i % CAR.length], r = { x, z, w: 4.2, d: 1.8, yaw: 0 };
+      this.col.addBox({ ...r, h: 1.0, tag: 'car' });
+      this.geo.prism(r, [0.95, 0.95, 0.95, 0.95], 0.28, col, col);
+      this.geo.prism({ x: x - 0.2, z, w: 2.2, d: 1.6 }, [1.45, 1.45, 1.45, 1.45], 0.95, 0x27323d, col);
+      this.geo.prism({ x: x - 0.2, z, w: 1.9, d: 1.5 }, [1.48, 1.48, 1.48, 1.48], 1.45, col, col);
+      for (const [wx, wz] of [[1.3, -0.85], [1.3, 0.85], [-1.3, -0.85], [-1.3, 0.85]]) {
+        this.geo.addGeometry(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12).rotateX(Math.PI / 2), new THREE.Matrix4().makeTranslation(x + wx, 0.32, z + wz), 0x1b1b1b);
+      }
+      this.geo.castShadow(GeoBuilder.prismPoints(r, [1.45, 1.45, 1.45, 1.45], 0), 0);
+    });
+  }
+
+  // ---------------------------------------------------------------- distant terrain
+  // Rolling hills far outside the city (no collision), coloured with a bit of
+  // atmospheric haze so the horizon isn't just a flat edge.
+  _terrain() {
+    const cx = 60, cz = 20, S = 72, RINGS = 9, r0 = 270, r1 = 440;
+    const haze = new THREE.Color(0x9aa3b2), base = new THREE.Color(0x4f7a3a), rock = new THREE.Color(0x7d7468);
+    const pos = [], col = [], c = new THREE.Color();
+    const h = (a, r) => {
+      const t = (r - r0) / (r1 - r0);
+      const n = Math.sin(a * 3 + 1.3) * 0.5 + Math.sin(a * 7.1 + 0.4) * 0.3 + Math.sin(a * 13.7) * 0.2;
+      return Math.max(0, (10 + n * 12) * Math.sin(Math.min(1, t * 1.4) * Math.PI / 2) + t * t * 22);
+    };
+    const P = (i, j) => { const a = (j / S) * Math.PI * 2, r = r0 + (r1 - r0) * (i / RINGS); return [cx + Math.cos(a) * r, h(a, r) - 0.5, cz + Math.sin(a) * r, i / RINGS]; };
+    const push = (p) => {
+      pos.push(p[0], p[1], p[2]);
+      c.copy(base).lerp(rock, Math.min(1, Math.max(0, p[1] - 18) / 30)).lerp(haze, 0.18 + p[3] * 0.45);
+      col.push(c.r, c.g, c.b);
+    };
+    for (let i = 0; i < RINGS; i++) for (let j = 0; j < S; j++) {
+      const a = P(i, j), b = P(i, j + 1), d = P(i + 1, j), e = P(i + 1, j + 1);
+      push(a); push(e); push(b); push(a); push(d); push(e);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    this.hills = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
+    this.scene.add(this.hills);
+  }
+
   // ---------------------------------------------------------------- Southside Skatepark (south-east)
   // An original fenced concrete park: quarter-pipe lines, a spine, a pyramid with
   // hip corners and a top rail, a 3-step-3 with a kinked rail, a funbox with an
@@ -770,6 +1003,16 @@ export class World {
       this.geo.prism({ x, z, w: 18, d: 16, yaw: 0 }, [h, h, h, h], 0, col, col);
       this.geo.castShadow(GeoBuilder.prismPoints({ x, z, w: 18, d: 16 }, [h, h, h, h], 0), 0);
       this.geo.prism({ x, z, w: 18.3, d: 16.3 }, [h + 0.4, h + 0.4, h + 0.4, h + 0.4], h, 0x6c6f72, 0x6c6f72); // roof edge
+      // rooftop details: AC units, a water tank or a stair hut
+      this.geo.prism({ x: x - 4, z: z + 3, w: 2.2, d: 1.6 }, [h + 1.4, h + 1.4, h + 1.4, h + 1.4], h, 0xb7b9ba, 0x8f9193);
+      this.geo.prism({ x: x + 3, z: z - 4, w: 1.4, d: 1.4 }, [h + 1.1, h + 1.1, h + 1.1, h + 1.1], h, 0xb7b9ba, 0x8f9193);
+      if (k % 3 === 0) {
+        this.geo.addGeometry(new THREE.CylinderGeometry(1.3, 1.3, 2.2, 12), new THREE.Matrix4().makeTranslation(x + 4, h + 3.2, z + 3), 0x8a6a4a);
+        for (const [ox, oz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) this.geo.beam([x + 4 + ox, h, z + 3 + oz], [x + 4 + ox, h + 2.1, z + 3 + oz], 0.08, C.metal);
+      } else this.geo.prism({ x: x + 5, z: z + 4, w: 3, d: 3 }, [h + 2.6, h + 2.6, h + 2.6, h + 2.6], h, col, col);
+      // street level: shop windows and an awning
+      this.geo.prism({ x, z, w: 18.15, d: 16.15 }, [3.2, 3.2, 3.2, 3.2], 0.4, 0x2f3b47, 0x2f3b47);
+      this.geo.prism({ x, z, w: 18.9, d: 16.9 }, [3.6, 3.6, 3.4, 3.4], 3.3, [0x8e2c2c, 0x2c5f8e, 0x2c8e5a, 0x8e6d2c][k % 4], [0x8e2c2c, 0x2c5f8e, 0x2c8e5a, 0x8e6d2c][k % 4]);
       k++;
     }
     // trees (trunk is solid, crown is decoration)

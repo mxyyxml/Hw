@@ -40,7 +40,7 @@ Letting go without a flick does a plain ollie.
 | **W / ↑** | Push — tap for one stroke, hold to keep pushing. On a ramp: pump for speed |
 | **S / ↓** | Brake — at speed it's a powerslide |
 | **A D / ← →** | Steer on the ground, spin in the air |
-| **Z / X / V / B** | One-key tricks: Kickflip / Heelflip / 360 Flip / Pop Shuvit (tap just after an ollie for a late flip) |
+| **Z / X / V / B** | One-key tricks: Kickflip / Heelflip / 360 Flip / Pop Shuvit (tap just after an ollie for a late flip). **Hold** to keep flipping → Double / Triple |
 | **Space** (hold → release) | Crouch, then ollie. Longer hold = higher pop |
 | **Hold Space + flick + release** | ↓↑ Ollie · ↓← Kickflip · ↓→ Heelflip · ↓↑← 360 Flip · ↓↑→ Laser Flip · ↓←← / ↓→→ Double flips · ←↓← / →↓→ Varials · ↑↓ Nollie |
 | **Shift + ← / →** (air) | BS / FS Shuvit |
@@ -75,7 +75,10 @@ colours for everything, skin tone, hair, backpack, board colour, **stance (Regul
   losing some speed. Further than that and you bail into a full physics ragdoll.
 - **Landing assist** (Settings, on by default) straightens a slightly crooked board just before touchdown
   and nudges you onto a nearby landing ramp when you transfer.
-- **Off the board (E):** WASD walks relative to the camera, Shift runs, Space jumps, you slide along walls.
+- **Off the board (E):** the board stays where you stepped off. WASD moves relative to the camera, keep moving to
+  break into a run (or hold Shift), Space jumps. Press E again — even running or mid-jump — to drop the board
+  and hop on with your speed.
+- **Mid-air board adjust:** coming down onto a ramp, the board tilts to match it so air drop-ins land.
 
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
 in the air. Land with the board straight (forward or fakie) and your flip finished, or you
@@ -95,7 +98,15 @@ multiplied by the number of tricks in it. A bail loses the combo.
   a pyramid with hip corners and a top rail, a 3-step-3 with a kinked rail, a funbox with an A-frame rail,
   manual pads, a flat bar, a euro gap, rollers, a big quarter-pipe and a flow bowl
 
-Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Downhill Street, Southside Skatepark.
+- **Far east – Mega Park** – a 12 m drop-in tower into a giant roll-in, a big kicker gap to a long landing,
+  a 6 m vert quarter, a 6 m bank with a 30 m down-rail and hubba, a 4 m deep bowl, a giant spine, a big pyramid,
+  quarter-pipe walls, bleachers and floodlights
+- **Around town** – an avenue with lane lines, crosswalk and rideable curbs, a road out to the Mega Park, lawns
+  with trees and bushes, parked cars, hydrants, a bus shelter, shopfronts with awnings and rooftop details;
+  rolling hills on the horizon
+
+Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Downhill Street, Southside Skatepark,
+Mega Park – The Drop, Mega Park – Big Bank & Rail, Mega Park – Mega Bowl.
 
 ## 🏆 Modes
 

@@ -18,7 +18,7 @@ export class CollisionWorld {
     this.rails = [];
     this.zones = [];
     this.bowls = [];
-    this.bounds = { minX: -110, maxX: 110, minZ: -110, maxZ: 155 };
+    this.bounds = { minX: -110, maxX: 232, minZ: -110, maxZ: 155 };
     this.vertSlope = 2.6; // set from PHYSICS.vertSlope in main.js
     // scratch objects (avoid garbage every frame)
     this._s = { h: 0, gx: 0, gz: 0 };

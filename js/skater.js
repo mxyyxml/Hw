@@ -11,6 +11,8 @@ import { getFabric } from './textures.js';
 
 const THIGH = 0.42, SHIN = 0.42;          // leg bone lengths
 const DECK_Y = 0.105;                     // height of the deck top above the ground
+const FOOT_H = 0.066;                     // ankle height above the shoe sole (keeps shoes ON the deck, not in it)
+const FRONT_FOOT = 0.19, BACK_FOOT = 0.29; // footplant: front foot over the front bolts, back foot on the tail
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const damp = (a, b, rate, dt) => lerp(a, b, 1 - Math.exp(-rate * dt));
@@ -125,8 +127,14 @@ export class Skater {
       const el = bone(sh, 0, -0.3, 0);
       const cuff = mesh(el, new THREE.CylinderGeometry(0.036, 0.036, 0.035, 10), m.topDark, sgn * 0.018, -0.255, 0);
       const hand = joint(el, sgn * 0.018, -0.3, 0);
-      mesh(hand, new THREE.SphereGeometry(0.04, 10, 8).scale(0.72, 1.3, 1.05), m.skin, 0, -0.025, 0);           // palm + fingers
-      mesh(hand, new THREE.SphereGeometry(0.016, 6, 4).scale(1, 1.8, 1), m.skin, -sgn * 0.004, -0.01, 0.035);    // thumb
+      mesh(hand, new THREE.BoxGeometry(0.028, 0.075, 0.075).translate(0, -0.03, 0), m.skin, 0, 0, 0);            // palm
+      for (let f = 0; f < 4; f++) {                                                                                     // fingers, slightly curled
+        const fz = -0.026 + f * 0.0175, len = [0.055, 0.062, 0.058, 0.047][f];
+        const fg = mesh(hand, new THREE.CapsuleGeometry(0.0078, len - 0.016, 2, 6).translate(0, -len / 2, 0), m.skin, 0, -0.066, fz);
+        fg.rotation.z = -sgn * 0.35;
+      }
+      const th = mesh(hand, new THREE.CapsuleGeometry(0.0095, 0.03, 2, 6).translate(0, -0.02, 0), m.skin, -sgn * 0.004, -0.02, 0.04); // thumb
+      th.rotation.x = -0.6;
       this.arms.push({ sh, el, sgn, cuff });
     }
     // legs: hip → knee → foot. Thighs and shins are part of the skinned body.
@@ -328,10 +336,14 @@ export class Skater {
     // legs stand on the deck: leg 0 at body -X, leg 1 at body +X.
     // Regular: body -X is the board nose. Goofy turns the body the other way, so
     // body +X is the nose and the right foot leads.
-    const footX = 0.24;
+    // leg 0 is at body -X: the front foot when regular, the back foot when goofy
+    const frontIdx = s > 0 ? 0 : 1;
+    const footPos = (i) => (i === 0 ? -1 : 1) * (i === frontIdx ? FRONT_FOOT : BACK_FOOT);
     for (let i = 0; i < 2; i++) {
       const L = this.legs[i];
-      this._legIK(L, (i === 0 ? -footX : footX) - L.sgn * 0.09, -hipH, 0);
+      this._legIK(L, footPos(i) - L.sgn * 0.09, -hipH + FOOT_H, 0);
+      // real footplant: front foot angled toward the nose, back foot across the tail
+      L.foot.rotation.y = i === frontIdx ? -s * 0.42 : s * 0.12;
     }
     // ---------------- push stroke: the pushing foot steps off, plants beside the
     // board, sweeps back toward the tail, lifts and comes back to the deck.
@@ -342,8 +354,8 @@ export class Skater {
       const idx = this.mongo ? 1 - backIdx : backIdx;
       const L = this.legs[idx];
       const dirTail = tailX;
-      const ground = -hipH - DECK_Y + 0.02;
-      const onDeck = [(idx === 0 ? -footX : footX) - L.sgn * 0.09, -hipH, 0];
+      const ground = -hipH - DECK_Y + FOOT_H;
+      const onDeck = [footPos(idx) - L.sgn * 0.09, -hipH + FOOT_H, 0];
       const start = [dirTail * -0.12 - L.sgn * 0.09, ground, 0.22];
       const end = [dirTail * 0.42 - L.sgn * 0.09, ground, 0.18];
       let t;
@@ -378,29 +390,35 @@ export class Skater {
       A.el.rotation.x = lerp(A.el.rotation.x, -0.2, a.grab);
     }
 
-    // ---------------- walk mode
+    // ---------------- walk / run mode (the board is left on the ground)
     if (a.walk > 0.01) {
-      this.walkPhase += dt * (st.walkSpeed || 0) * 3.2;
-      const sw0 = Math.sin(this.walkPhase);
+      const spd = st.walkSpeed || 0, run = Math.min(1, Math.max(0, (spd - 2.6) / 2.8));
+      this.walkPhase += dt * spd * (3.0 - run * 0.6);
+      const sw0 = Math.sin(this.walkPhase), amp = Math.min(1, spd / 2) * (0.5 + run * 0.35);
       this.body.rotation.y = lerp(s * Math.PI / 2, 0, a.walk);
-      this.bodyBase.position.y = lerp(DECK_Y, 0.04, a.walk);
-      this.hips.position.y = lerp(hipH, 0.84, a.walk);
+      this.bodyBase.position.y = lerp(DECK_Y, 0.06 + Math.abs(Math.cos(this.walkPhase)) * 0.03 * run, a.walk);
+      this.hips.position.y = lerp(hipH, 0.84 - run * 0.03, a.walk);
       for (let i = 0; i < 2; i++) {
-        const L = this.legs[i], sw = (i === 0 ? sw0 : -sw0) * 0.55 * Math.min(1, (st.walkSpeed || 0) / 2);
-        L.hip.rotation.set(lerp(L.hip.rotation.x, sw, a.walk), 0, lerp(L.hip.rotation.z, 0, a.walk));
-        L.knee.rotation.x = lerp(L.knee.rotation.x, Math.max(0, -sw) * 0.8, a.walk);
-        L.foot.rotation.set(0, 0, 0);
+        const L = this.legs[i], sw = (i === 0 ? sw0 : -sw0) * amp;
+        L.hip.rotation.set(lerp(L.hip.rotation.x, -sw, a.walk), 0, lerp(L.hip.rotation.z, 0, a.walk));
+        L.knee.rotation.x = lerp(L.knee.rotation.x, Math.max(0, sw) * (0.6 + run * 0.9) + 0.05, a.walk);
+        L.foot.rotation.set(lerp(L.foot.rotation.x, -0.1, a.walk), 0, 0);
       }
-      this.torso.rotation.x = lerp(this.torso.rotation.x, 0.05 + Math.min(0.25, (st.walkSpeed || 0) * 0.05), a.walk);
-      if (st.walkAir) for (const L of this.legs) { L.hip.rotation.x -= 0.5; L.knee.rotation.x += 0.8; }   // tuck legs when jumping
+      this.torso.rotation.x = lerp(this.torso.rotation.x, 0.04 + run * 0.18, a.walk);
       this.torso.rotation.z = 0;
+      this.torso.rotation.y = sw0 * 0.08 * amp;
       this.head.rotation.y = lerp(this.head.rotation.y, 0, a.walk);
-      this.arms[0].sh.rotation.set(-sw0 * 0.4, 0, -0.15);
-      this.arms[1].sh.rotation.set(-0.3, 0, 0.35);
-      this.arms[1].el.rotation.set(-1.2, 0, 0);
-      this.boardHolder.position.set(lerp(0, 0.33, a.walk), lerp(0, 0.75, a.walk), lerp(0, -0.05, a.walk));
-      this.boardHolder.rotation.set(0, 0, lerp(0, Math.PI / 2, a.walk));
-    }
+      this.head.rotation.x = -run * 0.1;
+      for (let i = 0; i < 2; i++) {                // arms swing opposite to the legs
+        const A = this.arms[i], sw = (i === 0 ? -sw0 : sw0) * amp * 0.9;
+        A.sh.rotation.set(sw, 0, A.sgn * 0.12);
+        A.el.rotation.set(-0.25 - run * 0.9 - Math.max(0, sw) * 0.4, 0, 0);
+      }
+      if (st.walkAir) {                            // jumping: knees up, arms out
+        for (const L of this.legs) { L.hip.rotation.x -= 0.6; L.knee.rotation.x += 0.9; }
+        for (const A of this.arms) { A.sh.rotation.x -= 0.5; A.sh.rotation.z += A.sgn * 0.4; }
+      }
+    } else this.torso.rotation.y = 0;
 
     // ---------------- bail tumble (roll angle from Player physics)
     if (mode === 'bail') {

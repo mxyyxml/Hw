@@ -99,8 +99,11 @@ export class Player {
   frameInput(realNow) {
     const inp = this.input;
     if (inp.pressed.walk) {
-      if (this.state === 'ride' && this.speed < 3) this.enterWalk();
-      else if (this.state === 'walk') this.exitWalk();
+      if (this.state === 'ride' && this.speed < 4) this.enterWalk();
+      else if (this.state === 'walk') {
+        if (this.walkVy !== 0) this.wantBoard = true;   // mid-jump: hop on as you land
+        else this.exitWalk();
+      }
     }
     if (inp.pressed.respawn && this.state !== 'bail') this.respawnLast();
     if (inp.pressed.setSpot) this.emit('spotSet', { ok: this.setCustomSpot() });
@@ -111,7 +114,8 @@ export class Player {
       this.crouching = false;
       if (canPop) {
         // forgiving flicks: keys pressed a moment before Space, together with it, or slowly all count
-        const dirs = inp.dirEvents.filter((e) => e.t >= this.spaceStart - P.flickPreWindow && e.t >= realNow - P.flickWindow).map((e) => e.dir);
+        const rel = inp.releasedAt.pop || realNow;   // keys pressed AFTER letting go of Space don't count
+        const dirs = inp.dirEvents.filter((e) => e.t >= this.spaceStart - P.flickPreWindow && e.t >= realNow - P.flickWindow && e.t <= rel + 0.005).map((e) => e.dir);
         this.wantPop = { hold: realNow - this.spaceStart, dirs };
       }
     }
@@ -126,8 +130,8 @@ export class Player {
       if (canPop) {
         const hold = this.crouching ? realNow - this.spaceStart : 0.45;
         this.crouching = false;
-        this.wantPop = { hold, dirs: [], forced: def };
-      } else if (this.state === 'air') this.air.lateTrick = def;
+        this.wantPop = { hold, dirs: [], forced: def, holdKey: key };
+      } else if (this.state === 'air') { this.air.lateTrick = def; this.air.lateKey = key; }
     }
 
     // while grinding (and not winding up a pop): arrows / K switch the grind
@@ -346,14 +350,33 @@ export class Player {
   // and only counts if you land it.
   startPopTrick(popInfo) {
     const def = popInfo.forced || resolveFlick(popInfo.dirs);
-    this.startAirTrick(def);
+    this.startAirTrick(def, popInfo.holdKey);
   }
 
-  startAirTrick(def) {
+  startAirTrick(def, holdKey) {
     const A = this.air;
-    A.tricks.push({ name: def.name, base: def.name, points: def.points });
-    if (def.time > 0) A.trick = { def, t: 0 };
+    const entry = { name: def.name, base: def.name, points: def.points };
+    A.tricks.push(entry);
+    // holdKey: action that, while held, keeps the board flipping (Double / Triple)
+    if (def.time > 0) A.trick = { def, t: 0, loops: 0, entry, holdKey: holdKey || (def.flips ? 'down' : null) };
     this.emit('trick', { name: def.name });
+  }
+
+  // still holding the trick key when a flip finishes → flip again (if there's air)
+  _extendFlip(A) {
+    const T = A.trick;
+    if (!T.def.flips || !T.holdKey || !this.input.held[T.holdKey] || T.loops >= P2.maxExtraFlips) return false;
+    const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
+    const h = this.pos.y - g.h, vy = this.vel.y;
+    const tLand = (vy + Math.sqrt(vy * vy + 2 * P.gravity * Math.max(0, h))) / P.gravity;
+    if (tLand < T.def.time * 1.1) return false;               // not enough air left for another full flip
+    T.loops++; T.t = 0;
+    const base = T.def.name.replace(/^Double /, '');
+    T.entry.name = ['', 'Double ', 'Triple '][T.loops] + base;
+    T.entry.base = T.entry.name;
+    T.entry.points = Math.round(T.def.points * (1 + P2.extraFlipPoints * T.loops));
+    this.emit('trick', { name: T.entry.name });
+    return true;
   }
 
   launch(popped) {
@@ -404,6 +427,7 @@ export class Player {
       A.yaw += A.spinVel * dt; A.spin += A.spinVel * dt;
     }
     this.updateAirTricks(dt);
+    this._predictLanding();
     if (this.assist) this._landingAssist(dt, inp);
 
     const nx = this.pos.x + this.vel.x * dt, ny = this.pos.y + this.vel.y * dt, nz = this.pos.z + this.vel.z * dt;
@@ -421,6 +445,19 @@ export class Player {
     if (ny > A.maxY) A.maxY = ny;
   }
 
+  // where / when will we land? (used to tilt the board to the landing ramp mid-air)
+  _predictLanding() {
+    const A = this.air;
+    if (this.vel.y > 0.5) { A.tLand = 9; return; }
+    const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
+    const vy = -this.vel.y, h = this.pos.y - g.h;
+    const t = (-vy + Math.sqrt(vy * vy + 2 * P.gravity * Math.max(0, h))) / P.gravity;
+    const lg = this.col.ground(this.pos.x + this.vel.x * t, this.pos.z + this.vel.z * t, this.pos.y + 0.05);
+    A.tLand = t;
+    A.landN = A.landN || new THREE.Vector3();
+    A.landN.set(lg.nx, lg.ny, lg.nz);
+  }
+
   // LANDING ASSIST: just before touchdown, straighten a slightly crooked board
   // (if you're not spinning), and gently steer toward a landing ramp nearby.
   _landingAssist(dt, inp) {
@@ -432,6 +469,14 @@ export class Player {
     const t = (-vy + Math.sqrt(vy * vy + 2 * P.gravity * Math.max(0, h))) / P.gravity; // ≈ time to land
     const spinning = (inp.held.left || inp.held.right) && !inp.held.grind && !inp.held.shift;
     const hs = Math.hypot(this.vel.x, this.vel.z);
+    // nearly-finished flip: help it finish before the wheels touch down
+    if (A.trick && t < 0.3) {
+      const p = A.trick.t / A.trick.def.time;
+      if (p > 0.45) {
+        const need = (1 - p) * A.trick.def.time;
+        if (need > t * 0.9) A.trick.t += (need - t * 0.9) * Math.min(1, dt / Math.max(t, dt)) + dt * 0.5;
+      }
+    }
     if (t < 0.35 && !spinning && hs > 0.8 && !A.trick) {
       const travel = Math.atan2(this.vel.x, this.vel.z);
       let d = wrapAngle(A.yaw - travel);
@@ -472,7 +517,7 @@ export class Player {
       const e = 1 - (1 - p) * (1 - p) * 0.35 - 0.65 * (1 - p); // slightly eased
       A.flipAngle = A.trick.def.flips * TAU * e;
       A.shuvAngle = A.trick.def.shuv * Math.PI * e;
-      if (p >= 1) { A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; }
+      if (p >= 1 && !this._extendFlip(A)) { A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; }
     }
     // --- late flip: a one-key trick right after take-off replaces the plain ollie
     if (A.lateTrick) {
@@ -480,7 +525,7 @@ export class Player {
       const plain = A.tricks.length === 0 || (A.tricks.length === 1 && (A.tricks[0].name === 'Ollie' || A.tricks[0].name === 'Nollie'));
       if (!A.trick && !A.grab && A.time <= P.lateFlipWindow && plain) {
         A.tricks = [];
-        this.startAirTrick(def);
+        this.startAirTrick(def, A.lateKey);
       }
     }
     // --- Shift + ← / → = shuvit (one at a time, not while grabbing)
@@ -845,15 +890,22 @@ export class Player {
   }
 
   // ------------------------------------------------------------------ WALK
+  // Off the board: the board stays on the ground where you stepped off
   enterWalk() {
+    this.groundBoard = { pos: this.pos.clone().add(new THREE.Vector3(Math.sin(this.heading) * 0.5, 0.075, Math.cos(this.heading) * 0.5)),
+      quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading) };
+    this.moveTime = 0; this.wantBoard = false;
     this.state = 'walk'; this.walkVel = { x: Math.sin(this.heading) * this.speed * 0.5, z: Math.cos(this.heading) * this.speed * 0.5 };
     this.speed = 0; this.walkVy = 0;
     this.heading = this.modelYaw(); this.fakie = false;
     this.emit('walk', { on: true });
   }
+  // Back on the board (E): you drop it and jump on, keeping your running speed
   exitWalk() {
-    if (this.walkVy !== 0) return;                   // can't hop on the board mid-jump
-    this.state = 'ride'; this.speed = Math.min(2, this.walkSpeed * 0.6); this.fakie = false;
+    if (this.walkVy !== 0) { this.wantBoard = true; return; }
+    this.state = 'ride'; this.speed = Math.min(5, this.walkSpeed * 0.95); this.fakie = false;
+    this.groundBoard = null;
+    if (this.speed > 0.5) this.pushPhase = -1;
     this.emit('walk', { on: false });
   }
   // Walking: third-person controls relative to the CAMERA (W = away from the
@@ -867,7 +919,10 @@ export class Player {
     const fx = Math.sin(cy), fz = Math.cos(cy), rx = -Math.cos(cy), rz = Math.sin(cy);
     let wx = fx * iz + rx * ix, wz = fz * iz + rz * ix;
     const wl = Math.hypot(wx, wz);
-    const target = wl > 0 ? (inp.held.shift ? P.runSpeed : P.walkSpeed) : 0;
+    // keep moving and you break into a run (or hold Shift)
+    this.moveTime = wl > 0 ? (this.moveTime || 0) + dt : 0;
+    const running = inp.held.shift || this.moveTime > P.autoRunTime;
+    const target = wl > 0 ? (running ? P.runSpeed : P.walkSpeed) : 0;
     if (wl > 0) { wx /= wl; wz /= wl; }
     this.walkVel = this.walkVel || { x: 0, z: 0 };
     const V = this.walkVel, onGround = this.walkVy === 0;
@@ -899,6 +954,7 @@ export class Player {
       ny = g.h; this.walkVy = 0;
     }
     this.pos.set(nx, ny, nz);
+    if (this.wantBoard && this.walkVy === 0) { this.wantBoard = false; this.exitWalk(); return; }
     this.normal.set(0, 1, 0);
   }
 
@@ -916,6 +972,9 @@ export class Player {
     const up = this._up || (this._up = new THREE.Vector3(0, 1, 0));
     let n = this.normal, rate = 14;
     if (this.state === 'air' || this.state === 'grind') { n = up; rate = this.state === 'grind' ? 10 : 3; }
+    // mid-air: as you come down onto a ramp the board tilts to match it, so you
+    // can actually land drop-ins and transitions
+    if (this.state === 'air' && this.air.landN && this.air.tLand < 0.45 && this.air.landN.y < 0.995) { n = this.air.landN; rate = 9; }
     if (this.state === 'walk') n = up;
     if (this.state === 'bail') yaw = this.bailInfo.yaw;
     if (this.state === 'ride' && this.powersliding) yaw += (this.fakie ? -1 : 1) * 1.25;
@@ -930,6 +989,7 @@ export class Player {
     if (this.state === 'bail') { n = up; rate = 20; }
     sk.setTransform(this.pos, yaw, n, dt, rate, this.bankSmooth);
     if (this.state === 'bail') sk.setLooseBoard(true, this.bailInfo.boardPos, this.bailInfo.boardQuat);
+    else if (this.state === 'walk' && this.groundBoard) sk.setLooseBoard(true, this.groundBoard.pos, this.groundBoard.quat);
     else sk.setLooseBoard(false);
     // wheels keep spinning in the air and slowly stop
     if (this.state === 'ride') this.wheelSpeed = this.speed;

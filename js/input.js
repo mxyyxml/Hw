@@ -14,6 +14,7 @@ export class Input {
     this.pressed = {};     // action -> true for the frame it went down
     this.released = {};    // action -> true for the frame it went up
     this.dirEvents = [];   // [{dir, t}] — direction presses, used for flick tricks
+    this.releasedAt = {};  // action -> time (s) it was last let go
     this.enabled = true;
     this.now = 0;          // seconds, updated by main loop
 
@@ -39,6 +40,7 @@ export class Input {
       // if both keys of an action exist (W and ↑), only release when none is held
       this.held[action] = false;
       this.released[action] = true;
+      this.releasedAt[action] = performance.now() / 1000;
     }
   }
 

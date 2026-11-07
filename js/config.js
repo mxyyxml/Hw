@@ -51,7 +51,7 @@ export const PHYSICS = {
   maxLandingImpact: 12.5,   // m/s into the ground — harder than this = bail
   wallBailSpeed: 8.5,       // m/s straight into a wall = bail
   landAngleTolerance: 32,   // DEGREES board may be off the travel direction
-  flipCompleteThreshold: 0.82, // flip must be this % done when you land
+  flipCompleteThreshold: 0.75, // flip must be this % done when you land
   bailIfGrabbingOnLand: false,
   bailRespawnDelay: 2.2,    // seconds (real time) before respawn after a bail (time to watch the ragdoll)
   bailSlowMo: 0.35,         // time scale during the bail slow-mo
@@ -66,8 +66,9 @@ export const PHYSICS = {
   lateFlipWindow: 0.38,     // one-key tricks pressed this soon after leaving the ground = late flip
 
   // Walking (E)
-  walkSpeed: 2.4,
-  runSpeed: 4.2,            // walking with Shift held
+  walkSpeed: 2.6,
+  runSpeed: 5.4,            // Shift, or keep moving for autoRunTime seconds
+  autoRunTime: 1.0,
   walkTurnRate: 3.0,
 };
 
@@ -167,6 +168,7 @@ export const GAPS = [
   { name: 'Plaza Gap',     from: 'gapA',        to: 'gapB',         points: 600 },
   { name: 'Mega Gap',      from: 'mega_kicker', to: 'mega_land',    points: 1500 },
   { name: 'Euro Gap',      from: 'euro_bank',   to: 'euro_land',    points: 700 },
+  { name: 'Mega Park Gap', from: 'mega2_kicker', to: 'mega2_land',  points: 2000 },
   { name: '3-Step-3',      from: 'kink_top',    to: 'kink_land',    points: 600 },
   { name: 'Funbox Clear',  from: 'funbox_s',    to: 'funbox_n_land', points: 250 },
   { name: 'Funbox Clear',  from: 'funbox_n',    to: 'funbox_s_land', points: 250 },
@@ -212,10 +214,10 @@ export const CAMERA = {
 //  GRAPHICS presets (toggle in Settings)
 // -----------------------------------------------------------------------------
 export const GRAPHICS = {
-  low:  { pixelRatio: 1,   shadows: false, fogFar: 200, drawDistance: 420 },
-  high: { pixelRatio: 1.5, shadows: true,  fogFar: 300, drawDistance: 420, shadowMapSize: 2048 },
+  low:  { pixelRatio: 1,   shadows: false, fogFar: 220, drawDistance: 800 },
+  high: { pixelRatio: 1.5, shadows: true,  fogFar: 320, drawDistance: 800, shadowMapSize: 2048 },
   // Ultra (gaming / school PCs): ambient occlusion + anti-aliasing post-processing, 4K shadows
-  ultra: { pixelRatio: 2, shadows: true, fogFar: 340, drawDistance: 460, shadowMapSize: 4096, post: true },
+  ultra: { pixelRatio: 2, shadows: true, fogFar: 360, drawDistance: 800, shadowMapSize: 4096, post: true },
 };
 
 // -----------------------------------------------------------------------------
@@ -273,7 +275,9 @@ export const PHYSICS2 = {
   // ride it out (rolling the way the BOARD points, losing some speed); more = bail
   // the allowed angle depends on SPEED: slow = you can land almost any way and
   // stay on (the board just stops / turns), fast = it has to be fairly straight
-  landClean: 16, landMaxSlow: 90, landMaxFast: 50, landSlowSpeed: 3, landFastSpeed: 8.5,
+  landClean: 20, landMaxSlow: 90, landMaxFast: 60, landSlowSpeed: 4, landFastSpeed: 10,
+  // hold the trick key (Z / X / V, or ↓ after a flick) to keep flipping: Double, Triple...
+  maxExtraFlips: 2, extraFlipPoints: 0.8,
   // drop-ins: rolling off a lip onto a ramp that falls away keeps you on the ramp
   dropInMaxSpeed: 10, dropInMaxGap: 1.2,
   // landing assist (Settings): straightens the board just before touchdown and
