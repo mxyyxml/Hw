@@ -14,7 +14,7 @@
 // =============================================================================
 import * as THREE from 'three';
 import { CollisionWorld } from './physics.js';
-import { getTexture, TEX_SCALE } from './textures.js';
+import { getTexture, getNormal, TEX_SCALE } from './textures.js';
 
 // ---- colour palette (natural, slightly muted tones) --------------------------
 const C = {
@@ -42,11 +42,15 @@ setCat('tiles', [C.plaza, C.plazaDark, C.bowlDeck, 0xcfc3ad, 0xe0d2c0]);
 setCat('asphalt', [C.street]);
 setCat('wood', [C.wood, C.woodSide, C.rampSide, C.kickerSide, C.megaSide, C.trunk, C.bench]);
 setCat('ramp', [C.ramp, C.kicker, C.mega, 0x8d9aa3]);
-setCat('grass', [C.grass, C.leaf, C.leaf2]);
+setCat('grass', [C.grass]);
+setCat('foliage', [C.leaf, C.leaf2]); // tree leaves: their own green, no photo
 setCat('building', BUILDING_COLORS);
+// the colour in each category that shows the photo texture untinted
+const CAT_REF = { concrete: C.concrete, tiles: C.plaza, asphalt: C.street, wood: C.wood, ramp: C.ramp, grass: C.grass, building: 0xb5654f };
 
 // Direction TOWARD the sun (matches the DirectionalLight offset in main.js)
-export const SUN = { x: 30, y: 60, z: 20 };
+// (measured from the sky photo: elevation ≈ 48°, so shadows line up with the sun in the sky)
+export const SUN = { x: 53.4, y: 74.3, z: 40.3 };
 
 // convex hull of 2D points (monotone chain) — used for the fake ground shadows
 function hull2D(pts) {
@@ -91,6 +95,20 @@ class GeoBuilder {
   }
   _bucket(cat) { return this.buckets[cat] || (this.buckets[cat] = { pos: [], nor: [], col: [], uv: [] }); }
 
+  // Photo textures carry their own colour, so a vertex colour becomes a TINT
+  // relative to the category's main colour (main colour → white = untinted photo).
+  _setColor(color, cat) {
+    this._c.setHex(color);
+    const ref = CAT_REF[cat];
+    if (ref !== undefined) {
+      const r = this._ref || (this._ref = new THREE.Color());
+      r.setHex(ref);
+      this._c.r = Math.min(1.6, Math.max(0.3, this._c.r / r.r));
+      this._c.g = Math.min(1.6, Math.max(0.3, this._c.g / r.g));
+      this._c.b = Math.min(1.6, Math.max(0.3, this._c.b / r.b));
+    }
+  }
+
   // push one vertex: world-space planar UVs + fake ambient occlusion near the ground
   _vert(B, cat, x, y, z, nx, ny, nz) {
     const s = 1 / TEX_SCALE[cat];
@@ -117,7 +135,7 @@ class GeoBuilder {
     }
     const cat = CAT.get(color) || 'plain';
     const B = this._bucket(cat);
-    this._c.setHex(color);
+    this._setColor(color, cat);
     for (const p of [a, b, c]) this._vert(B, cat, p[0], p[1], p[2], nx, ny, nz);
   }
   quad(a, b, c, d, color, hint) { this.tri(a, b, c, color, hint); this.tri(a, c, d, color, hint); }
@@ -133,7 +151,7 @@ class GeoBuilder {
     }
     const cat = CAT.get(color) || 'plain';
     const B = this._bucket(cat);
-    this._c.setHex(color);
+    this._setColor(color, cat);
     this._vert(B, cat, a[0], a[1], a[2], na[0], na[1], na[2]);
     this._vert(B, cat, b[0], b[1], b[2], nb[0], nb[1], nb[2]);
     this._vert(B, cat, c[0], c[1], c[2], nc[0], nc[1], nc[2]);
@@ -178,7 +196,7 @@ class GeoBuilder {
     const p = g.attributes.position.array, n = g.attributes.normal.array;
     const cat = CAT.get(color) || 'plain';
     const B = this._bucket(cat);
-    this._c.setHex(color);
+    this._setColor(color, cat);
     for (let i = 0; i < p.length; i += 3) this._vert(B, cat, p[i], p[i + 1], p[i + 2], n[i], n[i + 1], n[i + 2]);
   }
 
@@ -361,6 +379,11 @@ export class World {
         this._mats[key] = level === 'high'
           ? new THREE.MeshStandardMaterial({ vertexColors: true, map, roughness: cat === 'plain' ? 0.45 : 0.92, metalness: cat === 'plain' ? 0.35 : 0 })
           : new THREE.MeshLambertMaterial({ vertexColors: true, map });
+        // High: real surface relief from the photo normal maps
+        if (level === 'high') {
+          const mat = this._mats[key];
+          getNormal(cat, (n) => { mat.normalMap = n; mat.normalScale.set(0.8, 0.8); mat.needsUpdate = true; });
+        }
       }
       mesh.material = this._mats[key];
     }

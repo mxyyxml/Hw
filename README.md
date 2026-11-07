@@ -124,11 +124,25 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | `js/audio.js` | Web Audio sound effects |
 | `js/ui.js` | HUD, pop-ups, menus |
 | `js/storage.js` | Safe localStorage helper |
+| `js/body.js` | The skater's smooth skinned human body (one mesh, bones bend it) |
+| `js/ragdoll.js` | Rapier physics ragdoll for bails + the flying board |
 | `js/gesture.js` | Mouse / thumb flick-stick gestures |
 | `js/touch.js` | Phone / tablet touch controls and device detection |
 | `js/textures.js` | Procedural canvas textures (concrete, tiles, asphalt, wood, windows…) |
 | `play.html` | Built single-file version of the whole game |
 | `tools/build-play.mjs` | Builds `play.html` |
+
+## 🧱 Open-source assets & libraries used
+
+| What | Source | Licence |
+| --- | --- | --- |
+| 3D engine | [three.js](https://github.com/mrdoob/three.js) 0.160.0 | MIT |
+| Ragdoll / board physics | [Rapier](https://github.com/dimforge/rapier) (`@dimforge/rapier3d-compat` 0.12.0) | Apache-2.0 |
+| Photo textures: concrete floor 02, concrete tiles, asphalt 02, brushed concrete 2, plywood, leafy grass, brick wall 001, denim fabric, cotton jersey | [Poly Haven](https://polyhaven.com) | CC0 |
+| Sky: Kloofendal 48d Partly Cloudy (Pure Sky) | [Poly Haven](https://polyhaven.com) | CC0 |
+
+Textures were resized to 512×512 (and the concrete ones colour-neutralised) to stay light on Chromebooks;
+they live in `assets/`. The skater, the park and the sounds are all made in code.
 
 ## Originality
 

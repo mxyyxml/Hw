@@ -6,6 +6,8 @@
 // =============================================================================
 import * as THREE from 'three';
 import { DEFAULT_OUTFIT, PUSH } from './config.js';
+import { buildBody } from './body.js';
+import { getFabric } from './textures.js';
 
 const THIGH = 0.42, SHIN = 0.42;          // leg bone lengths
 const DECK_Y = 0.105;                     // height of the deck top above the ground
@@ -18,8 +20,6 @@ function joint(parent, x, y, z) {
   const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g;
 }
 
-// capsule limb hanging down from its joint (length = joint-to-joint distance)
-function limbGeo(r, len) { return new THREE.CapsuleGeometry(r, Math.max(0.01, len - 2 * r), 3, 8).translate(0, -len / 2, 0); }
 function hemi(r, sy = 1) { return new THREE.SphereGeometry(r, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, sy, 1); }
 
 export class Skater {
@@ -59,85 +59,95 @@ export class Skater {
     scene.add(this.looseBoard);
 
     // ------------------------------------------------------------ body
+    // A skeleton of bones drives ONE smooth skinned body mesh (see body.js).
     // Built facing its own +Z, then turned ±90° to stand sideways (regular/goofy).
+    const bone = (parent, x, y, z) => { const b = new THREE.Bone(); b.position.set(x, y, z); parent.add(b); return b; };
     this.bodyBase = joint(this.manualInner, 0, DECK_Y, 0);
     this.body = joint(this.bodyBase, 0, 0, 0);
-    this.hips = joint(this.body, 0, 0.8, 0);
+    this.hips = bone(this.body, 0, 0.8, 0);
     const m = this.mat;
-    mesh(this.hips, new THREE.CapsuleGeometry(0.1, 0.14, 3, 8).rotateZ(Math.PI / 2).scale(1, 0.9, 0.9), m.pants, 0, 0.02, 0);
-    mesh(this.hips, new THREE.CylinderGeometry(0.165, 0.165, 0.04, 12).scale(1, 1, 0.68), m.sole, 0, 0.09, 0); // belt
-    this.torso = joint(this.hips, 0, 0.08, 0);
-    // rounded torso: capsule squashed front-to-back, a bit wider at the shoulders
-    mesh(this.torso, new THREE.CapsuleGeometry(0.16, 0.2, 4, 10).scale(1.12, 1, 0.7), m.top, 0, 0.25, 0);
+    m.top.map = getFabric('cotton');
+    m.pants.map = getFabric('denim');
+    mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
+    this.torso = bone(this.hips, 0, 0.08, 0);
     this.parts = {
-      hood: mesh(this.torso, new THREE.SphereGeometry(0.12, 10, 6).scale(1.2, 0.6, 0.8), m.topDark, 0, 0.46, -0.1),
-      pocket: box(this.torso, 0.24, 0.1, 0.02, m.topDark, 0, 0.13, 0.108),
-      strings: [box(this.torso, 0.012, 0.12, 0.012, m.lace, -0.05, 0.38, 0.11), box(this.torso, 0.012, 0.12, 0.012, m.lace, 0.05, 0.38, 0.11)],
-      jacketOpen: box(this.torso, 0.09, 0.42, 0.02, m.topTrim, 0, 0.25, 0.106),
-      collar: mesh(this.torso, new THREE.TorusGeometry(0.09, 0.025, 6, 12).rotateX(Math.PI / 2), m.topDark, 0, 0.47, 0),
+      hood: mesh(this.torso, new THREE.SphereGeometry(0.12, 12, 8).scale(1.25, 0.6, 0.85), m.topDark, 0, 0.47, -0.095),
+      pocket: box(this.torso, 0.22, 0.1, 0.02, m.topDark, 0, 0.15, 0.106),
+      strings: [box(this.torso, 0.01, 0.12, 0.01, m.lace, -0.045, 0.39, 0.124), box(this.torso, 0.01, 0.12, 0.01, m.lace, 0.045, 0.39, 0.124)],
+      jacketOpen: box(this.torso, 0.08, 0.3, 0.012, m.topTrim, 0, 0.3, 0.122),
+      collar: mesh(this.torso, new THREE.TorusGeometry(0.075, 0.022, 6, 14).rotateX(Math.PI / 2), m.topDark, 0, 0.5, 0.005),
       flannel: [],
-      pack: mesh(this.torso, new THREE.CapsuleGeometry(0.11, 0.14, 3, 8).scale(1.2, 1, 0.55), m.pack, 0, 0.27, -0.17),
-      packStraps: [box(this.torso, 0.035, 0.36, 0.02, m.packDark, -0.1, 0.27, 0.11), box(this.torso, 0.035, 0.36, 0.02, m.packDark, 0.1, 0.27, 0.11)],
+      pack: mesh(this.torso, new THREE.CapsuleGeometry(0.11, 0.14, 3, 10).scale(1.2, 1, 0.55), m.pack, 0, 0.28, -0.17),
+      packStraps: [box(this.torso, 0.035, 0.34, 0.015, m.packDark, -0.1, 0.28, 0.126), box(this.torso, 0.035, 0.34, 0.015, m.packDark, 0.1, 0.28, 0.126)],
       cargo: [],
     };
-    for (let i = 0; i < 3; i++) this.parts.flannel.push(mesh(this.torso, new THREE.CylinderGeometry(0.182, 0.182, 0.022, 12).scale(1, 1, 0.66), m.topDark, 0, 0.1 + i * 0.13, 0));
+    // flannel check stripes follow the torso's shape
+    for (const [y, rx, rz] of [[0.12, 0.158, 0.106], [0.25, 0.176, 0.121], [0.37, 0.192, 0.127]]) {
+      this.parts.flannel.push(mesh(this.torso, new THREE.CylinderGeometry(1, 1, 0.022, 18).scale(rx, 1, rz), m.topDark, 0, y, 0.006));
+    }
 
     // head
-    this.head = joint(this.torso, 0, 0.5, 0);
-    mesh(this.head, new THREE.CylinderGeometry(0.05, 0.055, 0.1, 8), m.skin, 0, 0.04, 0);        // neck
-    mesh(this.head, new THREE.SphereGeometry(0.125, 14, 10).scale(1, 1.12, 1.02), m.skin, 0, 0.2, 0);
-    mesh(this.head, new THREE.SphereGeometry(0.025, 6, 4).scale(1, 1, 1.3), m.skinDark, 0, 0.18, 0.125); // nose
-    mesh(this.head, new THREE.SphereGeometry(0.017, 6, 4), m.eye, -0.045, 0.22, 0.112);
-    mesh(this.head, new THREE.SphereGeometry(0.017, 6, 4), m.eye, 0.045, 0.22, 0.112);
-    mesh(this.head, new THREE.SphereGeometry(0.03, 6, 4).scale(0.6, 1, 1), m.skinDark, -0.125, 0.2, 0);  // ears
-    mesh(this.head, new THREE.SphereGeometry(0.03, 6, 4).scale(0.6, 1, 1), m.skinDark, 0.125, 0.2, 0);
+    this.head = bone(this.torso, 0, 0.5, 0);
+    mesh(this.head, new THREE.SphereGeometry(0.122, 18, 14).scale(0.98, 1.14, 1.04), m.skin, 0, 0.2, 0.004);
+    mesh(this.head, new THREE.SphereGeometry(0.075, 12, 8).scale(1, 0.75, 0.9), m.skin, 0, 0.12, 0.04);              // jaw / chin
+    mesh(this.head, new THREE.ConeGeometry(0.022, 0.05, 6).rotateX(Math.PI / 2 - 0.35), m.skinDark, 0, 0.185, 0.13);  // nose
+    for (const sx of [-1, 1]) {
+      mesh(this.head, new THREE.SphereGeometry(0.021, 10, 8).scale(1.15, 0.8, 0.55), m.topTrim, sx * 0.045, 0.218, 0.111); // eye white
+      mesh(this.head, new THREE.SphereGeometry(0.0115, 8, 6).scale(1, 1, 0.5), m.eye, sx * 0.045, 0.218, 0.12);         // iris
+      mesh(this.head, new THREE.BoxGeometry(0.05, 0.011, 0.012).rotateZ(-sx * 0.12), m.hair, sx * 0.047, 0.25, 0.115);   // eyebrow
+      mesh(this.head, new THREE.SphereGeometry(0.03, 8, 6).scale(0.5, 1, 0.8), m.skinDark, sx * 0.122, 0.2, -0.005);     // ear
+    }
+    mesh(this.head, new THREE.BoxGeometry(0.045, 0.008, 0.01), m.lipColor || m.skinDark, 0, 0.14, 0.113);                // mouth
     this.hair = [
-      mesh(this.head, hemi(0.132, 1.05), m.hair, 0, 0.215, -0.008),                                    // top
-      mesh(this.head, new THREE.SphereGeometry(0.13, 12, 8).scale(1, 0.75, 0.6), m.hair, 0, 0.19, -0.045), // back
+      mesh(this.head, hemi(0.13, 1.05), m.hair, 0, 0.225, -0.006),                                       // top
+      mesh(this.head, new THREE.SphereGeometry(0.128, 14, 10).scale(1, 0.8, 0.62), m.hair, 0, 0.2, -0.048), // back
     ];
     // hats
     const H = () => joint(this.head, 0, 0, 0);
     this.hats = { beanie: H(), cap: H(), capBack: H(), helmet: H(), bucket: H() };
-    mesh(this.hats.beanie, hemi(0.142, 1.25), m.hat, 0, 0.225, 0);
-    mesh(this.hats.beanie, new THREE.CylinderGeometry(0.145, 0.145, 0.06, 14), m.hatDark, 0, 0.235, 0);
-    mesh(this.hats.beanie, new THREE.SphereGeometry(0.04, 8, 6), m.hatDark, 0, 0.405, 0);
+    mesh(this.hats.beanie, hemi(0.14, 1.25), m.hat, 0, 0.235, 0);
+    mesh(this.hats.beanie, new THREE.CylinderGeometry(0.143, 0.143, 0.055, 16), m.hatDark, 0, 0.245, 0);
+    mesh(this.hats.beanie, new THREE.SphereGeometry(0.04, 8, 6), m.hatDark, 0, 0.415, 0);
     for (const [g, dir] of [[this.hats.cap, 1], [this.hats.capBack, -1]]) {
-      mesh(g, hemi(0.138, 0.9), m.hat, 0, 0.24, 0);
-      mesh(g, new THREE.CylinderGeometry(0.11, 0.11, 0.012, 12, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.25), m.hatDark, 0, 0.245, dir * 0.11);
-      mesh(g, new THREE.SphereGeometry(0.018, 6, 4), m.hatDark, 0, 0.365, 0);
+      mesh(g, hemi(0.136, 0.9), m.hat, 0, 0.25, 0);
+      mesh(g, new THREE.CylinderGeometry(0.11, 0.11, 0.012, 12, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 1.25), m.hatDark, 0, 0.255, dir * 0.11);
+      mesh(g, new THREE.SphereGeometry(0.018, 6, 4), m.hatDark, 0, 0.375, 0);
     }
-    mesh(this.hats.helmet, hemi(0.16, 1.0), m.hat, 0, 0.21, 0);
-    mesh(this.hats.helmet, new THREE.CylinderGeometry(0.162, 0.162, 0.03, 14), m.hatDark, 0, 0.215, 0);
-    mesh(this.hats.bucket, new THREE.CylinderGeometry(0.12, 0.14, 0.12, 14), m.hat, 0, 0.32, 0);
-    mesh(this.hats.bucket, new THREE.CylinderGeometry(0.2, 0.2, 0.012, 16), m.hatDark, 0, 0.265, 0);
+    mesh(this.hats.helmet, hemi(0.158, 1.0), m.hat, 0, 0.22, 0);
+    mesh(this.hats.helmet, new THREE.CylinderGeometry(0.16, 0.16, 0.03, 16), m.hatDark, 0, 0.225, 0);
+    mesh(this.hats.bucket, new THREE.CylinderGeometry(0.12, 0.138, 0.12, 16), m.hat, 0, 0.33, 0);
+    mesh(this.hats.bucket, new THREE.CylinderGeometry(0.2, 0.2, 0.012, 18), m.hatDark, 0, 0.275, 0);
 
-    // arms: shoulder → elbow → hand
+    // arms: shoulder → elbow (+ hand). Upper/fore arms are part of the skinned body.
     this.arms = [];
     for (const sgn of [-1, 1]) {
-      const sh = joint(this.torso, sgn * 0.21, 0.42, 0);
-      mesh(sh, limbGeo(0.055, 0.3), m.top);
-      const el = joint(sh, 0, -0.3, 0);
-      const fore = mesh(el, limbGeo(0.048, 0.27), m.top);
-      const cuff = mesh(el, new THREE.CylinderGeometry(0.052, 0.052, 0.04, 8), m.topDark, 0, -0.24, 0);
-      mesh(el, new THREE.SphereGeometry(0.045, 8, 6).scale(0.9, 1.15, 0.75), m.skin, 0, -0.3, 0);
-      this.arms.push({ sh, el, sgn, fore, cuff });
+      const sh = bone(this.torso, sgn * 0.21, 0.42, 0);
+      const el = bone(sh, 0, -0.3, 0);
+      const cuff = mesh(el, new THREE.CylinderGeometry(0.036, 0.036, 0.035, 10), m.topDark, sgn * 0.018, -0.255, 0);
+      const hand = joint(el, sgn * 0.018, -0.3, 0);
+      mesh(hand, new THREE.SphereGeometry(0.04, 10, 8).scale(0.72, 1.3, 1.05), m.skin, 0, -0.025, 0);           // palm + fingers
+      mesh(hand, new THREE.SphereGeometry(0.016, 6, 4).scale(1, 1.8, 1), m.skin, -sgn * 0.004, -0.01, 0.035);    // thumb
+      this.arms.push({ sh, el, sgn, cuff });
     }
-    // legs: hip → knee → foot
+    // legs: hip → knee → foot. Thighs and shins are part of the skinned body.
     this.legs = [];
     for (const sgn of [-1, 1]) {
-      const hip = joint(this.hips, sgn * 0.09, 0, 0);
+      const hip = bone(this.hips, sgn * 0.09, 0, 0);
       hip.rotation.order = 'ZXY';
-      mesh(hip, limbGeo(0.075, THIGH), m.pants);
-      this.parts.cargo.push(box(hip, 0.035, 0.11, 0.1, m.pantsDark, sgn * 0.075, -0.25, 0));
-      const knee = joint(hip, 0, -THIGH, 0);
-      const shin = mesh(knee, limbGeo(0.064, SHIN), m.pants);
-      const sock = mesh(knee, new THREE.CylinderGeometry(0.058, 0.058, 0.07, 8), m.lace, 0, -SHIN + 0.07, 0);
-      const foot = joint(knee, 0, -SHIN, 0);
-      mesh(foot, new THREE.CapsuleGeometry(0.055, 0.17, 3, 8).rotateX(Math.PI / 2).scale(1.1, 0.75, 1), m.shoe, 0, -0.01, 0.03);
-      box(foot, 0.125, 0.025, 0.29, m.sole, 0, -0.05, 0.03);
-      box(foot, 0.05, 0.01, 0.09, m.lace, 0, 0.032, 0.07);
-      this.legs.push({ hip, knee, foot, sgn, shin, sock });
+      this.parts.cargo.push(box(hip, 0.03, 0.11, 0.1, m.pantsDark, sgn * 0.088, -0.25, 0));
+      const knee = bone(hip, 0, -THIGH, 0);
+      const sock = mesh(knee, new THREE.CylinderGeometry(0.044, 0.042, 0.07, 10), m.lace, 0, -SHIN + 0.05, 0);
+      const foot = bone(knee, 0, -SHIN, 0);
+      mesh(foot, new THREE.CapsuleGeometry(0.052, 0.18, 4, 10).rotateX(Math.PI / 2).scale(1.1, 0.72, 1), m.shoe, 0, -0.012, 0.035);
+      mesh(foot, new THREE.CapsuleGeometry(0.057, 0.19, 2, 10).rotateX(Math.PI / 2).scale(1.08, 0.25, 1), m.sole, 0, -0.045, 0.035);
+      box(foot, 0.045, 0.01, 0.09, m.lace, 0, 0.026, 0.075);
+      this.legs.push({ hip, knee, foot, sgn, sock });
     }
+    // the smooth body itself, skinned to these bones
+    this.bones = [this.hips, this.torso, this.head, this.arms[0].sh, this.arms[0].el, this.arms[1].sh, this.arms[1].el,
+      this.legs[0].hip, this.legs[0].knee, this.legs[0].foot, this.legs[1].hip, this.legs[1].knee, this.legs[1].foot];
+    this.root.updateMatrixWorld(true);
+    this.bodyMesh = buildBody(this.bones, { skin: m.skin, top: m.top, pants: m.pants }, this.body);
 
     // blob shadow (cheap fake shadow, used on Low graphics)
     const blob = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14),
@@ -199,8 +209,9 @@ export class Skater {
     show(P.flannel, o.top === 'flannel');
     show(P.pack, !!o.backpack); show(P.packStraps, !!o.backpack);
     show(P.cargo, o.pants === 'cargo');
-    for (const A of this.arms) { A.fore.material = o.top === 'tee' ? m.skin : m.top; A.cuff.visible = o.top !== 'tee'; }
-    for (const L of this.legs) { L.shin.material = o.pants === 'shorts' ? m.skin : m.pants; L.sock.visible = o.pants === 'shorts'; }
+    for (const A of this.arms) A.cuff.visible = o.top !== 'tee';
+    for (const L of this.legs) L.sock.visible = o.pants === 'shorts';
+    if (this.bodyMesh) this.bodyMesh.setOutfit(o);   // tee = bare forearms, shorts = bare shins
     for (const [k, g] of Object.entries(this.hats)) g.visible = o.hat === k;
     this.hair[0].visible = o.hat === 'none';
     this.stance = o.stance === 'goofy' ? -1 : 1;

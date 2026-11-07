@@ -53,7 +53,7 @@ export const PHYSICS = {
   landAngleTolerance: 32,   // DEGREES board may be off the travel direction
   flipCompleteThreshold: 0.82, // flip must be this % done when you land
   bailIfGrabbingOnLand: false,
-  bailRespawnDelay: 1.5,    // seconds (real time) before respawn after a bail
+  bailRespawnDelay: 2.2,    // seconds (real time) before respawn after a bail (time to watch the ragdoll)
   bailSlowMo: 0.35,         // time scale during the bail slow-mo
   bailSlowMoDuration: 0.6,  // real seconds of slow-mo
 

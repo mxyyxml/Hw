@@ -65,6 +65,7 @@ export class Player {
 
   // ------------------------------------------------------------------ spawning
   respawnAt(spot) {
+    if (this.ragdoll && this.ragdoll.active) this.ragdoll.clear(this.skater);
     this.pos.set(spot.x, spot.y, spot.z);
     const g = this.col.ground(spot.x, spot.z, spot.y + 0.5);
     this.pos.y = g.h;
@@ -634,12 +635,20 @@ export class Player {
       boardSpin: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 18),
     };
     this.air = null; this.grind = null; this.manual = null;
+    // real physics ragdoll (Rapier) if it's loaded; otherwise the simple tumble below
+    this.bailInfo.ragdoll = !!(this.ragdoll && this.ragdoll.ready && this.ragdoll.spawn(this.skater, this.vel));
     this.emit('bail', { reason });
   }
 
   updateBail(dt) {
     const B = this.bailInfo;
     B.t += dt;
+    if (B.ragdoll) {
+      this.ragdoll.step(dt);
+      this.ragdoll.pelvisPosition(this.pos);   // the camera follows the falling body
+      if (performance.now() / 1000 - B.start > P.bailRespawnDelay) this.respawnAt(this.lastSafe || this.spawn);
+      return;
+    }
     const fr = Math.exp(-2.5 * dt);
     B.vx *= fr; B.vz *= fr;
     B.vy -= P.gravity * dt;
@@ -737,6 +746,12 @@ export class Player {
   // Called once per rendered frame after physics.
   sync(dt) {
     const sk = this.skater;
+    if (this.state === 'bail' && this.bailInfo.ragdoll) {   // physics owns the body during a ragdoll bail
+      this.ragdoll.apply(sk);
+      const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
+      sk.setBlob(this.pos.x, g.h, this.pos.z, this.pos.y - g.h);
+      return;
+    }
     let yaw = this.modelYaw();
     const up = this._up || (this._up = new THREE.Vector3(0, 1, 0));
     let n = this.normal, rate = 14;

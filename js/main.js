@@ -5,7 +5,9 @@
 // =============================================================================
 import * as THREE from 'three';
 import { PHYSICS, GRAPHICS, SCORING, DEFAULT_SETTINGS } from './config.js';
-import { World } from './world.js';
+import { World, SUN } from './world.js';
+import { assetURL } from './textures.js';
+import { Ragdoll } from './ragdoll.js';
 import { Input } from './input.js';
 import { Skater } from './skater.js';
 import { Player } from './player.js';
@@ -76,7 +78,7 @@ class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.scene = new THREE.Scene();
-    const HORIZON = 0xcfe0ea;
+    const HORIZON = 0x979caa; // horizon colour of the sky photo, so fog blends into it
     this.scene.background = new THREE.Color(HORIZON);
     this.scene.fog = new THREE.Fog(HORIZON, 70, GRAPHICS.low.fogFar);
     this.sky = makeSky(HORIZON);
@@ -87,7 +89,7 @@ class Game {
     this.hemi = new THREE.HemisphereLight(0xd6ebff, 0x7d7260, 1.9);
     this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffe9c9, 2.6);
-    this.sun.position.set(30, 60, 20);
+    this.sun.position.set(SUN.x, SUN.y, SUN.z);
     this.scene.add(this.sun, this.sun.target);
 
     // ---------------------------------------------------------------- game objects
@@ -140,7 +142,29 @@ class Game {
     window.addEventListener('resize', () => this.resize());
     this.resize();
     this.ui.refreshChallenges();
+    this.loadSkyPhoto();
+    // Rapier physics for ragdoll bails — loads in the background after the first frames
+    this.ragdoll = new Ragdoll();
+    setTimeout(() => {
+      this.ragdoll.init(this.world.mesh, PHYSICS.gravity)
+        .then(() => { this.player.ragdoll = this.ragdoll; })
+        .catch((e) => console.warn('Ragdoll physics unavailable, using simple bails', e));
+    }, 300);
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  // Real sky: a CC0 photo-based panorama (Poly Haven). Falls back to the
+  // gradient dome if it can't load.
+  loadSkyPhoto() {
+    new THREE.TextureLoader().load(assetURL('assets/sky.jpg'), (tex) => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.skyTex = tex;
+      this.scene.background = tex;
+      this.sky.visible = false;
+      if (this.envMap) { this.envMap.dispose(); this.envMap = null; }
+      if (this.settings.graphics === 'high') this.applyGraphics('high');
+    });
   }
 
   // ================================================================ settings
@@ -162,6 +186,12 @@ class Game {
     this.world.setQuality(level);
     // High: reflections / ambient light from the sky (image-based lighting)
     if (level === 'high') {
+      if (!this.envMap && this.skyTex) {
+        // reflections & ambient light straight from the sky photo
+        const pm = new THREE.PMREMGenerator(this.renderer);
+        this.envMap = pm.fromEquirectangular(this.skyTex).texture;
+        pm.dispose();
+      }
       if (!this.envMap) {
         const pm = new THREE.PMREMGenerator(this.renderer);
         const envScene = new THREE.Scene();
@@ -416,7 +446,7 @@ class Game {
       if (this.lunch.time <= 0) this.endLunch();
     }
     // keep the shadow camera centred on the player
-    this.sun.position.set(p.pos.x + 30, p.pos.y + 60, p.pos.z + 20);
+    this.sun.position.set(p.pos.x + SUN.x, p.pos.y + SUN.y, p.pos.z + SUN.z);
     this.sun.target.position.copy(p.pos);
     this.sky.position.copy(this.camera.position);
   }

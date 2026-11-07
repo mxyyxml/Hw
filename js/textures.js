@@ -119,19 +119,72 @@ const MAKERS = {
     }
     ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0, SIZE - 6, SIZE, 6);                     // floor line
   },
+  foliage(ctx, r) { MAKERS.grass(ctx, r); },
   plain(ctx) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, SIZE, SIZE); },
 };
 
 // world units (metres) covered by one texture repeat, per category
 export const TEX_SCALE = {
-  concrete: 3, tiles: 2, asphalt: 5, wood: 2.4, ramp: 2.4, grass: 6, building: 4, plain: 10,
+  concrete: 2.6, tiles: 2.2, asphalt: 3.2, wood: 2.4, ramp: 2.6, grass: 3.5, building: 4, plain: 10, foliage: 1.5,
 };
+
+// -----------------------------------------------------------------------------
+//  Real photo-scanned textures (CC0, from Poly Haven — see README credits).
+//  They load in the background; until then the procedural canvas above is used.
+//  play.html embeds them as data URIs (window.__LBS_ASSETS) so it works offline.
+// -----------------------------------------------------------------------------
+export function assetURL(path) {
+  return (typeof window !== 'undefined' && window.__LBS_ASSETS && window.__LBS_ASSETS[path]) || path;
+}
+const PHOTO = {
+  concrete: 'assets/textures/concrete.jpg', tiles: 'assets/textures/tiles.jpg', asphalt: 'assets/textures/asphalt.jpg',
+  ramp: 'assets/textures/ramp.jpg', wood: 'assets/textures/wood.jpg', grass: 'assets/textures/grass.jpg',
+  building: 'assets/textures/brick.jpg', denim: 'assets/textures/denim.jpg', cotton: 'assets/textures/cotton.jpg',
+};
+const NORMALS = {
+  concrete: 'assets/textures/concrete_n.jpg', tiles: 'assets/textures/tiles_n.jpg', asphalt: 'assets/textures/asphalt_n.jpg',
+  ramp: 'assets/textures/ramp_n.jpg', wood: 'assets/textures/wood_n.jpg', building: 'assets/textures/brick_n.jpg',
+};
+// average colour of each photo (used to tint the procedural fallback the same way)
+const PHOTO_AVG = { concrete: '#969590', tiles: '#96938c', asphalt: '#5f5f5f', ramp: '#9b9b98', wood: '#7e6141', grass: '#978359', building: '#644a3c' };
+
+function loadImage(url, ok) {
+  const img = new Image();
+  img.onload = () => ok(img);
+  img.onerror = () => { /* keep the procedural texture */ };
+  img.src = assetURL(url);
+}
+
+// building facade = brick photo + windows painted on top (one floor, two windows)
+function facade(brick) {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(brick, 0, 0, 512, 512);
+  const r = rng(42);
+  for (let i = 0; i < 2; i++) {
+    const x = 44 + i * 256, y = 100, w = 168, h = 240, lit = r() < 0.25;
+    ctx.fillStyle = 'rgba(30,30,30,0.55)'; ctx.fillRect(x - 10, y - 10, w + 20, h + 26);           // frame shadow
+    ctx.fillStyle = '#d9d4c8'; ctx.fillRect(x - 8, y - 8, w + 16, h + 16);                          // frame
+    const g = ctx.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, lit ? '#f1dfa8' : '#5d7389'); g.addColorStop(0.55, lit ? '#d6b878' : '#2e3b4b'); g.addColorStop(1, lit ? '#b89656' : '#1c2531');
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w * 0.5, y); ctx.lineTo(x, y + h * 0.6); ctx.fill();       // sky reflection
+    ctx.fillStyle = '#d9d4c8'; ctx.fillRect(x + w / 2 - 4, y, 8, h); ctx.fillRect(x, y + h * 0.45, w, 7);      // mullions
+    ctx.fillStyle = '#bdb6a6'; ctx.fillRect(x - 16, y + h + 8, w + 32, 14);                                     // sill
+  }
+  return c;
+}
 
 const cache = {};
 export function getTexture(cat, anisotropy = 1) {
   if (cache[cat]) { cache[cat].anisotropy = anisotropy; cache[cat].needsUpdate = true; return cache[cat]; }
   const [c, ctx] = canvas();
   (MAKERS[cat] || MAKERS.plain)(ctx, rng(cat.length * 7919 + cat.charCodeAt(0)));
+  if (PHOTO_AVG[cat]) { // tint the fallback like the photo so colours match either way
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = PHOTO_AVG[cat]; ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
@@ -139,6 +192,39 @@ export function getTexture(cat, anisotropy = 1) {
   t.generateMipmaps = true;
   t.minFilter = THREE.LinearMipmapLinearFilter;
   cache[cat] = t;
+  // (dispose first: the photo is bigger than the canvas, so the GPU copy must be re-allocated)
+  if (PHOTO[cat]) loadImage(PHOTO[cat], (img) => { t.dispose(); t.image = cat === 'building' ? facade(img) : img; t.needsUpdate = true; });
+  return t;
+}
+
+// photo normal map for a category (High graphics). Calls back once loaded.
+const nCache = {};
+export function getNormal(cat, cb) {
+  if (!NORMALS[cat]) return;
+  if (nCache[cat]) { if (nCache[cat].image) cb(nCache[cat]); else nCache[cat].waiting.push(cb); return; }
+  const t = new THREE.Texture();
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.waiting = [cb];
+  nCache[cat] = t;
+  loadImage(NORMALS[cat], (img) => {
+    t.image = img; t.needsUpdate = true;
+    for (const f of t.waiting) f(t);
+    t.waiting = [];
+  });
+}
+
+// fabric detail maps for the skater's clothes (greyscale, tinted by outfit colour)
+export function getFabric(name) {
+  if (cache['fabric_' + name]) return cache['fabric_' + name];
+  const t = new THREE.Texture();
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  // a 1×1 white placeholder until the photo arrives
+  const c = document.createElement('canvas'); c.width = c.height = 2;
+  const x = c.getContext('2d'); x.fillStyle = '#dcdcdc'; x.fillRect(0, 0, 2, 2);
+  t.image = c; t.needsUpdate = true;
+  loadImage(PHOTO[name], (img) => { t.dispose(); t.image = img; t.needsUpdate = true; });
+  cache['fabric_' + name] = t;
   return t;
 }
 export const CATEGORIES = Object.keys(MAKERS);

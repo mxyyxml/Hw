@@ -8,9 +8,12 @@
   <meta name="theme-color" content="#1d2433">
   <title>Lunch Break Skate</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- three.js pinned to an exact version from a CDN — no build step needed -->
+  <!-- three.js and Rapier physics pinned to exact versions from a CDN — no build step needed -->
   <script type="importmap">
-    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js"
+    } }
   </script>
 </head>
 <body>
