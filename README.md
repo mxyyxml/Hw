@@ -45,7 +45,7 @@ Letting go without a flick does a plain ollie.
 | **Hold Space + flick + release** | ↓↑ Ollie · ↓← Kickflip · ↓→ Heelflip · ↓↑← 360 Flip · ↓↑→ Laser Flip · ↓←← / ↓→→ Double flips · ←↓← / →↓→ Varials · ↑↓ Nollie |
 | **Shift + ← / →** (air) | BS / FS Shuvit |
 | **J** (+ direction, air) | Grab: Indy · ↑ Nosegrab · ↓ Tailgrab · ← Melon · → Stalefish |
-| **K** + direction (landing on a rail) | ↑ Nosegrind · ↓ 5-0 · ← Boardslide · → Lipslide · K alone Smith. No K = 50-50 |
+| **Grinds** | Line up = 50-50. Hold ↑ / ↓ as you land on it = Nosegrind / 5-0. Board sideways (spin onto it) = Boardslide. While grinding tap ↑ ↓ ← → to switch grinds (each switch adds to the combo). K + direction picks any grind, K alone = Smith |
 | **L** | Manual (L + ↑ = Nose Manual). Balance with W / S. Tap L in the air to land into one |
 | **E** | Step off / on the board (walk with WASD, Shift to run) |
 | **R** / **T** | Respawn at your spot / set a custom drop spot |

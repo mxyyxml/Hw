@@ -130,6 +130,15 @@ export class Player {
       } else if (this.state === 'air') this.air.lateTrick = def;
     }
 
+    // while grinding (and not winding up a pop): arrows / K switch the grind
+    if (this.state === 'grind' && !this.crouching) {
+      if (inp.pressed.up) this.switchGrind(GRINDS.up);
+      else if (inp.pressed.down) this.switchGrind(GRINDS.down);
+      else if (inp.pressed.left) this.switchGrind(GRINDS.left);
+      else if (inp.pressed.right) this.switchGrind(GRINDS.right);
+      else if (inp.pressed.grind) this.switchGrind(inp.held.up || inp.held.down || inp.held.left || inp.held.right ? GRINDS[inp.heldDir()] : GRINDS.none);
+    }
+
     // L = manual on / off (L + ↑ = nose manual); in the air it queues a manual for landing
     if (inp.pressed.manual) {
       if (this.state === 'ride') {
@@ -546,6 +555,12 @@ export class Player {
     if (queued && this.speed > 0.8) this.startManual(this.input.held.up);
   }
 
+  // how crooked (radians) a landing may be at this speed before you bail
+  landTolerance(speed) {
+    const t = clamp((speed - P2.landSlowSpeed) / (P2.landFastSpeed - P2.landSlowSpeed), 0, 1);
+    return lerp(P2.landMaxSlow, P2.landMaxFast, t) * Math.PI / 180 + 1e-6;
+  }
+
   // returns a bail reason string, or null if the landing is clean
   landingProblem(impact, vtx, vtz) {
     const A = this.air;
@@ -561,7 +576,7 @@ export class Player {
       const travel = Math.atan2(vtx, vtz);
       const d = Math.abs(wrapAngle(A.yaw - travel));
       const off = Math.min(d, Math.PI - d);              // forward or fakie are both fine
-      if (off > P2.landMax * Math.PI / 180) return 'Landed sideways!';
+      if (off > this.landTolerance(vth)) return 'Landed sideways!';
     }
     return null;
   }
@@ -611,7 +626,7 @@ export class Player {
     const r = hit.rail;
     let s = this.vel.x * r.dx + this.vel.y * r.dy + this.vel.z * r.dz;
     if (Math.abs(s) < 1) s = (s < 0 ? -1 : 1) * 1;
-    const def = this.input.held.grind ? (GRINDS[this.input.heldDir()] || GRINDS.none) : GRINDS.auto;
+    const def = this.chooseGrind(r);
     // record the air's tricks as "landed" onto the rail
     const fake = { tag: r.tag, nx: 0, ny: 1, nz: 0 };
     this.pos.set(r.ax + r.dx * hit.t, r.ay + r.dy * hit.t, r.az + r.dz * hit.t);
@@ -625,6 +640,33 @@ export class Player {
     this.emit('land', info);
     this.emit('grindStart', { name: def.name, tag: r.tag });
     return true;
+  }
+
+  // Which grind you lock into:
+  //   K + direction (any time) → that grind (K alone = Smith)
+  //   holding ↑ / ↓ as you land on it → Nosegrind / 5-0
+  //   board turned sideways to the rail (e.g. a 90° spin onto it) → Boardslide
+  //   (→ held = Lipslide), otherwise 50-50
+  chooseGrind(r) {
+    const inp = this.input, dir = inp.heldDir();
+    if (inp.held.grind) return GRINDS[dir] || GRINDS.none;
+    const railYaw = Math.atan2(r.dx, r.dz);
+    const d = Math.abs(wrapAngle((this.air ? this.air.yaw : this.heading) - railYaw));
+    const off = Math.min(d, Math.PI - d);
+    if (off > 50 * Math.PI / 180) return dir === 'right' ? GRINDS.right : GRINDS.left;
+    if (dir === 'up') return GRINDS.up;
+    if (dir === 'down') return GRINDS.down;
+    return GRINDS.auto;
+  }
+
+  // switch grinds mid-rail (arrow keys while grinding) — each switch adds to the combo
+  switchGrind(def) {
+    const G = this.grind;
+    if (!G || G.def === def) return;
+    const pts = Math.round(GRIND_POINTS.base * 0.5 + GRIND_POINTS.perSecond * G.time);
+    this.emit('grindEnd', { name: G.def.name, base: G.def.name, time: G.time, tag: G.rail.tag, points: pts, switched: true });
+    G.def = def; G.time = 0;
+    this.emit('grindStart', { name: def.name, tag: G.rail.tag });
   }
 
   _updateGrindYaw() {

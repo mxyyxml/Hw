@@ -271,7 +271,9 @@ export const PHYSICS2 = {
   grindFriction: { '50-50': 0.05, 'Smith Grind': 0.07, 'Nosegrind': 0.07, '5-0': 0.06, 'Boardslide': 0.13, 'Lipslide': 0.13 },
   // landings: under landClean degrees = clean; up to landMax = sketchy but you
   // ride it out (rolling the way the BOARD points, losing some speed); more = bail
-  landClean: 16, landMax: 62,
+  // the allowed angle depends on SPEED: slow = you can land almost any way and
+  // stay on (the board just stops / turns), fast = it has to be fairly straight
+  landClean: 16, landMaxSlow: 90, landMaxFast: 50, landSlowSpeed: 3, landFastSpeed: 8.5,
   // drop-ins: rolling off a lip onto a ramp that falls away keeps you on the ramp
   dropInMaxSpeed: 10, dropInMaxGap: 1.2,
   // landing assist (Settings): straightens the board just before touchdown and

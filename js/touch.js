@@ -178,7 +178,8 @@ export const TOUCH_HELP = [
   ['KICK / HEEL', 'Kickflip / Heelflip straight away (tap just after an ollie = late flip)'],
   ['SHUV (in the air)', 'Shuvit (hold joystick right for FS)'],
   ['GRAB (hold, in the air)', 'Grab — joystick direction picks Indy / Nosegrab / Tailgrab / Melon / Stalefish'],
-  ['GRIND (hold as you land on a rail)', 'Joystick ↑ Nosegrind · ↓ 5-0 · ← Boardslide · → Lipslide'],
+  ['Grinds', 'Joystick ↑ / ↓ as you land on a rail = Nosegrind / 5-0. While grinding, flick the joystick to switch (← Boardslide, → Lipslide)'],
+  ['GRIND (hold)', 'K: with the joystick picks a grind, alone = Smith'],
   ['MANUAL', 'Manual — balance with the joystick up / down'],
   ['Top corner', '? help · CAM camera · WALK off board · ↺ respawn · ❚❚ pause'],
 ];
