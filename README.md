@@ -20,14 +20,7 @@ It works offline and on school networks that block CDNs. Chrome is recommended.
 re-run that after editing the code, see the script for the two npm packages it needs.)
 
 ## ▶️ Play it on GitHub Pages
-
-1. Push this repository to GitHub (the files must be on the `main` branch).
-2. On GitHub open the repo → **Settings** → **Pages**.
-3. Under **Build and deployment** → **Source** choose **Deploy from a branch**.
-4. Pick branch **`main`** and folder **`/ (root)`**, then click **Save**.
-5. Wait ~1 minute. Your game will be live at
-   `https://<your-username>.github.io/<repo-name>/` (or `/play.html` for the single-file version)
-
+ `https://<your-username>.github.io/<repo-name>/` (or `/play.html` for the single-file version)
 > Opening `index.html` straight from your hard drive (`file://`) won't work in most browsers
 > because ES modules need a web server. GitHub Pages is the easiest option; locally you can
 > run `python3 -m http.server` in this folder and open <http://localhost:8000>.
