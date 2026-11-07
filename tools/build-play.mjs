@@ -9,15 +9,10 @@
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const threePath = require.resolve('three').replace(/three\.cjs$/, 'three.module.js');
 
 const out = await build({
   entryPoints: ['js/main.js'],
   bundle: true, format: 'iife', minify: true, write: false, target: 'es2020',
-  alias: { three: threePath },
   legalComments: 'none',
 });
 const js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');

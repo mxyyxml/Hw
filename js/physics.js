@@ -206,12 +206,15 @@ export class CollisionWorld {
       const dh = Math.hypot(p.x - cx, p.z - cz);
       const dy = p.y - cy;
       if (dh > cfg.snapRadius || dy > cfg.snapAbove || dy < -cfg.snapBelow) continue;
-      // alignment of horizontal travel with the rail direction
+      // must be moving ALONG the rail: enough sideways speed, lined up with it.
+      // (fixes snapping onto coping when coming straight down from a vert air)
       const rh = Math.hypot(r.dx, r.dz);
-      if (vh > 0.5 && rh > 1e-3) {
+      if (vh < (cfg.minHorizSpeed || 1.2)) continue;
+      if (rh > 1e-3) {
         const dot = Math.abs((v.x * r.dx + v.z * r.dz) / (vh * rh));
         if (dot < cosAlign) continue;
       }
+      if (Math.abs(v.y) > 3 * vh) continue;
       const d = dh + Math.abs(dy) * 0.5;
       if (d < bestD) { bestD = d; best = { rail: r, t }; }
     }

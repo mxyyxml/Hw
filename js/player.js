@@ -195,6 +195,7 @@ export class Player {
 
   // ------------------------------------------------------------------ RIDE
   updateRide(dt) {
+    if (this.sketch) this.sketch = Math.max(0, this.sketch - dt * 1.4);   // wobble after a sketchy landing
     const inp = this.input, n = this.normal;
     const f = this._f || (this._f = new THREE.Vector3());
 
@@ -267,7 +268,21 @@ export class Player {
     // launch if the ground drops away, or on a sharp convex edge (e.g. the lip of
     // a quarter-pipe) where we'd be moving away from the new surface
     const away = this.vel.x * g.nx + this.vel.y * g.ny + this.vel.z * g.nz;
-    if (ny > g.h + P.launchTolerance || away > P.lipLaunchSpeed) {
+    let leaving = ny > g.h + P.launchTolerance || away > P.lipLaunchSpeed;
+    if (leaving && this.state === 'ride') {
+      // DROP-IN: rolling off a deck/lip onto a ramp that falls away in front of you
+      // keeps the wheels on the ramp (you lean into it), instead of flying off
+      const hs = Math.hypot(this.vel.x, this.vel.z) || 1;
+      const slopeAlong = (g.gx * this.vel.x + g.gz * this.vel.z) / hs;   // < 0 = ramp goes down ahead
+      const onRamp = g.surf ? (g.surf.type === 'quarter' || g.surf.type === 'wedge' || g.surf.type === 'corner') : !!g.tag;
+      if (onRamp && slopeAlong < -0.35 && this.vel.y < 1.0 && this.speed < P2.dropInMaxSpeed && ny - g.h < P2.dropInMaxGap) {
+        leaving = false;
+        if (!this._droppingIn) this.emit('dropIn');
+        this._droppingIn = 0.3;
+      }
+    }
+    if (this._droppingIn) this._droppingIn = Math.max(0, this._droppingIn - dt);
+    if (leaving) {
       // the ground fell away (lip of a ramp, edge of a stair) → airborne
       this.pos.set(nx, ny, nz);
       this.launch(false);
@@ -380,6 +395,7 @@ export class Player {
       A.yaw += A.spinVel * dt; A.spin += A.spinVel * dt;
     }
     this.updateAirTricks(dt);
+    if (this.assist) this._landingAssist(dt, inp);
 
     const nx = this.pos.x + this.vel.x * dt, ny = this.pos.y + this.vel.y * dt, nz = this.pos.z + this.vel.z * dt;
     const maxY = this.pos.y + P.stepUp;
@@ -394,6 +410,48 @@ export class Player {
     if (ny <= g.h) { this.pos.set(nx, g.h, nz); this.land(g); return; }
     this.pos.set(nx, ny, nz);
     if (ny > A.maxY) A.maxY = ny;
+  }
+
+  // LANDING ASSIST: just before touchdown, straighten a slightly crooked board
+  // (if you're not spinning), and gently steer toward a landing ramp nearby.
+  _landingAssist(dt, inp) {
+    const A = this.air;
+    if (A.time < 0.12 || this.vel.y > 0) return;
+    const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
+    const h = this.pos.y - g.h;
+    const vy = -this.vel.y;
+    const t = (-vy + Math.sqrt(vy * vy + 2 * P.gravity * Math.max(0, h))) / P.gravity; // ≈ time to land
+    const spinning = (inp.held.left || inp.held.right) && !inp.held.grind && !inp.held.shift;
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    if (t < 0.35 && !spinning && hs > 0.8 && !A.trick) {
+      const travel = Math.atan2(this.vel.x, this.vel.z);
+      let d = wrapAngle(A.yaw - travel);
+      if (Math.abs(d) > Math.PI / 2) d = wrapAngle(d - Math.PI);           // fakie is fine too
+      if (Math.abs(d) < P2.assistAlignDeg * Math.PI / 180) {
+        const step = Math.min(Math.abs(d), P2.assistAlignRate * dt);
+        A.yaw -= Math.sign(d) * step;
+      }
+    }
+    // ramp magnet: once per jump, if you'd land on flat just before/after a
+    // landing ramp that slopes away from you, adjust your carry to reach it
+    if (!A.magnet && t < 0.6 && hs > 2) {
+      A.magnet = true;
+      const dx = this.vel.x / hs, dz = this.vel.z / hs;
+      const lx = this.pos.x + this.vel.x * t, lz = this.pos.z + this.vel.z * t;
+      const here = this.col.ground(lx, lz, this.pos.y);
+      if (here.ny > 0.985) {
+        let best = null;
+        for (let k = -P2.assistMagnet; k <= P2.assistMagnet; k += 0.2) {
+          const q = this.col.ground(lx + dx * k, lz + dz * k, this.pos.y);
+          const slopeAlong = q.gx * dx + q.gz * dz;
+          if (slopeAlong < -0.15 && (!best || Math.abs(k) < Math.abs(best))) best = k;
+        }
+        if (best !== null) {
+          const f = clamp((hs * t + best + 0.4) / (hs * t), 0.8, 1.2);
+          this.vel.x *= f; this.vel.z *= f;
+        }
+      }
+    }
   }
 
   updateAirTricks(dt) {
@@ -458,15 +516,22 @@ export class Player {
     if (fail) { this.bail(fail); return; }
 
     const vth = Math.hypot(vtx, vtz);
+    let keep = 1;
     if (vth > 0.8) {
+      // You roll the way the BOARD points (like real skating): if you land a bit
+      // turned, the wheels steer you that way and you lose some speed.
       const travel = Math.atan2(vtx, vtz);
       const diff = Math.abs(wrapAngle(A.yaw - travel));
-      this.heading = travel;
       this.fakie = diff > Math.PI / 2;
+      const facing = this.fakie ? A.yaw + Math.PI : A.yaw;
+      const off = Math.abs(wrapAngle(facing - travel));
+      this.heading = facing;
+      keep = Math.cos(off);
+      if (off > P2.landClean * Math.PI / 180) { this.sketch = Math.min(1, 0.35 + off); this.emit('sketchy', { off }); }
     } else {
       this.heading = A.yaw; this.fakie = false;
     }
-    this.speed = Math.hypot(vtx, vty, vtz) * P.landSpeedKeep;
+    this.speed = Math.hypot(vtx, vty, vtz) * P.landSpeedKeep * keep;
     // big impacts: knees absorb it and you lose some speed
     if (impact > P2.hardLandingImpact) this.speed *= Math.max(0.5, 1 - P2.hardLandingLoss * (impact - P2.hardLandingImpact));
     this.landDip = clamp(impact / 9, 0.12, 1);
@@ -496,7 +561,7 @@ export class Player {
       const travel = Math.atan2(vtx, vtz);
       const d = Math.abs(wrapAngle(A.yaw - travel));
       const off = Math.min(d, Math.PI - d);              // forward or fakie are both fine
-      if (off > P.landAngleTolerance * Math.PI / 180) return 'Landed sideways!';
+      if (off > P2.landMax * Math.PI / 180) return 'Landed sideways!';
     }
     return null;
   }
@@ -739,29 +804,58 @@ export class Player {
 
   // ------------------------------------------------------------------ WALK
   enterWalk() {
-    this.state = 'walk'; this.speed = 0; this.walkVy = 0;
+    this.state = 'walk'; this.walkVel = { x: Math.sin(this.heading) * this.speed * 0.5, z: Math.cos(this.heading) * this.speed * 0.5 };
+    this.speed = 0; this.walkVy = 0;
     this.heading = this.modelYaw(); this.fakie = false;
     this.emit('walk', { on: true });
   }
   exitWalk() {
-    this.state = 'ride'; this.speed = 0; this.fakie = false;
+    if (this.walkVy !== 0) return;                   // can't hop on the board mid-jump
+    this.state = 'ride'; this.speed = Math.min(2, this.walkSpeed * 0.6); this.fakie = false;
     this.emit('walk', { on: false });
   }
+  // Walking: third-person controls relative to the CAMERA (W = away from the
+  // camera), smooth acceleration, the body turns toward where you walk, Shift
+  // runs, Space jumps, you slide along walls and fall off ledges.
   updateWalk(dt) {
     const inp = this.input;
-    const turn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
-    this.heading += turn * P.walkTurnRate * dt;
-    const move = (inp.held.up ? 1 : 0) - (inp.held.down ? 0.6 : 0);
-    const spd = move * (inp.held.shift ? P.runSpeed : P.walkSpeed);
-    this.walkSpeed = Math.abs(spd);
+    const ix = (inp.held.right ? 1 : 0) - (inp.held.left ? 1 : 0);
+    const iz = (inp.held.up ? 1 : 0) - (inp.held.down ? 1 : 0);
+    const cy = this.camYaw ?? this.heading;
+    const fx = Math.sin(cy), fz = Math.cos(cy), rx = -Math.cos(cy), rz = Math.sin(cy);
+    let wx = fx * iz + rx * ix, wz = fz * iz + rz * ix;
+    const wl = Math.hypot(wx, wz);
+    const target = wl > 0 ? (inp.held.shift ? P.runSpeed : P.walkSpeed) : 0;
+    if (wl > 0) { wx /= wl; wz /= wl; }
+    this.walkVel = this.walkVel || { x: 0, z: 0 };
+    const V = this.walkVel, onGround = this.walkVy === 0;
+    const rate = (wl > 0 ? P2.walkAccel : P2.walkDecel) * (onGround ? 1 : 0.25) * dt; // little air control
+    const tx = wx * target - V.x, tz = wz * target - V.z, tl = Math.hypot(tx, tz);
+    if (tl > 0) { const k = Math.min(1, rate / tl); V.x += tx * k; V.z += tz * k; }
+    const sp = Math.hypot(V.x, V.z);
+    this.walkSpeed = sp;
+    if (sp > 0.2) {                                  // turn the body toward the movement
+      const want = Math.atan2(V.x, V.z);
+      this.heading += clamp(wrapAngle(want - this.heading), -P2.walkTurnRate * dt, P2.walkTurnRate * dt);
+    }
+    if (inp.pressed.pop && onGround) { this.walkVy = P2.jumpSpeed; this.emit('jump'); }
     this.walkVy -= P.gravity * dt;
-    const nx = this.pos.x + Math.sin(this.heading) * spd * dt;
-    const nz = this.pos.z + Math.cos(this.heading) * spd * dt;
-    const maxY = this.pos.y + P.walkStepUp;
-    if (this.col.blocker(nx, nz, maxY)) { this.walkSpeed = 0; return; }
+    let nx = this.pos.x + V.x * dt, nz = this.pos.z + V.z * dt;
+    const maxY = this.pos.y + (onGround ? P.walkStepUp : 0.1);
+    const blk = this.col.blocker(nx, nz, maxY);
+    if (blk) {                                       // slide along walls
+      const n = this.col.wallNormal(blk, this.pos.x, this.pos.z, this._wn || (this._wn = {}));
+      const vn = V.x * n.x + V.z * n.z;
+      if (vn < 0) { V.x -= vn * n.x; V.z -= vn * n.z; }
+      nx = this.pos.x + V.x * dt; nz = this.pos.z + V.z * dt;
+      if (this.col.blocker(nx, nz, maxY)) { nx = this.pos.x; nz = this.pos.z; V.x = V.z = 0; }
+    }
     const g = this.col.ground(nx, nz, maxY);
     let ny = this.pos.y + this.walkVy * dt;
-    if (ny <= g.h || (this.walkVy <= 0 && ny - g.h < 0.08)) { ny = g.h; this.walkVy = 0; }
+    if (ny <= g.h || (this.walkVy <= 0 && ny - g.h < 0.06)) {
+      if (this.walkVy < -9) this.emit('wall', { speed: -this.walkVy });   // heavy landing thud
+      ny = g.h; this.walkVy = 0;
+    }
     this.pos.set(nx, ny, nz);
     this.normal.set(0, 1, 0);
   }
@@ -810,6 +904,8 @@ export class Player {
       mode: this.manual ? 'manual' : this.state,
       crouch: this.crouching ? 1 : (this.powersliding ? 0.5 : 0),
       lean: this.state === 'ride' ? this.lean : 0,
+      sketch: this.sketch || 0,
+      walkAir: this.state === 'walk' && this.walkVy !== 0,
       pushPhase: this.pushPhase,
       flipAngle: A ? A.flipAngle : 0,
       shuvAngle: A ? A.shuvAngle : 0,

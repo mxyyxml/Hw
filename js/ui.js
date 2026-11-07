@@ -153,13 +153,18 @@ export class UI {
         const s = g.settings;
         h = `<h2>Settings</h2>
           <div class="setting"><span>Graphics</span><span class="row-buttons">
-            <button data-set="graphics" data-val="low" class="${s.graphics === 'low' ? 'sel' : ''}">Low</button>
-            <button data-set="graphics" data-val="high" class="${s.graphics === 'high' ? 'sel' : ''}">High</button></span></div>
-          <p class="muted">Low = fast on Chromebooks (no shadows, 1x resolution). High = real shadows, sharper.</p>
+            <button data-set="graphics" data-val="low" class="${g.graphicsLevel === 'low' ? 'sel' : ''}">Low</button>
+            <button data-set="graphics" data-val="high" class="${g.graphicsLevel === 'high' ? 'sel' : ''}">High</button>
+            <button data-set="graphics" data-val="ultra" class="${g.graphicsLevel === 'ultra' ? 'sel' : ''}">Ultra</button></span></div>
+          <p class="muted">Low = fastest (phones / old laptops). High = real shadows, surface detail &amp; sky reflections (default on PCs).
+          Ultra = High + ambient occlusion, anti-aliasing and 4K shadows (needs a decent graphics card).</p>
           <div class="setting"><span>Volume <b id="vol-val">${Math.round(s.volume * 100)}%</b></span>
             <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-range="volume"></div>
           <div class="setting"><span>Camera sensitivity <b id="sens-val">${s.camSensitivity.toFixed(1)}</b></span>
             <input type="range" min="0.3" max="2" step="0.1" value="${s.camSensitivity}" data-range="camSensitivity"></div>
+          <div class="setting"><span>Landing assist</span><span class="row-buttons">
+            <button data-set="assist" data-val="on" class="${s.assist !== false ? 'sel' : ''}">On</button>
+            <button data-set="assist" data-val="off" class="${s.assist === false ? 'sel' : ''}">Off</button></span></div>
           <div class="setting"><span>Touch controls</span><span class="row-buttons">
             <button data-set="touch" data-val="auto" class="${(s.touch || 'auto') === 'auto' ? 'sel' : ''}">Auto</button>
             <button data-set="touch" data-val="on" class="${s.touch === 'on' ? 'sel' : ''}">On</button>

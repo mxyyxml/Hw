@@ -69,6 +69,14 @@ Title screen or Pause → **Closet**: hats, tops (hoodie, tee, jacket, flannel),
 colours for everything, skin tone, hair, backpack, board colour, **stance (Regular / Goofy)** and
 **push style (Normal / Mongo)**. Saved in your browser.
 
+### 🛹 How the physics feels
+- **Drop in** by rolling off any deck or coping into a ramp — you stay on the ramp and pick up speed.
+- **Land a bit crooked?** Up to ~60° off you ride it out ("Sketchy!") and roll the way your **board** points,
+  losing some speed. Further than that and you bail into a full physics ragdoll.
+- **Landing assist** (Settings, on by default) straightens a slightly crooked board just before touchdown
+  and nudges you onto a nearby landing ramp when you transfer.
+- **Off the board (E):** WASD walks relative to the camera, Shift runs, Space jumps, you slide along walls.
+
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
 in the air. Land with the board straight (forward or fakie) and your flip finished, or you
 bail. Tricks chain into a combo while you keep landing within ~1.5 s — the combo total is
@@ -97,8 +105,9 @@ Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Down
 
 ## ⚙️ Settings
 
-Graphics **Low** (default — no shadows, 1× resolution, made for school Chromebooks) or
-**High** (real shadows, sharper), volume and camera sensitivity.
+Graphics **Auto** (High on PCs, Low on phones), **Low**, **High** (shadows, photo-texture surface relief,
+sky reflections) or **Ultra** (High + ambient occlusion, SMAA anti-aliasing and 4K shadows — for PCs with a
+decent graphics card). Also volume, camera sensitivity, camera style, landing assist and touch controls.
 
 ## 🛠️ Tweaking the game
 

@@ -12,7 +12,7 @@ export const GAME_TITLE = 'Lunch Break Skate';
 export const PHYSICS = {
   gravity: 13,              // m/s². A bit stronger than Earth (9.8) = snappier air
   fixedStep: 1 / 120,       // physics sub-step (seconds). Smaller = more stable
-  maxSubSteps: 6,           // safety cap per rendered frame
+  maxSubSteps: 16,          // physics catches up to ~0.13 s per frame, so low FPS doesn't mean slow motion
 
   // Pushing (W / ↑)
   pushImpulse: 1.7,         // m/s added per push
@@ -128,6 +128,7 @@ export const GRINDS = {
 export const GRIND_POINTS = { base: 200, perSecond: 450 };
 export const GRIND = {
   snapRadius: 0.5,          // horizontal distance to rail to snap on
+  minHorizSpeed: 1.2,       // must be moving along the rail at least this fast to lock on
   snapAbove: 0.65,          // board may be this far above the rail to snap
   snapBelow: 0.25,          // ...or this far below
   alignDegrees: 50,         // travel must be within this many degrees of the rail
@@ -212,7 +213,9 @@ export const CAMERA = {
 // -----------------------------------------------------------------------------
 export const GRAPHICS = {
   low:  { pixelRatio: 1,   shadows: false, fogFar: 200, drawDistance: 420 },
-  high: { pixelRatio: 2,   shadows: true,  fogFar: 300, drawDistance: 420, shadowMapSize: 2048 },
+  high: { pixelRatio: 1.5, shadows: true,  fogFar: 300, drawDistance: 420, shadowMapSize: 2048 },
+  // Ultra (gaming / school PCs): ambient occlusion + anti-aliasing post-processing, 4K shadows
+  ultra: { pixelRatio: 2, shadows: true, fogFar: 340, drawDistance: 460, shadowMapSize: 4096, post: true },
 };
 
 // -----------------------------------------------------------------------------
@@ -244,10 +247,11 @@ export const KEYS = {
 //  DEFAULT SETTINGS (saved to localStorage once changed)
 // -----------------------------------------------------------------------------
 export const DEFAULT_SETTINGS = {
-  graphics: 'low',          // 'low' | 'high'
+  graphics: 'auto',         // 'auto' (High on PCs, Low on phones) | 'low' | 'high' | 'ultra'
   volume: 0.7,              // 0..1
   camSensitivity: 1.0,      // 0.3..2 — how fast the camera swings behind you
   touch: 'auto',            // 'auto' | 'on' | 'off' — on-screen touch controls
+  assist: true,             // landing assist (straighten board / reach landing ramps)
 };
 
 // -----------------------------------------------------------------------------
@@ -265,6 +269,16 @@ export const PHYSICS2 = {
     mega_rollin: 0.65, mega_kicker: 0.65, mega_land: 0.7, mega_quarter: 0.7, bowl: 0.75 },
   // grind friction per grind type (fraction of speed lost per second)
   grindFriction: { '50-50': 0.05, 'Smith Grind': 0.07, 'Nosegrind': 0.07, '5-0': 0.06, 'Boardslide': 0.13, 'Lipslide': 0.13 },
+  // landings: under landClean degrees = clean; up to landMax = sketchy but you
+  // ride it out (rolling the way the BOARD points, losing some speed); more = bail
+  landClean: 16, landMax: 62,
+  // drop-ins: rolling off a lip onto a ramp that falls away keeps you on the ramp
+  dropInMaxSpeed: 10, dropInMaxGap: 1.2,
+  // landing assist (Settings): straightens the board just before touchdown and
+  // nudges you onto a nearby landing ramp
+  assistAlignDeg: 50, assistAlignRate: 4.5, assistMagnet: 1.6,
+  // walking (off the board)
+  walkAccel: 14, walkDecel: 16, walkTurnRate: 10, jumpSpeed: 4.4,
   // bail ragdoll-lite
   bodyBounce: 0.25, boardBounce: 0.35, boardFriction: 2.2,
 };
@@ -274,7 +288,7 @@ export const PHYSICS2 = {
 // -----------------------------------------------------------------------------
 export const OUTFIT_OPTIONS = {
   hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat']],
-  top:    [['hoodie', 'Hoodie'], ['tee', 'T-shirt'], ['jacket', 'Jacket'], ['flannel', 'Flannel']],
+  top:    [['tank', 'Tank top'], ['hoodie', 'Hoodie'], ['tee', 'T-shirt'], ['jacket', 'Jacket'], ['flannel', 'Flannel']],
   pants:  [['jeans', 'Jeans'], ['cargo', 'Cargos'], ['shorts', 'Shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
   stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
@@ -283,15 +297,15 @@ export const OUTFIT_OPTIONS = {
 export const OUTFIT_COLORS = {
   hatColor:   [0xf4743b, 0x1d1d1d, 0xe63946, 0x2a9d8f, 0xf2c14e, 0xffffff, 0x457b9d, 0x6a4c93],
   topColor:   [0x2a9d8f, 0x1d1d1d, 0xe63946, 0xf2f2f2, 0x457b9d, 0xf4a261, 0x6a994e, 0x9b5de5, 0x8d6e63, 0xffafcc],
-  pantsColor: [0x3d5a80, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
-  shoeColor:  [0xf1f1f1, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63],
+  pantsColor: [0x2b3a55, 0x3d5a80, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
+  shoeColor:  [0xf1f1f1, 0x9a9a9a, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63],
   skin:       [0xf3d2b3, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a21],
   hairColor:  [0x2b1d14, 0x5a3825, 0xa0522d, 0xe6c35c, 0x1d1d1d, 0xb0b0b0, 0xd94f8a],
   deckColor:  [0xe9c46a, 0xe63946, 0x2a9d8f, 0x6a4c93, 0xf4a261, 0x1d1d1d, 0xffffff, 0x90be6d],
 };
 export const DEFAULT_OUTFIT = {
-  hat: 'beanie', hatColor: 0xf4743b, top: 'hoodie', topColor: 0x2a9d8f, pants: 'jeans', pantsColor: 0x3d5a80,
-  shoeColor: 0xf1f1f1, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0xe9c46a, backpack: true,
+  hat: 'none', hatColor: 0xf4743b, top: 'tank', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
+  shoeColor: 0x9a9a9a, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0x1d1d1d, backpack: false,
   stance: 'regular', pushStyle: 'normal',
 };
 

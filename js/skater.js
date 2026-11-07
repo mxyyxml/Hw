@@ -209,7 +209,7 @@ export class Skater {
     show(P.flannel, o.top === 'flannel');
     show(P.pack, !!o.backpack); show(P.packStraps, !!o.backpack);
     show(P.cargo, o.pants === 'cargo');
-    for (const A of this.arms) A.cuff.visible = o.top !== 'tee';
+    for (const A of this.arms) A.cuff.visible = o.top !== 'tee' && o.top !== 'tank';
     for (const L of this.legs) L.sock.visible = o.pants === 'shorts';
     if (this.bodyMesh) this.bodyMesh.setOutfit(o);   // tee = bare forearms, shorts = bare shins
     for (const [k, g] of Object.entries(this.hats)) g.visible = o.hat === k;
@@ -217,6 +217,31 @@ export class Skater {
     this.stance = o.stance === 'goofy' ? -1 : 1;
     this.mongo = o.pushStyle === 'mongo';
     this.outfit = o;
+  }
+
+  // High/Ultra: physically based materials (skin, cloth, rubber and metal react to
+  // light and sky reflections differently). Low: cheap Lambert shading.
+  setQuality(level) {
+    const pbr = level === 'high' || level === 'ultra';
+    if (!this._lambert) this._lambert = { ...this.mat };
+    if (!this._pbr) {
+      const R = { skin: 0.55, skinDark: 0.6, eye: 0.2, topTrim: 0.4, truck: 0.35, wheel: 0.5, grip: 0.95, deck: 0.6, deckSide: 0.6, sole: 0.8, shoe: 0.75, hair: 0.7 };
+      const metal = { truck: 0.75 };
+      this._pbr = {};
+      for (const [k, m] of Object.entries(this._lambert)) {
+        this._pbr[k] = new THREE.MeshStandardMaterial({ color: m.color, map: m.map || null, roughness: R[k] ?? 0.92, metalness: metal[k] ?? 0 });
+      }
+    }
+    const from = pbr ? this._lambert : this._pbr, to = pbr ? this._pbr : this._lambert;
+    const swap = new Map(Object.keys(from).map((k) => [from[k], to[k]]));
+    const fix = (o) => {
+      if (!o.material) return;
+      if (Array.isArray(o.material)) o.material = o.material.map((m) => swap.get(m) || m);
+      else if (swap.has(o.material)) o.material = swap.get(o.material);
+    };
+    this.root.traverse(fix); this.looseBoard.traverse(fix);
+    this.mat = to;
+    this.applyOutfit(this.outfit || DEFAULT_OUTFIT);   // re-apply colours to the new set
   }
 
   setTransform(pos, yaw, normal, dt, alignRate = 14, bank = 0) {
@@ -277,7 +302,10 @@ export class Skater {
 
     // board flip / shuv / pop lift
     this.board.rotation.y = st.shuvAngle || 0;
-    this.board.rotation.z = st.flipAngle || 0;
+    // the deck tilts on its trucks when you lean into a turn, and shakes on a sketchy landing
+    a.deckRoll = damp(a.deckRoll || 0, mode === 'ride' ? -st.lean * 0.13 : 0, 8, dt);
+    const shake = (st.sketch || 0) * Math.sin(performance.now() / 45) * 0.12;
+    this.board.rotation.z = (st.flipAngle || 0) + a.deckRoll + shake;
     this.board.position.y = DECK_Y - 0.012 + (st.boardLift || 0);
 
     // manual pivot (tail wheels for manual, nose wheels for nose manual)
@@ -333,7 +361,7 @@ export class Skater {
 
     // torso, head, arms
     this.torso.rotation.x = 0.15 + a.crouch * 0.35 + a.grab * 0.5 + a.lean * 0.25 + a.dip * 0.3 + a.push * 0.25;
-    this.torso.rotation.z = (-a.manual * 0.9 + a.slide * 0.1) * s;
+    this.torso.rotation.z = (-a.manual * 0.9 + a.slide * 0.1) * s + (st.sketch || 0) * Math.sin(performance.now() / 70) * 0.35;
     this.head.rotation.y = s * (-1.25 + a.lean * 0.15) * (1 - a.push * 0.3);
     this.head.rotation.x = -0.1 - a.crouch * 0.2;
     const t = performance.now() / 1000;
@@ -363,7 +391,8 @@ export class Skater {
         L.knee.rotation.x = lerp(L.knee.rotation.x, Math.max(0, -sw) * 0.8, a.walk);
         L.foot.rotation.set(0, 0, 0);
       }
-      this.torso.rotation.x = lerp(this.torso.rotation.x, 0.05, a.walk);
+      this.torso.rotation.x = lerp(this.torso.rotation.x, 0.05 + Math.min(0.25, (st.walkSpeed || 0) * 0.05), a.walk);
+      if (st.walkAir) for (const L of this.legs) { L.hip.rotation.x -= 0.5; L.knee.rotation.x += 0.8; }   // tuck legs when jumping
       this.torso.rotation.z = 0;
       this.head.rotation.y = lerp(this.head.rotation.y, 0, a.walk);
       this.arms[0].sh.rotation.set(-sw0 * 0.4, 0, -0.15);

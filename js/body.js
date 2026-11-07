@@ -11,7 +11,7 @@ import * as THREE from 'three';
 // Bone order used for skinning (see Skater constructor)
 export const B = { hips: 0, torso: 1, head: 2, shL: 3, elL: 4, shR: 5, elR: 6, legL: 7, kneeL: 8, footL: 9, legR: 10, kneeR: 11, footR: 12 };
 
-const SEGS = 14; // vertices around each ring
+const SEGS = 20; // vertices around each ring (more = smoother body)
 
 // Ring profiles: [y, radiusX, radiusZ, weights{bone: w}, zOffset]
 // All positions are in the skater's body space at rest (standing, arms down).
@@ -30,11 +30,14 @@ function torsoRings() {
       T(0.96, 0.153, 0.1, { [B.hips]: 0.4, [B.torso]: 0.6 }),
       T(1.05, 0.158, 0.103, { [B.hips]: 0.1, [B.torso]: 0.9 }),
       T(1.14, 0.172, 0.112, { [B.torso]: 1 }, 0.006),
-      T(1.22, 0.186, 0.117, { [B.torso]: 1 }, 0.01),
-      T(1.29, 0.192, 0.108, { [B.torso]: 1 }, 0.004),
-      T(1.345, 0.168, 0.094, { [B.torso]: 1 }),
-      T(1.385, 0.1, 0.075, { [B.torso]: 0.85, [B.head]: 0.15 }),
-      T(1.405, 0.062, 0.058, { [B.torso]: 0.6, [B.head]: 0.4 }),
+      T(1.22, 0.188, 0.12, { [B.torso]: 1 }, 0.012),     // chest
+      T(1.29, 0.198, 0.11, { [B.torso]: 1 }, 0.004),     // shoulders
+      T(1.345, 0.172, 0.094, { [B.torso]: 1 }),
+    ],
+    collar: [   // shoulder tops / trapezius — skin under a tank top
+      T(1.345, 0.172, 0.094, { [B.torso]: 1 }),
+      T(1.385, 0.105, 0.076, { [B.torso]: 0.85, [B.head]: 0.15 }),
+      T(1.405, 0.064, 0.059, { [B.torso]: 0.6, [B.head]: 0.4 }),
     ],
     neck: [
       T(1.39, 0.06, 0.056, { [B.torso]: 0.7, [B.head]: 0.3 }),
@@ -74,9 +77,10 @@ function armRings(side) {
   const R = (y, rx, rz, w, z = 0) => [y, rx, rz, w, z, x];
   return {
     upperArm: [
-      R(1.36, 0.05, 0.05, { [B.torso]: 0.6, [sh]: 0.4 }),
-      R(1.31, 0.062, 0.06, { [B.torso]: 0.3, [sh]: 0.7 }),
-      R(1.22, 0.056, 0.055, { [sh]: 1 }),
+      R(1.36, 0.052, 0.052, { [B.torso]: 0.6, [sh]: 0.4 }),
+      R(1.31, 0.066, 0.064, { [B.torso]: 0.3, [sh]: 0.7 }),   // deltoid
+      R(1.24, 0.06, 0.058, { [sh]: 1 }),
+      R(1.17, 0.054, 0.056, { [sh]: 1 }, 0.004),               // biceps
       R(1.1, 0.048, 0.048, { [sh]: 1 }),
       R(1.03, 0.044, 0.045, { [sh]: 0.65, [el]: 0.35 }),
       R(0.995, 0.043, 0.044, { [sh]: 0.5, [el]: 0.5 }),
@@ -136,7 +140,8 @@ function buildGeometry() {
   };
   const t = torsoRings();
   tube(t.pelvis, 'pelvis', true, false);
-  tube(t.torso, 'torso', false, true);
+  tube(t.torso, 'torso', false, false);
+  tube(t.collar, 'collar', false, true);
   tube(t.neck, 'neck', false, true);
   for (const side of [-1, 1]) {
     const L = legRings(side), A = armRings(side);
@@ -160,8 +165,10 @@ export function buildBody(bones, mats, parent) {
   const regionOf = (part, o) => {
     switch (part) {
       case 'neck': return 0;
-      case 'torso': case 'upperArm': return 1;
-      case 'foreArm': return o.top === 'tee' ? 0 : 1;
+      case 'torso': return 1;
+      case 'collar': return o.top === 'tank' ? 0 : 1;
+      case 'upperArm': return o.top === 'tank' ? 0 : 1;
+      case 'foreArm': return o.top === 'tee' || o.top === 'tank' ? 0 : 1;
       case 'pelvis': case 'thigh': return 2;
       case 'shin': return o.pants === 'shorts' ? 0 : 2;
     }

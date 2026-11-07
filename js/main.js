@@ -8,6 +8,11 @@ import { PHYSICS, GRAPHICS, SCORING, DEFAULT_SETTINGS } from './config.js';
 import { World, SUN } from './world.js';
 import { assetURL } from './textures.js';
 import { Ragdoll } from './ragdoll.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Input } from './input.js';
 import { Skater } from './skater.js';
 import { Player } from './player.js';
@@ -174,18 +179,29 @@ class Game {
     else if (key === 'camSensitivity') this.rig.sensitivity = value;
     else if (key === 'camera') { this.rig.mode = value; return; }
     else if (key === 'touch') { this.settings.touch = value; this.updateTouch(); }
+    else if (key === 'assist') value = value === 'on' || value === true;
     this.settings[key] = value;
     Storage.set('settings', this.settings);
   }
 
-  applyGraphics(level) {
-    const g = GRAPHICS[level] || GRAPHICS.low;
+  // 'auto' = High on computers, Low on phones / tablets
+  resolveGraphics(level) {
+    if (level === 'auto' || !GRAPHICS[level]) return isTouchDevice() ? 'low' : 'high';
+    return level;
+  }
+
+  applyGraphics(levelSetting) {
+    const level = this.resolveGraphics(levelSetting);
+    this.graphicsLevel = level;
+    const g = GRAPHICS[level];
+    const pbr = level === 'high' || level === 'ultra';
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, g.pixelRatio));
     this.renderer.shadowMap.enabled = g.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.world.setQuality(level);
-    // High: reflections / ambient light from the sky (image-based lighting)
-    if (level === 'high') {
+    this.world.setQuality(pbr ? 'high' : 'low');
+    this.skater.setQuality(level);
+    // High / Ultra: reflections & ambient light from the sky (image-based lighting)
+    if (pbr) {
       if (!this.envMap && this.skyTex) {
         // reflections & ambient light straight from the sky photo
         const pm = new THREE.PMREMGenerator(this.renderer);
@@ -213,13 +229,29 @@ class Game {
       const c = this.sun.shadow.camera;
       c.left = -35; c.right = 35; c.top = 35; c.bottom = -35; c.near = 1; c.far = 160;
       c.updateProjectionMatrix();
-      this.sun.shadow.bias = -0.0008;
+      this.sun.shadow.bias = -0.0005;
+      this.sun.shadow.normalBias = 0.02;
+      this.sun.shadow.radius = 3;
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     }
     this.skater.blob.visible = !g.shadows;
     this.scene.fog.far = g.fogFar;
     this.camera.far = g.drawDistance;
     this.camera.updateProjectionMatrix();
+    // Ultra: post-processing — ambient occlusion (contact shadows in corners and
+    // under things) + SMAA anti-aliasing. OutputPass applies tone mapping.
+    if (g.post && !this.composer) {
+      const w = window.innerWidth, h = window.innerHeight;
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      const ao = new GTAOPass(this.scene, this.camera, w, h);
+      ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.2, scale: 1.1 });
+      ao.blendIntensity = 0.85;
+      this.composer.addPass(ao);
+      this.composer.addPass(new OutputPass());
+      this.composer.addPass(new SMAAPass(w * this.renderer.getPixelRatio(), h * this.renderer.getPixelRatio()));
+    }
+    this.usePost = !!g.post;
     // materials must recompile when shadows are toggled
     this.scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
     this.resize();
@@ -251,6 +283,7 @@ class Game {
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h, false);
+    if (this.composer) { this.composer.setPixelRatio(this.renderer.getPixelRatio()); this.composer.setSize(w, h); }
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -338,6 +371,8 @@ class Game {
         this.challenges.onLand(d);
         break;
       case 'grindStart': ui.popup(d.name); break;
+      case 'sketchy': ui.popup('Sketchy!', 'small'); break;
+      case 'jump': au.push(); break;
       case 'grindEnd':
         this.combo.add(d);
         this.challenges.onGrind(d);
@@ -414,13 +449,16 @@ class Game {
     }
     if (this.touch) this.touch.setVisible(this.mode !== 'title' && !this.paused);
     inp.endFrame();
-    this.renderer.render(this.scene, this.camera);
+    if (this.usePost && this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   step(realDt) {
     const p = this.player, inp = this.input;
     const now = performance.now() / 1000;
     if (inp.pressed.camera) this.ui.toast('Camera: ' + { follow: 'Follow', filmer: 'Filmer', fisheye: 'Fisheye filmer' }[this.rig.toggle()], '', 1200);
+    p.camYaw = this.rig.yaw;                 // walking is camera-relative
+    p.assist = this.settings.assist !== false;
     p.frameInput(now);
 
     // slow-mo during bails
