@@ -128,6 +128,17 @@ class Game {
     this.canvas.addEventListener('pointerup', endFlick);
     this.canvas.addEventListener('pointercancel', endFlick);
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // RIGHT mouse button + drag: turn. Off the board you turn with the camera;
+    // on the board the camera swings around you and springs back.
+    this.canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 2) { this.rig.dragging = true; this._dragX = e.clientX; } });
+    window.addEventListener('pointerup', (e) => { if (e.button === 2) this.rig.dragging = false; });
+    window.addEventListener('pointermove', (e) => {
+      if (!this.rig.dragging) return;
+      const dx = e.clientX - this._dragX; this._dragX = e.clientX;
+      const k = 0.006 * (this.settings.camSensitivity || 1);
+      if (this.player.state === 'walk') this.player.mouseTurn = (this.player.mouseTurn || 0) - dx * k;
+      else this.rig.orbit = Math.max(-2.6, Math.min(2.6, (this.rig.orbit || 0) - dx * k));
+    });
 
     this.mode = 'title';
     this.paused = false;

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { DEFAULT_OUTFIT, PUSH } from './config.js';
 import { buildBody } from './body.js';
+import { fitSkeleton, buildHuman } from './human.js';
 import { getFabric } from './textures.js';
 
 const THIGH = 0.42, SHIN = 0.42;          // leg bone lengths
@@ -100,6 +101,7 @@ export class Skater {
       mesh(this.head, new THREE.SphereGeometry(0.03, 8, 6).scale(0.5, 1, 0.8), m.skinDark, sx * 0.122, 0.2, -0.005);     // ear
     }
     mesh(this.head, new THREE.BoxGeometry(0.045, 0.008, 0.01), m.lipColor || m.skinDark, 0, 0.14, 0.113);                // mouth
+    this.faceParts = [...this.head.children];   // the simple face (replaced by the human head)
     this.hair = [
       mesh(this.head, hemi(0.13, 1.05), m.hair, 0, 0.225, -0.006),                                       // top
       mesh(this.head, new THREE.SphereGeometry(0.128, 14, 10).scale(1, 0.8, 0.62), m.hair, 0, 0.2, -0.048), // back
@@ -135,7 +137,7 @@ export class Skater {
       }
       const th = mesh(hand, new THREE.CapsuleGeometry(0.0095, 0.03, 2, 6).translate(0, -0.02, 0), m.skin, -sgn * 0.004, -0.02, 0.04); // thumb
       th.rotation.x = -0.6;
-      this.arms.push({ sh, el, sgn, cuff });
+      this.arms.push({ sh, el, sgn, cuff, hand });
     }
     // legs: hip → knee → foot. Thighs and shins are part of the skinned body.
     this.legs = [];
@@ -155,7 +157,16 @@ export class Skater {
     this.bones = [this.hips, this.torso, this.head, this.arms[0].sh, this.arms[0].el, this.arms[1].sh, this.arms[1].el,
       this.legs[0].hip, this.legs[0].knee, this.legs[0].foot, this.legs[1].hip, this.legs[1].knee, this.legs[1].foot];
     this.root.updateMatrixWorld(true);
-    this.bodyMesh = buildBody(this.bones, { skin: m.skin, top: m.top, pants: m.pants }, this.body);
+    // leg measurements used by the animation (replaced by the human's own proportions)
+    this.thigh = THIGH; this.shin = SHIN; this.footH = FOOT_H; this.hipX = 0.09;
+    this.belt = this.hips.children[this.hips.children.length - 1 - 0];
+    try {
+      this._useHuman();
+    } catch (e) {
+      console.warn('Human body unavailable, using the simple body', e);
+      this.human = false;
+      this.bodyMesh = buildBody(this.bones, { skin: m.skin, top: m.top, pants: m.pants }, this.body);
+    }
 
     // blob shadow (cheap fake shadow, used on Low graphics)
     const blob = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14),
@@ -172,6 +183,64 @@ export class Skater {
     this._up = new THREE.Vector3(0, 1, 0); this._n = new THREE.Vector3(); this._fwd = new THREE.Vector3(0, 0, 1);
 
     this.applyOutfit(DEFAULT_OUTFIT);
+  }
+
+  // Swap in the realistic MakeHuman body (human.js): reshape the skeleton to its
+  // proportions, hide the simple face / hands / shoes, add eyes and brows, and
+  // fit hats and hair to the real head.
+  _useHuman() {
+    const m = this.mat;
+    const fit = fitSkeleton(this);
+    this.thigh = fit.thigh; this.shin = fit.shin; this.footH = fit.footH; this.hipX = fit.hipX;
+    this.human = true;
+    const J = fit.joints;
+    for (const p of this.faceParts) p.visible = false;
+    for (const A of this.arms) { A.hand.visible = false; A.cuff.visible = false; }
+    for (const L of this.legs) { for (const c of L.foot.children) c.visible = false; L.sock.visible = false; }
+    // eyes & eyebrows on the real face (positions from the model's eye markers)
+    const neck = J.neck;
+    for (const side of ['l', 'r']) {
+      const e = J[side + '-eye'].clone().sub(neck);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0118, 12, 10), m.topTrim);
+      eye.position.copy(e); this.head.add(eye);
+      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.0066, 10, 8).scale(1, 1, 0.5), m.eye);
+      iris.position.set(e.x, e.y, e.z + 0.0105); this.head.add(iris);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.006, 0.01), m.hair);
+      brow.position.set(e.x * 1.15, e.y + 0.021, e.z + 0.008); brow.rotation.z = (side === 'l' ? -1 : 1) * 0.1;
+      this.head.add(brow);
+    }
+    // fit hats & hair (designed for the old head) onto the real head
+    const top = J['head-2'].y, eyeY = J['l-eye'].y;
+    const ry = (top - eyeY) * 1.149, rx = 0.082, rz = 0.1;
+    const oldC = new THREE.Vector3(0, 0.2, 0.004), oldR = new THREE.Vector3(0.1196, 0.139, 0.127);
+    const scale = new THREE.Vector3(rx / oldR.x, ry / oldR.y, rz / oldR.z);
+    const newC = new THREE.Vector3(0, top - ry, J['l-eye'].z - 0.088).sub(neck);
+    this.headWear = new THREE.Group();
+    this.headWear.scale.copy(scale);
+    this.headWear.position.copy(newC).sub(oldC.clone().multiply(scale));
+    this.head.add(this.headWear);
+    for (const g of [...Object.values(this.hats), ...this.hair]) this.headWear.add(g);
+    // clothing extras that only fit the simple body
+    const P = this.parts;
+    for (const x of [P.pocket, ...P.strings, P.jacketOpen, P.collar, ...P.flannel]) x.visible = false;
+    this._hideExtras = true;
+    const chestY = J['l-shoulder'].y - J['spine-4'].y - 0.14;
+    P.pack.position.set(0, chestY, -0.16);
+    P.packStraps.forEach((st, i) => st.position.set(i ? 0.08 : -0.08, chestY, 0.11));
+    P.hood.position.set(0, J.neck.y - J['spine-4'].y - 0.01, -0.085);
+    P.hood.scale.set(0.85, 0.85, 0.85);
+    if (this.belt) { this.belt.position.y = J['spine-4'].y - (J['l-upper-leg'].y) - 0.02; this.belt.scale.set(0.84, 1, 0.92); }
+    for (const h of this.hair) h.visible = false;      // hair is painted on the real scalp instead
+    this._hairless = true;
+    this.bodyMesh = buildHuman(this, { skin: m.skin, top: m.top, pants: m.pants, shoe: m.shoe, hair: m.hair, belt: m.sole });
+    if (this.belt) this.belt.visible = false;           // the fitted waistband replaces it
+    // rubber soles under the shoe-shaped feet
+    for (const L of this.legs) {
+      const sole = L.foot.children[1];
+      sole.visible = true;
+      sole.position.set(0, -this.footH + 0.012, 0.045);
+      sole.scale.set(0.95, 0.9, 0.95);
+    }
   }
 
   _makeBoard(parent) {
@@ -212,16 +281,19 @@ export class Skater {
     m.hat.color.setHex(o.hatColor); m.hatDark.color.copy(dark(o.hatColor));
     m.deck.color.setHex(o.deckColor); m.deckSide.color.copy(dark(o.deckColor, 0.85));
     const P = this.parts, show = (x, v) => (Array.isArray(x) ? x : [x]).forEach((p) => { p.visible = v; });
-    show(P.hood, o.top === 'hoodie'); show(P.pocket, o.top === 'hoodie'); show(P.strings, o.top === 'hoodie');
-    show(P.jacketOpen, o.top === 'jacket'); show(P.collar, o.top === 'jacket' || o.top === 'flannel');
-    show(P.flannel, o.top === 'flannel');
+    const simple = !this._hideExtras;
+    show(P.hood, o.top === 'hoodie'); show(P.pocket, simple && o.top === 'hoodie'); show(P.strings, simple && o.top === 'hoodie');
+    show(P.jacketOpen, simple && o.top === 'jacket'); show(P.collar, simple && (o.top === 'jacket' || o.top === 'flannel'));
+    show(P.flannel, simple && o.top === 'flannel');
     show(P.pack, !!o.backpack); show(P.packStraps, !!o.backpack);
     show(P.cargo, o.pants === 'cargo');
-    for (const A of this.arms) A.cuff.visible = o.top !== 'tee' && o.top !== 'tank';
-    for (const L of this.legs) L.sock.visible = o.pants === 'shorts';
+    for (const A of this.arms) A.cuff.visible = !this.human && o.top !== 'tee' && o.top !== 'tank';
+    for (const L of this.legs) L.sock.visible = !this.human && o.pants === 'shorts';
+    if (this.seams) for (const r of this.seams) if (r && r.userData.hem) r.visible = o.pants !== 'shorts';
     if (this.bodyMesh) this.bodyMesh.setOutfit(o);   // tee = bare forearms, shorts = bare shins
     for (const [k, g] of Object.entries(this.hats)) g.visible = o.hat === k;
-    this.hair[0].visible = o.hat === 'none';
+    this.hair[0].visible = !this._hairless && o.hat === 'none';
+    if (this._hairless) this.hair[1].visible = false;
     this.stance = o.stance === 'goofy' ? -1 : 1;
     this.mongo = o.pushStyle === 'mongo';
     this.outfit = o;
@@ -278,13 +350,17 @@ export class Skater {
 
   // Two-bone leg IK toward a foot target (tx,ty,tz) given relative to the hip, in body space
   _legIK(L, tx, ty, tz) {
-    const len = Math.min(Math.hypot(tx, ty, tz), THIGH + SHIN - 0.001);
-    const k = Math.acos(Math.min(1, len / (THIGH + SHIN)));      // knee half-angle
+    const T = this.thigh, Sh = this.shin;
+    const len = Math.min(Math.hypot(tx, ty, tz), T + Sh - 0.001);
+    // knee angle from the law of cosines (works for unequal thigh / shin)
+    const cosK = (T * T + Sh * Sh - len * len) / (2 * T * Sh);
+    const kneeBend = Math.PI - Math.acos(Math.max(-1, Math.min(1, cosK)));
+    const k = Math.acos(Math.max(-1, Math.min(1, (T * T + len * len - Sh * Sh) / (2 * T * len))));
     const splay = Math.atan2(tx, -ty);
     const fwd = Math.atan2(tz, Math.hypot(tx, ty));
     L.hip.rotation.set(-(k + fwd), 0, splay);
-    L.knee.rotation.x = 2 * k;
-    L.foot.rotation.set(fwd - k, 0, -splay);
+    L.knee.rotation.x = kneeBend;
+    L.foot.rotation.set(k + fwd - kneeBend, 0, -splay);   // keep the foot flat: cancels hip + knee pitch
   }
 
   animate(st, dt) {
@@ -322,7 +398,8 @@ export class Skater {
     this.manualPivot.rotation.x = -a.manual;
 
     // ---------------- base pose
-    const stand = 0.8, low = 0.48;
+    const legL = this.thigh + this.shin;
+    const stand = 0.874 * legL + this.footH, low = 0.493 * legL + this.footH;
     let hipH = lerp(stand, low, Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95) + a.dip * 0.6));
     hipH -= a.push * 0.17;                    // bend the standing knee so the push foot reaches the floor
     this.hips.position.set(0, hipH, 0);
@@ -341,7 +418,7 @@ export class Skater {
     const footPos = (i) => (i === 0 ? -1 : 1) * (i === frontIdx ? FRONT_FOOT : BACK_FOOT);
     for (let i = 0; i < 2; i++) {
       const L = this.legs[i];
-      this._legIK(L, footPos(i) - L.sgn * 0.09, -hipH + FOOT_H, 0);
+      this._legIK(L, footPos(i) - L.sgn * this.hipX, -hipH + this.footH, 0);
       // real footplant: front foot angled toward the nose, back foot across the tail
       L.foot.rotation.y = i === frontIdx ? -s * 0.42 : s * 0.12;
     }
@@ -354,10 +431,10 @@ export class Skater {
       const idx = this.mongo ? 1 - backIdx : backIdx;
       const L = this.legs[idx];
       const dirTail = tailX;
-      const ground = -hipH - DECK_Y + FOOT_H;
-      const onDeck = [footPos(idx) - L.sgn * 0.09, -hipH + FOOT_H, 0];
-      const start = [dirTail * -0.12 - L.sgn * 0.09, ground, 0.22];
-      const end = [dirTail * 0.42 - L.sgn * 0.09, ground, 0.18];
+      const ground = -hipH - DECK_Y + this.footH;
+      const onDeck = [footPos(idx) - L.sgn * this.hipX, -hipH + this.footH, 0];
+      const start = [dirTail * -0.12 - L.sgn * this.hipX, ground, 0.22];
+      const end = [dirTail * 0.42 - L.sgn * this.hipX, ground, 0.18];
       let t;
       if (ph < c0) { const u = smooth(ph / c0); t = onDeck.map((v, j) => lerp(v, start[j], u)); t[1] += Math.sin(u * Math.PI) * 0.1; }
       else if (ph < c1) { const u = (ph - c0) / (c1 - c0); t = start.map((v, j) => lerp(v, end[j], u)); }
@@ -397,7 +474,7 @@ export class Skater {
       const sw0 = Math.sin(this.walkPhase), amp = Math.min(1, spd / 2) * (0.5 + run * 0.35);
       this.body.rotation.y = lerp(s * Math.PI / 2, 0, a.walk);
       this.bodyBase.position.y = lerp(DECK_Y, 0.06 + Math.abs(Math.cos(this.walkPhase)) * 0.03 * run, a.walk);
-      this.hips.position.y = lerp(hipH, 0.84 - run * 0.03, a.walk);
+      this.hips.position.y = lerp(hipH, this.thigh + this.shin + this.footH - 0.03 - run * 0.03, a.walk);
       for (let i = 0; i < 2; i++) {
         const L = this.legs[i], sw = (i === 0 ? sw0 : -sw0) * amp;
         L.hip.rotation.set(lerp(L.hip.rotation.x, -sw, a.walk), 0, lerp(L.hip.rotation.z, 0, a.walk));

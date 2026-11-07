@@ -47,7 +47,8 @@ const CONTROLS = [
   ['<kbd>L</kbd>', 'Manual (L + ↑ = Nose Manual). Balance with W / S. Tap L in the air to land in one'],
   ['Other'],
   ['<kbd>E</kbd>', 'Step off (the board stays on the ground) / jump back on — works while running and mid-jump'],
-  ['Off the board', 'WASD moves relative to the camera, keep moving to run (or Shift), Space jumps'],
+  ['Off the board', 'A / D (or hold the RIGHT mouse button and drag) turn you and the camera together. W runs (keeps speeding up into a sprint, or hold Shift), S backs up, Space jumps. E hops back on the board'],
+  ['Right mouse + drag (skating)', 'Look around — the camera swings back behind you when you let go'],
   ['<kbd>R</kbd> / <kbd>T</kbd>', 'Respawn at your spot / set a custom drop spot'],
   ['<kbd>C</kbd>', 'Switch camera (follow / filmer / fisheye)'],
   ['<kbd>H</kbd>', 'Show / hide this help'],
@@ -139,7 +140,7 @@ export class UI {
         const o = g.outfit;
         const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
           hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
-          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing' };
+          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing', body: 'Body' };
         h = `<h2>Closet</h2><div class="closet">`;
         for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
           h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +

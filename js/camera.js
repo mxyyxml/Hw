@@ -52,9 +52,14 @@ export class CameraRig {
       if (h > 3 && !(player.air && player.air.vert)) want = Math.atan2(player.vel.x, player.vel.z);
     }
     if (this.first) { this.yaw = want; }
-    this.yaw = dampAngle(this.yaw, want, cfg.lag * this.sensitivity, dt);
+    // walking: stay right behind the player so turning the camera = turning the player
+    const lag = player.state === 'walk' ? Math.max(cfg.lag * 2.4, 12) : cfg.lag;
+    this.yaw = dampAngle(this.yaw, want, lag * this.sensitivity, dt);
+    // right-mouse orbit while skating (springs back when you let go)
+    this.orbit = this.orbit || 0;
+    if (!this.dragging) this.orbit *= Math.exp(-2.5 * dt);
 
-    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    const fx = Math.sin(this.yaw + this.orbit), fz = Math.cos(this.yaw + this.orbit);
     this.desired.set(p.x - fx * cfg.distance, p.y + cfg.height, p.z - fz * cfg.distance);
     if (cfg.side) { this.desired.x += -fz * cfg.side; this.desired.z += fx * cfg.side; }
     // keep above the ground / ramps

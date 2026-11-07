@@ -75,9 +75,10 @@ colours for everything, skin tone, hair, backpack, board colour, **stance (Regul
   losing some speed. Further than that and you bail into a full physics ragdoll.
 - **Landing assist** (Settings, on by default) straightens a slightly crooked board just before touchdown
   and nudges you onto a nearby landing ramp when you transfer.
-- **Off the board (E):** the board stays where you stepped off. WASD moves relative to the camera, keep moving to
-  break into a run (or hold Shift), Space jumps. Press E again — even running or mid-jump — to drop the board
-  and hop on with your speed.
+- **Off the board (E):** the board stays where you stepped off. **A / D or right-mouse drag turn you and the
+  camera together**, W runs (breaking into a sprint), S backs up, Space jumps (with a little grace after running
+  off a ledge). Press E — even running or mid-jump — to throw the board down and hop onto it with your speed.
+- **Right-mouse drag while skating** swings the camera around you; it springs back when you let go.
 - **Mid-air board adjust:** coming down onto a ramp, the board tilts to match it so air drop-ins land.
 
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
@@ -142,7 +143,8 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | `js/audio.js` | Web Audio sound effects |
 | `js/ui.js` | HUD, pop-ups, menus |
 | `js/storage.js` | Safe localStorage helper |
-| `js/body.js` | The skater's smooth skinned human body (one mesh, bones bend it) |
+| `js/human.js` + `js/humanData.js` | The realistic MakeHuman body fitted to the skater's skeleton (`tools/convert-human.py` makes the data) |
+| `js/body.js` | Fallback hand-built body (used only if the human data can't load) |
 | `js/ragdoll.js` | Rapier physics ragdoll for bails + the flying board |
 | `js/gesture.js` | Mouse / thumb flick-stick gestures |
 | `js/touch.js` | Phone / tablet touch controls and device detection |
@@ -156,6 +158,7 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | --- | --- | --- |
 | 3D engine | [three.js](https://github.com/mrdoob/three.js) 0.160.0 | MIT |
 | Ragdoll / board physics | [Rapier](https://github.com/dimforge/rapier) (`@dimforge/rapier3d-compat` 0.12.0) | Apache-2.0 |
+| Skater body: base human mesh + body-shape targets (male athletic, flat chest, ideal proportions; female athletic) | [MakeHuman](http://www.makehumancommunity.org) (`base.obj`, macrodetails / breast / proportions targets) | CC0 |
 | Photo textures: concrete floor 02, concrete tiles, asphalt 02, brushed concrete 2, plywood, leafy grass, brick wall 001, denim fabric, cotton jersey | [Poly Haven](https://polyhaven.com) | CC0 |
 | Sky: Kloofendal 48d Partly Cloudy (Pure Sky) | [Poly Haven](https://polyhaven.com) | CC0 |
 

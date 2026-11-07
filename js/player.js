@@ -903,39 +903,48 @@ export class Player {
   // Back on the board (E): you drop it and jump on, keeping your running speed
   exitWalk() {
     if (this.walkVy !== 0) { this.wantBoard = true; return; }
-    this.state = 'ride'; this.speed = Math.min(5, this.walkSpeed * 0.95); this.fakie = false;
-    this.groundBoard = null;
-    if (this.speed > 0.5) this.pushPhase = -1;
+    // throw the board down and hop on — you land on it rolling with your run speed
+    this.state = 'ride'; this.speed = Math.min(5.2, this.walkSpeed * 0.95); this.fakie = false;
+    this.groundBoard = null; this.pushPhase = -1;
+    const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.3);
+    this.normal.set(g.nx, g.ny, g.nz); this.groundTag = g.tag; this.groundVert = false;
+    this._tangent(this.heading, this.normal, this.vel).multiplyScalar(this.speed);
+    this.vel.y += 2.3;
+    this.launch(true);
+    this.air.hop = true;
     this.emit('walk', { on: false });
   }
-  // Walking: third-person controls relative to the CAMERA (W = away from the
-  // camera), smooth acceleration, the body turns toward where you walk, Shift
-  // runs, Space jumps, you slide along walls and fall off ledges.
+  // Walking / running off the board — third-person controls where the camera
+  // stays behind you: A/D (or right-mouse drag) TURN you and the camera turns
+  // with you, W runs forward, S backs up. Turning has a little momentum,
+  // Space jumps (with a short grace period after running off a ledge and a
+  // buffered press just before landing), you slide along walls.
   updateWalk(dt) {
     const inp = this.input;
-    const ix = (inp.held.right ? 1 : 0) - (inp.held.left ? 1 : 0);
-    const iz = (inp.held.up ? 1 : 0) - (inp.held.down ? 1 : 0);
-    const cy = this.camYaw ?? this.heading;
-    const fx = Math.sin(cy), fz = Math.cos(cy), rx = -Math.cos(cy), rz = Math.sin(cy);
-    let wx = fx * iz + rx * ix, wz = fz * iz + rz * ix;
-    const wl = Math.hypot(wx, wz);
-    // keep moving and you break into a run (or hold Shift)
-    this.moveTime = wl > 0 ? (this.moveTime || 0) + dt : 0;
+    const turnIn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+    this.walkTurnVel = this.walkTurnVel || 0;
+    this.walkTurnVel += clamp(turnIn * P.walkTurnRate - this.walkTurnVel, -14 * dt, 14 * dt);
+    this.heading += this.walkTurnVel * dt + (this.mouseTurn || 0);
+    this.mouseTurn = 0;
+    const move = (inp.held.up ? 1 : 0) - (inp.held.down ? 0.55 : 0);
+    this.moveTime = move > 0 ? (this.moveTime || 0) + dt : 0;
     const running = inp.held.shift || this.moveTime > P.autoRunTime;
-    const target = wl > 0 ? (running ? P.runSpeed : P.walkSpeed) : 0;
-    if (wl > 0) { wx /= wl; wz /= wl; }
+    const target = move > 0 ? (running ? P.runSpeed : P.walkSpeed) * move : move * P.walkSpeed;
     this.walkVel = this.walkVel || { x: 0, z: 0 };
     const V = this.walkVel, onGround = this.walkVy === 0;
-    const rate = (wl > 0 ? P2.walkAccel : P2.walkDecel) * (onGround ? 1 : 0.25) * dt; // little air control
-    const tx = wx * target - V.x, tz = wz * target - V.z, tl = Math.hypot(tx, tz);
+    if (onGround) this.coyote = 0.12; else this.coyote = Math.max(0, (this.coyote || 0) - dt);
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    const tx = fx * target - V.x, tz = fz * target - V.z, tl = Math.hypot(tx, tz);
+    const rate = (Math.abs(target) > 0.01 ? P2.walkAccel : P2.walkDecel) * (onGround ? 1 : 0.3) * dt;
     if (tl > 0) { const k = Math.min(1, rate / tl); V.x += tx * k; V.z += tz * k; }
-    const sp = Math.hypot(V.x, V.z);
-    this.walkSpeed = sp;
-    if (sp > 0.2) {                                  // turn the body toward the movement
-      const want = Math.atan2(V.x, V.z);
-      this.heading += clamp(wrapAngle(want - this.heading), -P2.walkTurnRate * dt, P2.walkTurnRate * dt);
+    this.walkSpeed = Math.hypot(V.x, V.z);
+    // jump: buffered press + coyote time
+    if (inp.pressed.pop) this.jumpBuffer = 0.15; else this.jumpBuffer = Math.max(0, (this.jumpBuffer || 0) - dt);
+    if (this.jumpBuffer > 0 && this.coyote > 0) {
+      this.walkVy = P2.jumpSpeed + Math.min(0.6, this.walkSpeed * 0.08);   // a running jump goes a bit higher
+      this.jumpBuffer = 0; this.coyote = 0;
+      this.emit('jump');
     }
-    if (inp.pressed.pop && onGround) { this.walkVy = P2.jumpSpeed; this.emit('jump'); }
     this.walkVy -= P.gravity * dt;
     let nx = this.pos.x + V.x * dt, nz = this.pos.z + V.z * dt;
     const maxY = this.pos.y + (onGround ? P.walkStepUp : 0.1);
@@ -951,11 +960,12 @@ export class Player {
     let ny = this.pos.y + this.walkVy * dt;
     if (ny <= g.h || (this.walkVy <= 0 && ny - g.h < 0.06)) {
       if (this.walkVy < -9) this.emit('wall', { speed: -this.walkVy });   // heavy landing thud
+      if (this.walkVy < -4) this.landDip = Math.min(1, -this.walkVy / 12);
       ny = g.h; this.walkVy = 0;
     }
     this.pos.set(nx, ny, nz);
-    if (this.wantBoard && this.walkVy === 0) { this.wantBoard = false; this.exitWalk(); return; }
     this.normal.set(0, 1, 0);
+    if (this.wantBoard && this.walkVy === 0) { this.wantBoard = false; this.exitWalk(); return; }
   }
 
   // ------------------------------------------------------------------ RENDER SYNC

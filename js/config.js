@@ -297,6 +297,7 @@ export const OUTFIT_OPTIONS = {
   top:    [['tank', 'Tank top'], ['hoodie', 'Hoodie'], ['tee', 'T-shirt'], ['jacket', 'Jacket'], ['flannel', 'Flannel']],
   pants:  [['jeans', 'Jeans'], ['cargo', 'Cargos'], ['shorts', 'Shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
+  body:   [['male', 'Male'], ['female', 'Female']],
   stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
   pushStyle: [['normal', 'Normal push'], ['mongo', 'Mongo (front foot)']],
 };
@@ -312,7 +313,7 @@ export const OUTFIT_COLORS = {
 export const DEFAULT_OUTFIT = {
   hat: 'none', hatColor: 0xf4743b, top: 'tank', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
   shoeColor: 0x9a9a9a, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0x1d1d1d, backpack: false,
-  stance: 'regular', pushStyle: 'normal',
+  stance: 'regular', pushStyle: 'normal', body: 'male',
 };
 
 // -----------------------------------------------------------------------------
