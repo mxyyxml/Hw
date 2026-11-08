@@ -17,7 +17,7 @@ import sys, base64, json, math, struct
 src, dst = sys.argv[1], sys.argv[2]
 # optional 3rd argument: folder holding MakeHuman .target files (all CC0)
 tdir = sys.argv[3] if len(sys.argv) > 3 else None
-MALE = [('universal-male-young-maxmuscle-averageweight.target', 0.6),
+MALE = [('universal-male-young-maxmuscle-averageweight.target', 0.42),
         ('female-young-averagemuscle-averageweight-mincup-averagefirmness.target', 1.0),   # flat chest
         ('male-young-averagemuscle-averageweight-idealproportions.target', 0.7)]
 FEMALE = [('universal-female-young-maxmuscle-averageweight.target', 0.4)]

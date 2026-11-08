@@ -71,7 +71,7 @@ export class Skater {
     const m = this.mat;
     m.top.map = getFabric('cotton');
     m.pants.map = getFabric('denim');
-    mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
+    this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
     this.parts = {
       hood: mesh(this.torso, new THREE.SphereGeometry(0.12, 12, 8).scale(1.25, 0.6, 0.85), m.topDark, 0, 0.47, -0.095),
@@ -159,7 +159,6 @@ export class Skater {
     this.root.updateMatrixWorld(true);
     // leg measurements used by the animation (replaced by the human's own proportions)
     this.thigh = THIGH; this.shin = SHIN; this.footH = FOOT_H; this.hipX = 0.09;
-    this.belt = this.hips.children[this.hips.children.length - 1 - 0];
     try {
       this._useHuman();
     } catch (e) {
@@ -232,14 +231,55 @@ export class Skater {
     if (this.belt) { this.belt.position.y = J['spine-4'].y - (J['l-upper-leg'].y) - 0.02; this.belt.scale.set(0.84, 1, 0.92); }
     for (const h of this.hair) h.visible = false;      // hair is painted on the real scalp instead
     this._hairless = true;
-    this.bodyMesh = buildHuman(this, { skin: m.skin, top: m.top, pants: m.pants, shoe: m.shoe, hair: m.hair, belt: m.sole });
+    // the bare feet are hidden inside the sneakers
+    const hidden = new THREE.MeshBasicMaterial({ visible: false });
+    this.bodyMesh = buildHuman(this, { skin: m.skin, top: m.top, pants: m.pants, shoe: hidden, hair: m.hair, belt: m.sole });
     if (this.belt) this.belt.visible = false;           // the fitted waistband replaces it
-    // rubber soles under the shoe-shaped feet
-    for (const L of this.legs) {
-      const sole = L.foot.children[1];
-      sole.visible = true;
-      sole.position.set(0, -this.footH + 0.012, 0.045);
-      sole.scale.set(0.95, 0.9, 0.95);
+    // proper sneakers on the real feet
+    for (const L of this.legs) this._makeSneaker(L.foot);
+  }
+
+  // A low-poly sneaker built from a foot-shaped outline: contoured rubber sole,
+  // rounded upper that slopes down into the toe box, heel collar, tongue, laces.
+  _makeSneaker(foot) {
+    const m = this.mat;
+    if (!m.soleW) m.soleW = new THREE.MeshLambertMaterial({ color: 0xf2efe8 });
+    const outline = (inset) => {
+      // half-widths along the foot (z: heel -0.075 → toe +0.215)
+      const pts = [[-0.075, 0.03], [-0.06, 0.04], [-0.02, 0.041], [0.05, 0.043], [0.12, 0.052], [0.17, 0.05], [0.2, 0.038], [0.215, 0.018]];
+      const sh = new THREE.Shape();
+      const R = pts.map(([z, w]) => [Math.max(0.004, w - inset), z + (z > 0 ? -inset : inset)]);
+      sh.moveTo(0, R[0][1] - 0.006 + inset);
+      for (const [w, z] of R) sh.lineTo(w, z);
+      sh.lineTo(0, 0.218 - inset);
+      for (let i = R.length - 1; i >= 0; i--) sh.lineTo(-R[i][0], R[i][1]);
+      sh.closePath();
+      return sh;
+    };
+    const fh = this.footH;
+    // sole: thick rubber, slightly flared
+    const sole = new THREE.ExtrudeGeometry(outline(0), { depth: 0.022, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.005, bevelSegments: 2, curveSegments: 4 });
+    sole.rotateX(Math.PI / 2); sole.translate(0, -fh + 0.028, 0);
+    const soleM = new THREE.Mesh(sole, m.soleW); soleM.castShadow = true; foot.add(soleM);
+    // upper: rounded, lower over the toes
+    const up = new THREE.ExtrudeGeometry(outline(0.007), { depth: 0.058, bevelEnabled: true, bevelThickness: 0.016, bevelSize: 0.012, bevelSegments: 3, curveSegments: 6 });
+    up.rotateX(Math.PI / 2); up.translate(0, -fh + 0.03 + 0.074, 0);
+    const pa = up.attributes.position, base = -fh + 0.028;
+    for (let i = 0; i < pa.count; i++) {
+      const z = pa.getZ(i), y = pa.getY(i);
+      const t = Math.min(1, Math.max(0, (z - 0.06) / 0.155));
+      pa.setY(i, base + (y - base) * (1 - 0.5 * t * t));
+    }
+    up.computeVertexNormals();
+    const upM = new THREE.Mesh(up, m.shoe); upM.castShadow = true; foot.add(upM);
+    // heel collar, tongue, laces
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.011, 6, 14).rotateX(Math.PI / 2).scale(0.95, 1, 1.15), m.shoe);
+    collar.position.set(0, -fh + 0.112, -0.022); foot.add(collar);
+    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.01, 0.075), m.shoe);
+    tongue.position.set(0, -fh + 0.118, 0.04); tongue.rotation.x = -0.45; foot.add(tongue);
+    for (let i = 0; i < 4; i++) {
+      const lace = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.006, 0.007), m.lace);
+      lace.position.set(0, -fh + 0.103 - i * 0.008, 0.045 + i * 0.022); foot.add(lace);
     }
   }
 
@@ -362,7 +402,7 @@ export class Skater {
     const splay = Math.atan2(tx, -ty);
     const fwd = Math.atan2(tz, Math.hypot(tx, ty));
     L.hip.rotation.set(-(k + fwd), 0, splay);
-    L.knee.rotation.x = kneeBend;
+    L.knee.rotation.set(kneeBend, 0, 0);   // knees only hinge (clears any twist left from the bind pose)
     L.foot.rotation.set(k + fwd - kneeBend - th, 0, -splay);   // keep the foot flat: cancels pelvis + hip + knee pitch
   }
 
@@ -501,7 +541,7 @@ export class Skater {
         const kneeBendW = 0.08 + Math.max(0, Math.cos(p - 0.5)) * kneeAmp; // fold while swinging through
         L.hip.rotation.set(lerp(L.hip.rotation.x, -thigh, a.walk), 0, lerp(L.hip.rotation.z, 0, a.walk));
         L.hip.rotation.y = 0;
-        L.knee.rotation.x = lerp(L.knee.rotation.x, kneeBendW, a.walk);
+        L.knee.rotation.set(lerp(L.knee.rotation.x, kneeBendW, a.walk), 0, 0);
         // foot: flat-ish, toe pushes off at the back of the stride, toes up before heel strike
         const footPitch = thigh - kneeBendW - this.hips.rotation.x + Math.max(0, -Math.sin(p)) * 0.35 * move - Math.max(0, Math.sin(p)) * 0.15 * move;
         L.foot.rotation.set(lerp(L.foot.rotation.x, footPitch, a.walk), 0, 0);

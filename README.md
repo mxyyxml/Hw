@@ -79,6 +79,7 @@ colours for everything, skin tone, hair, backpack, board colour, **stance (Regul
   camera together**, W runs (breaking into a sprint), S backs up, Space jumps (with a little grace after running
   off a ledge). Press E — even running or mid-jump — to throw the board down and hop onto it with your speed.
 - **Right-mouse drag while skating** swings the camera around you; it springs back when you let go.
+- **Carving grip:** turn rate is limited by sideways grip (~0.75 g), so the faster you go, the wider you carve.
 - **Mid-air board adjust:** coming down onto a ramp, the board tilts to match it so air drop-ins land.
 
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
@@ -102,12 +103,21 @@ multiplied by the number of tricks in it. A bail loses the combo.
 - **Far east – Mega Park** – a 12 m drop-in tower into a giant roll-in, a big kicker gap to a long landing,
   a 6 m vert quarter, a 6 m bank with a 30 m down-rail and hubba, a 4 m deep bowl, a giant spine, a big pyramid,
   quarter-pipe walls, bleachers and floodlights
-- **Around town** – an avenue with lane lines, crosswalk and rideable curbs, a road out to the Mega Park, lawns
+- **Far south – Titan Park** – the biggest area, built around long lines that start from drop-in towers:
+  - *Mega Air line*: 22 m tower → 40 m roll-in → two huge gaps (≈23 m and ≈16 m) → 7 m vert quarter
+  - *Rail line*: 12 m tower → roll-in onto a 3 m-high deck of ledges and rails → 17-stair with long handrails → street section
+  - *Drop line*: roll off a 10 m deck onto a 30 m landing → designed gap → quarter
+  - a funbox section, a 5 m-deep giant bowl, a big spine, a mega hip and an 8 m quarter-pipe wall
+  Every big jump is **designed by physics** (`World._designJump` in `js/world.js`): it works out the speed you'll
+  have at the kicker, the flight path, matches the landing angle to it and sizes the gap so an 8 %-slower rider still
+  clears it and a 6 %-faster rider still lands on the slope (no overshoot). Each line was then ridden in-game to check.
+ an avenue with lane lines, crosswalk and rideable curbs, a road out to the Mega Park, lawns
   with trees and bushes, parked cars, hydrants, a bus shelter, shopfronts with awnings and rooftop details;
   rolling hills on the horizon
 
 Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Downhill Street, Southside Skatepark,
-Mega Park – The Drop, Mega Park – Big Bank & Rail, Mega Park – Mega Bowl.
+Mega Park – The Drop, Mega Park – Big Bank & Rail, Mega Park – Mega Bowl, Titan Park – Mega Air Line,
+Titan Park – Rail Line, Titan Park – Drop Line, Titan Park – Giant Bowl & Wall.
 
 ## 🏆 Modes
 

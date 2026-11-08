@@ -261,6 +261,7 @@ export const DEFAULT_SETTINGS = {
 // -----------------------------------------------------------------------------
 export const PHYSICS2 = {
   carveScrub: 0.07,         // speed lost per second while turning hard (tyres scrub)
+  maxCarveAccel: 9.5,       // m/s² sideways grip — the faster you go, the wider you have to carve (≈0.75 g)
   spinAccel: 32,            // rad/s² — how fast an air spin winds up
   spinDecay: 12,            // how fast the spin stops when you let go (per second)
   hardLandingImpact: 7,     // m/s — above this, landings cost extra speed

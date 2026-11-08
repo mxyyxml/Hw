@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { CollisionWorld } from './physics.js';
 import { getTexture, getNormal, TEX_SCALE } from './textures.js';
+import { GAPS, PHYSICS } from './config.js';
 
 // ---- colour palette (natural, slightly muted tones) --------------------------
 const C = {
@@ -238,6 +239,10 @@ export class World {
       { name: 'Mega Park – The Drop (12 m)', x: 123, y: 12, z: 26, heading: Math.PI / 2 },
       { name: 'Mega Park – Big Bank & Rail', x: 122, y: 6, z: 56, heading: Math.PI / 2 },
       { name: 'Mega Park – Mega Bowl', x: 160, y: 0, z: -60, heading: Math.PI / 2 },
+      { name: 'Titan Park – Mega Air Line (22 m)', x: 40, y: 22, z: 169.6, heading: 0 },
+      { name: 'Titan Park – Rail Line', x: 85, y: 12, z: 169.6, heading: 0 },
+      { name: 'Titan Park – Drop Line', x: 130, y: 10, z: 166, heading: 0 },
+      { name: 'Titan Park – Giant Bowl & Wall', x: 190, y: 0, z: 200, heading: 0 },
     ];
     this._build();
   }
@@ -335,6 +340,7 @@ export class World {
       { x: -50, z: 10, R: 8, D: 2.6 },          // plaza bowl
       { x: 84, z: 121, R: 8.5, D: 2.3 },        // skatepark flow bowl
       { x: 176, z: -60, R: 11, D: 4 },          // Mega Park deep bowl
+      { x: 190, z: 222, R: 14, D: 5 },          // Titan Park giant bowl
     ];
     const E = 80; // visual ground extends beyond bounds
     const gx0 = b.minX - E, gx1 = b.maxX + E, gz0 = b.minZ - E, gz1 = b.maxZ + E;
@@ -368,6 +374,7 @@ export class World {
     this._street();
     this._skatepark();
     this._megaPark();
+    this._titanPark();
     this._cityDetail();
     this._terrain();
     this._decor();
@@ -687,7 +694,7 @@ export class World {
       if (hole[3] < z1) out.push([hole[0], hole[3], hole[2], z1]);
       return out;
     });
-    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.013);
+    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.022);  // park slab, clear of the ground below
     const E = Math.PI / 2, Wd = -Math.PI / 2;
 
     // ---- THE DROP: 12 m tower → giant curved roll-in (heading +x)
@@ -702,7 +709,7 @@ export class World {
     this.wedge({ x: 164, z: zc, w: lane, d: 8, h0: 0, h1: 3.5, yaw: E, tag: 'mega2_kicker' }, C.ramp, C.rampSide);
     this.wedge({ x: 189, z: zc, w: lane + 2, d: 30, h0: 2.6, h1: 0, yaw: E, tag: 'mega2_land' }, C.ramp, C.rampSide);
     this.col.addZone({ x: 189, z: zc, w: 30, d: lane + 2, tag: 'mega2_land' });
-    this.patch(168, zc - lane / 2, 174, zc + lane / 2, 0xd9b45a, 0.016);
+    this.patch(168, zc - lane / 2, 174, zc + lane / 2, 0xd9b45a, 0.04);
     this._qp(221.5 - 1, zc, lane + 2, 6.6, E, 3, 85, 'mega2_quarter');
 
     // ---- BIG BANK & 30 m DOWN-RAIL (heading +x)
@@ -741,6 +748,200 @@ export class World {
       this.geo.beam([bx - 1.75, 0, 0.2], [bx - 1.75, 3.6, 0.2], 0.05, C.metal);
       this.geo.beam([bx + 1.75, 0, 0.2], [bx + 1.75, 3.6, 0.2], 0.05, C.metal);
     }
+  }
+
+  // ---------------------------------------------------------------- JUMP DESIGNER
+  // Builds kicker → gap → knuckle deck → landing slope (all heading +z) so that a
+  // rider arriving at the kicker at ~v m/s lands about 40% of the way down the
+  // landing, with the landing angled to match the flight path (soft touchdown).
+  // It then checks the realistic speed range (8% slower … 6% faster): the slow
+  // rider must still clear the gap, the fast rider must still land on the slope
+  // (no overshoot onto the flat). Returns where the landing ends and the speed
+  // you'll have at the bottom.
+  _designJump({ x, w, z0, h, d, v, name, label, points = 1000 }) {
+    const g = PHYSICS.gravity, th = Math.atan2(h, d);
+    const lip = (vv) => 0.965 * Math.sqrt(Math.max(1, vv * vv - 2 * g * h));
+    const hL = h * 0.85;
+    const fly = (vv, yT) => {                       // where the flight path comes down through height yT
+      const vl = lip(vv), vx = vl * Math.cos(th), vy = vl * Math.sin(th);
+      const t = (vy + Math.sqrt(vy * vy + 2 * g * (h - yT))) / g;
+      return { x: vx * t, vyEnd: vy - g * t, vx };
+    };
+    // Landing slope: matched to the flight angle, but gentle enough that the
+    // landing is long enough for the whole speed range (1.5× the spread between a
+    // slow and a fast rider). A slight mismatch is fine — touchdown impact is
+    // checked below and kept well under the bail limit.
+    const mid = fly(v, 0.6 * hL);
+    const spread = fly(v * 1.06, 0.6 * hL).x - fly(v * 0.92, 0.6 * hL).x;
+    const mMatch = Math.abs(mid.vyEnd) / mid.vx;
+    let m = Math.min(mMatch * 0.9, hL / (1.5 * spread + 4));
+    m = Math.max(0.12, Math.min(0.8, m));
+    const impactAt = (mm) => {                      // normal speed into the slope at the nominal touchdown
+      const a = Math.atan(mm), vx = mid.vx, vy = mid.vyEnd;   // vy < 0
+      return Math.abs(-vy * Math.cos(a) - vx * Math.sin(a));
+    };
+    while (impactAt(m) > 8 && m < mMatch) m *= 1.08;
+    let Ll, xs, gap, dk;
+    const landX = (vv) => {                         // step the real flight over the piecewise ground
+      const vl = lip(vv); let vx = vl * Math.cos(th), vy = vl * Math.sin(th), px = 0, py = h;
+      for (let i = 0; i < 3000; i++) {
+        vy -= g * 0.004; vx *= 1 - 0.01 * 0.004; px += vx * 0.004; py += vy * 0.004;
+        const gy = px < gap ? 0 : px < xs ? hL : px < xs + Ll ? hL - m * (px - xs) : 0;
+        if (i > 5 && py <= gy) return px;
+      }
+      return px;
+    };
+    for (let it = 0; it < 10; it++) {
+      Ll = hL / m;
+      xs = fly(v, hL - m * 0.4 * Ll).x - 0.4 * Ll;
+      dk = 2; gap = xs - dk;
+      if (landX(v * 1.06) > xs + 0.9 * Ll && m > 0.13) { m *= 0.88; continue; }   // longer, shallower landing
+      break;
+    }
+    const slow = landX(v * 0.92);
+    if (slow < gap + 0.5) { gap = Math.max(1.5, slow - 1.0); dk = xs - gap; }       // pull the knuckle closer
+    const zl = z0 + d;
+    this.wedge({ x, z: z0 + d / 2, w, d, h0: 0, h1: h, yaw: 0, tag: name + '_kick' }, C.ramp, C.rampSide);
+    this.box({ x, z: zl + gap + dk / 2, w: w + 2, d: dk, h: hL, tag: name + '_land' }, C.concrete, C.concreteSide);
+    this.wedge({ x, z: zl + xs + Ll / 2, w: w + 2, d: Ll, h0: hL, h1: 0, yaw: 0, tag: name + '_land' }, C.ramp, C.rampSide);
+    this.patch(x - w / 2, zl, x + w / 2, zl + gap, 0xd9b45a, 0.04);
+    this.col.addZone({ x, z: zl + gap + (dk + Ll) / 2, w: w + 2, d: dk + Ll, tag: name + '_land' });
+    GAPS.push({ name: label, from: name + '_kick', to: name + '_land', points });
+    const vl = lip(v);
+    const vOut = 0.9 * Math.sqrt(vl * vl + 2 * g * h);    // calibrated against test rides (landing + slope friction)
+    (this.jumpLog = this.jumpLog || []).push({ name, v: +v.toFixed(1), lip: +vl.toFixed(1), gap: +gap.toFixed(1), slope: +m.toFixed(2), landLen: +Ll.toFixed(1), slowLand: +slow.toFixed(1), fastLand: +landX(v * 1.06).toFixed(1), xs: +xs.toFixed(1) });
+    return { end: zl + xs + Ll, vOut };
+  }
+  // speed after rolling `dist` metres on flat ground (same friction as the game)
+  _coast(v, dist) {
+    for (let s = 0; s < dist; s += 0.5) v = Math.max(1, v - (v * PHYSICS.rollFriction + PHYSICS.rollDrag) * 0.5 / v);
+    return v;
+  }
+
+  // ---------------------------------------------------------------- TITAN PARK (far south)
+  // The giant park: four long lines that start from drop-in towers (so your speed
+  // into every jump is predictable), plus a transition zone.
+  _titanPark() {
+    const X0 = 20, X1 = 228, Z0 = 162, Z1 = 396, g = PHYSICS.gravity;
+    // floor slab, cut around the giant bowl
+    let slab = [[X0, Z0, X1, Z1]];
+    const hole = [174.5, 206.5, 205.5, 237.5];
+    slab = slab.flatMap(([x0, z0, x1, z1]) => {
+      if (hole[2] <= x0 || hole[0] >= x1 || hole[3] <= z0 || hole[1] >= z1) return [[x0, z0, x1, z1]];
+      const out = [];
+      if (hole[0] > x0) out.push([x0, z0, hole[0], z1]);
+      if (hole[2] < x1) out.push([hole[2], z0, x1, z1]);
+      if (hole[1] > z0) out.push([hole[0], z0, hole[2], hole[1]]);
+      if (hole[3] < z1) out.push([hole[0], hole[3], hole[2], z1]);
+      return out;
+    });
+    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.022);  // park slab, clear of the ground below
+    const tower = (x, w, h, z0, z1, tag) => {
+      this.box({ x, z: (z0 + z1) / 2, w, d: z1 - z0, h, tag }, C.wood, C.woodSide);
+      for (let zz = z0 + 0.5; zz <= z1; zz += 2.5) for (const sx of [-1, 1]) this.geo.beam([x + sx * (w / 2 - 0.1), h, zz], [x + sx * (w / 2 - 0.1), h + 1.1, zz], 0.05, C.metal);
+      this.geo.beam([x - w / 2, h + 1.1, z0 + 0.1], [x + w / 2, h + 1.1, z0 + 0.1], 0.05, C.metal);
+      for (let zz = z0 + 1; zz < z1; zz += 4) for (const sx of [-1, 1]) this.geo.beam([x + sx * (w / 2 - 0.3), 0, zz], [x + sx * (w / 2 - 0.3), h, zz], 0.2, C.metal);
+    };
+
+    // ===== LINE A — MEGA AIR: 22 m tower → 40 m roll-in → two big designed jumps → vert quarter
+    {
+      const x = 40, w = 14;
+      tower(x, w, 22, 163, 171, 'titanA_top');
+      this.wedge({ x, z: 191, w, d: 40, h0: 22, h1: 0, tag: 'titanA_rollin' }, C.ramp, C.rampSide);
+      let v = 0.93 * Math.sqrt(2 * g * 22);
+      let z = 211;
+      v = this._coast(v, 8); z += 8;
+      let j = this._designJump({ x, w, z0: z, h: 4, d: 9, v, name: 'titanA1', label: 'Titan Gap', points: 2500 });
+      z = j.end; v = this._coast(j.vOut, 14); z += 14;
+      if (z < 300) {
+        j = this._designJump({ x, w, z0: z, h: 3.2, d: 7, v, name: 'titanA2', label: 'Titan Gap II', points: 2500 });
+        z = j.end; v = this._coast(j.vOut, 10); z += 10;
+      }
+      const R = 7, L = R * Math.sin(85 * Math.PI / 180);
+      this.quarter({ x, z: z + L / 2, w: w + 2, d: L, R, yaw: 0, tag: 'titanA_quarter' }, C.ramp, C.rampSide);
+      this.box({ x, z: z + L + 1.5, w: w + 2, d: 3, h: R * (1 - Math.cos(85 * Math.PI / 180)), tag: 'titanA_deck' }, C.concrete, C.concreteSide);
+      this.lineEnds = { A: z + L + 3 };
+    }
+
+    // ===== LINE B — RAIL LINE: 12 m tower → roll-in onto a 3 m deck of ledges & rails → 17-stair → street
+    {
+      const x = 85, w = 16, deckH = 3;
+      tower(x, w, 12, 163, 171, 'titanB_top');
+      this.wedge({ x, z: 181, w, d: 20, h0: 12, h1: deckH, tag: 'titanB_rollin' }, C.ramp, C.rampSide);
+      this.box({ x, z: 221, w, d: 60, h: deckH, tag: 'titanB_deck' }, C.concrete, C.concreteSide);
+      this.ledge({ x: x - 4.5, z: 205, w: 0.6, d: 14, h: deckH + 0.45, base: deckH }, C.ledge, C.ledgeSide);
+      this.ledge({ x: x + 4.5, z: 230, w: 0.6, d: 16, h: deckH + 0.45, base: deckH }, C.ledge, C.ledgeSide);
+      this.rail([x, deckH + 0.5, 213], [x, deckH + 0.5, 238], 'titanrail');
+      this.ledge({ x: x - 4, z: 244, w: 3, d: 5, h: deckH + 0.22, base: deckH, tag: 'manualpad' }, C.pad, C.padSide, 'manualpad');
+      // 17-stair down to the ground with two long handrails
+      const n = 17, stepH = deckH / n, tread = 0.38, zTop = 251;
+      for (let i = 1; i < n; i++) this.box({ x, z: zTop + (i - 1) * tread + tread / 2, w: 10, d: tread, h: deckH - i * stepH, tag: 'titanB_steps', noShadow: true }, i % 2 ? 0xd6d0c4 : 0xc9c2b4, C.concreteSide);
+      for (const sx of [-1, 1]) this.box({ x: x + sx * 6.5, z: zTop + 3.05, w: 3, d: 6.1, h: 0.1, tag: 'titanB_side' }, C.concrete, C.concreteSide);
+      const run = (n - 1) * tread, slope = stepH / tread;
+      for (const sx of [-1, 1]) {
+        const rx = x + sx * 4.4, y = (zz) => deckH + 0.6 - Math.max(0, zz - zTop) * slope;
+        this.rail([rx, deckH + 0.6, zTop - 2], [rx, deckH + 0.6, zTop], 'handrail_flat');
+        this.rail([rx, deckH + 0.6, zTop], [rx, y(zTop + run + 0.3), zTop + run + 0.3], 'handrail');
+      }
+      this.col.addZone({ x, z: zTop + run + 7, w: 14, d: 12, tag: 'titanB_land' });
+      GAPS.push({ name: '17-Stair', from: 'titanB_deck', to: 'titanB_land', points: 1800 });
+      // street section after the stairs: long flat bar, kinked ledge, bank-to-ledge
+      this.rail([x - 3, 0.4, 272], [x - 3, 0.4, 300], 'flatbar');
+      this.ledge({ x: x + 3, z: 290, w: 0.6, d: 18, h: 0.5 }, C.ledge, C.ledgeSide);
+      this._bank(x, 312, w, 6, 1.5, 0, 'titanB_bank');
+      this.box({ x, z: 318, w, d: 6, h: 1.5, tag: 'titanB_block' }, C.concrete, C.concreteSide);
+      this._bank(x, 324, w, 6, 1.5, Math.PI, 'titanB_bank');
+      this.ledge({ x, z: 318, w: 4, d: 0.6, h: 1.95, base: 1.5 }, C.ledge, C.ledgeSide);
+    }
+
+    // ===== LINE C — DROP LINE: 10 m deck → roll off onto a long landing → designed kicker gap → quarter
+    {
+      const x = 130, w = 14, H = 10;
+      tower(x, w, H, 163, 185, 'titanC_top');
+      this.wedge({ x, z: 200.2, w: w + 2, d: 30, h0: H - 0.25, h1: 0, tag: 'titanC_land' }, C.ramp, C.rampSide);
+      this.col.addZone({ x, z: 200.2, w: w + 2, d: 30, tag: 'titanC_land' });
+      GAPS.push({ name: 'The Big Drop', from: 'titanC_top', to: 'titanC_land', points: 1500 });
+      // speed at the bottom: a few pushes on the deck (~6 m/s) + 10 m of drop
+      // calibrated from test rides: a lazy push (4 m/s) to a full push (8 m/s) on the deck
+      // arrives at the kicker at ~13.5–15 m/s
+      let v = 0.89 * Math.sqrt(30 + 2 * g * H);
+      let z = 215.2;
+      v = this._coast(v, 12); z += 12;
+      const j = this._designJump({ x, w, z0: z, h: 3, d: 6.5, v, name: 'titanC1', label: 'Drop Line Gap', points: 2000 });
+      z = j.end + 10;
+      const R = 5.5, L = R * Math.sin(85 * Math.PI / 180);
+      this.quarter({ x, z: z + L / 2, w: w + 2, d: L, R, yaw: 0, tag: 'titanC_quarter' }, C.ramp, C.rampSide);
+      this.box({ x, z: z + L + 1.5, w: w + 2, d: 3, h: R * (1 - Math.cos(85 * Math.PI / 180)), tag: 'titanC_deck' }, C.concrete, C.concreteSide);
+    }
+
+    // ===== FUNBOX SECTION between the lines
+    {
+      this._pyramid(62, 285, 8, 6, 1.2, 3, 'titanfun');
+      this.rail([59, 1.6, 285], [65, 1.6, 285], 'parkrail');
+      this.ledge({ x: 62, z: 310, w: 0.6, d: 14, h: 0.5 }, C.ledge, C.ledgeSide);
+      this.ledge({ x: 62, z: 330, w: 5, d: 3, h: 0.22, tag: 'manualpad' }, C.pad, C.padSide, 'manualpad');
+      this.rail([58, 0.4, 345], [66, 0.4, 365], 'flatbar');
+    }
+
+    // ===== TRANSITION ZONE: giant bowl (5 m deep), big spine, mega hip, 8 m quarter wall
+    {
+      const sL = 5 * Math.sin(65 * Math.PI / 180);
+      this.quarter({ x: 188, z: 290 + sL / 2, w: 22, d: sL, R: 5, yaw: Math.PI, tag: 'spine' }, C.ramp, C.rampSide);
+      const sLip = this.quarter({ x: 188, z: 290 - sL / 2, w: 22, d: sL, R: 5, yaw: 0, tag: 'spine' }, C.ramp, C.rampSide);
+      this.rail([177.2, sLip + 0.02, 290], [198.8, sLip + 0.02, 290], 'coping', C.coping, false);
+      this._pyramid(190, 335, 10, 8, 2.5, 5.5, 'titanhip');
+      this.rail([186, 2.9, 335], [194, 2.9, 335], 'parkrail');
+      const R = 9, L = R * Math.sin(85 * Math.PI / 180), lip = R * (1 - Math.cos(85 * Math.PI / 180));
+      this.quarter({ x: 188, z: 389.5 - L / 2, w: 64, d: L, R, yaw: 0, tag: 'titan_wall' }, C.ramp, C.rampSide);
+      this.box({ x: 188, z: 392.7, w: 64, d: 6.4, h: lip, tag: 'titan_wall_deck' }, C.concrete, C.concreteSide);
+      this.rail([156.2, lip + 0.02, 389.5], [219.8, lip + 0.02, 389.5], 'coping', C.coping, false);
+    }
+
+    // ===== perimeter, lights
+    this._fence(X0, Z0, X0 + 0.4, Z1); this._fence(X1 - 0.4, Z0, X1, Z1); this._fence(X0, Z1 - 0.4, X1, Z1);
+    this._fence(X0, Z0, 31, Z0 + 0.4); this._fence(140, Z0, X1, Z0 + 0.4);
+    for (const [x, z] of [[22, 164], [226, 164], [22, 394], [226, 394], [108, 280], [160, 260], [160, 360]]) this._floodlight(x, z, 14);
+    if (typeof console !== 'undefined') console.info('Titan Park jumps', JSON.stringify(this.jumpLog));
   }
 
   // ---------------------------------------------------------------- city detail
@@ -820,7 +1021,7 @@ export class World {
   // Rolling hills far outside the city (no collision), coloured with a bit of
   // atmospheric haze so the horizon isn't just a flat edge.
   _terrain() {
-    const cx = 60, cz = 20, S = 72, RINGS = 9, r0 = 270, r1 = 440;
+    const cx = 60, cz = 140, S = 80, RINGS = 9, r0 = 335, r1 = 520;
     const haze = new THREE.Color(0x9aa3b2), base = new THREE.Color(0x4f7a3a), rock = new THREE.Color(0x7d7468);
     const pos = [], col = [], c = new THREE.Color();
     const h = (a, r) => {
@@ -868,7 +1069,7 @@ export class World {
       if (hole[3] < z1) out.push([hole[0], hole[3], hole[2], z1]);
       return out;
     });
-    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.013);
+    for (const [x0, z0, x1, z1] of slab) this.patch(x0, z0, x1, z1, C.concrete, 0.022);  // park slab, clear of the ground below
 
     // ---- helpers
     const bank = (x, z, w, len, h, yaw, tag = 'bank') =>
@@ -968,7 +1169,7 @@ export class World {
     // euro gap: bank → gap → block against the east wall
     bank(89, 98, 6, 4, 1.1, E, 'euro_bank');
     this.box({ x: 96.05, z: 98, w: 7.1, d: 6, h: 1.1, tag: 'euro_land' }, C.concrete, C.concreteSide);
-    this.patch(91, 95, 92.5, 101, 0xd9b45a, 0.016);
+    this.patch(91, 95, 92.5, 101, 0xd9b45a, 0.04);
 
     // ---- south: rollers, long ledge, big quarter, flow bowl
     for (let i = 0; i < 4; i++) {

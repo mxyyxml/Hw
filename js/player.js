@@ -214,7 +214,9 @@ export class Player {
 
     // --- steering
     const turn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
-    let rate = lerp(P.turnRateLow, P.turnRateHigh, clamp(this.speed / P.pushMaxSpeed, 0, 1));
+    // grip-limited carving: turn rate = sideways grip / speed (like real urethane
+    // wheels) — tight turns when slow, long sweeping carves when bombing
+    let rate = Math.min(P.turnRateLow, P2.maxCarveAccel / Math.max(this.speed, 0.5));
     if (this.crouching) rate *= P.crouchTurnBonus;
     this.heading += turn * rate * dt;
     this.yawRate = turn * rate;
@@ -392,6 +394,7 @@ export class Player {
     if (this.powersliding) { this.powersliding = false; this.slideTime = 0; }
     if (this.manual) this.endManual();
     this.state = 'air';
+    this.emit('launch', { speed: Math.hypot(this.vel.x, this.vel.y, this.vel.z), tag: this.groundTag, x: this.pos.x, z: this.pos.z });
     this.air = {
       yaw: this.modelYaw(), spin: 0, spinVel: 0, time: 0,
       takeoffTag: this.groundTag, takeoffY: this.pos.y, maxY: this.pos.y, vert: wasVert,

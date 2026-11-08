@@ -88,7 +88,7 @@ class Game {
     this.scene.fog = new THREE.Fog(HORIZON, 70, GRAPHICS.low.fogFar);
     this.sky = makeSky(HORIZON);
     this.scene.add(this.sky);
-    this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, GRAPHICS.low.drawDistance);
+    this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, GRAPHICS.low.drawDistance);
 
     // simple, cheap lighting: sky/ground hemisphere + one sun
     this.hemi = new THREE.HemisphereLight(0xd6ebff, 0x7d7260, 1.9);
