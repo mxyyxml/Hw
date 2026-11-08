@@ -307,6 +307,7 @@ export class Player {
     this.normal.set(g.nx, g.ny, g.nz);
     this.groundTag = g.tag;
     this.groundVert = g.vert; this.gvx = g.vx; this.gvz = g.vz;
+    this.groundTrans = !!(g.surf ? g.surf.type === 'quarter' : g.tag && (g.vx || g.vz));
 
     // remember a "stable" spot for bail respawns
     this.safeTimer += dt;
@@ -342,8 +343,17 @@ export class Player {
     const t = clamp(popInfo.hold / P.popChargeTime, 0, 1);
     const pop = lerp(P.popMin, P.popMax, t);
     const n = this.normal;
-    this.vel.x += n.x * pop; this.vel.y += n.y * pop; this.vel.z += n.z * pop;
-    this.launch(true);
+    if (this.groundTrans && n.y < P.transPopNy) {
+      // OLLIE ON A TRANSITION (halfpipe / quarter / bowl wall): a real pop off a
+      // steep wall would throw you sideways into the flat. Like in skate games the
+      // pop goes UP the ramp instead and you stay in the ramp's plane, so you come
+      // back down onto the same wall.
+      this.vel.y += pop * P.transPopUp;
+      this.launch(true, true);
+    } else {
+      this.vel.x += n.x * pop; this.vel.y += n.y * pop; this.vel.z += n.z * pop;
+      this.launch(true);
+    }
     this.emit('pop', { strength: t });
     this.startPopTrick(popInfo);
   }
@@ -381,15 +391,17 @@ export class Player {
     return true;
   }
 
-  launch(popped) {
-    const wasVert = this.groundVert && !popped;
+  launch(popped, transPop) {
+    const wasVert = (this.groundVert && !popped) || !!transPop;
     if (wasVert) {
       // vert launch: kill the outward part so you fly straight up and come back down
+      // (moving back down the wall already? keep that, it lands you lower on the ramp)
       const vx = this.gvx, vz = this.gvz;
       const out = this.vel.x * vx + this.vel.z * vz;
-      this.vel.x -= vx * (out + P.vertInwardSpeed);
-      this.vel.z -= vz * (out + P.vertInwardSpeed);
-      this.pos.x -= vx * 0.06; this.pos.z -= vz * 0.06;
+      const keep = Math.min(out, -P.vertInwardSpeed);
+      this.vel.x -= vx * (out - keep);
+      this.vel.z -= vz * (out - keep);
+      if (!transPop) { this.pos.x -= vx * 0.06; this.pos.z -= vz * 0.06; }
     }
     if (this.powersliding) { this.powersliding = false; this.slideTime = 0; }
     if (this.manual) this.endManual();
@@ -491,7 +503,7 @@ export class Player {
     }
     // ramp magnet: once per jump, if you'd land on flat just before/after a
     // landing ramp that slopes away from you, adjust your carry to reach it
-    if (!A.magnet && t < 0.6 && hs > 2) {
+    if (!A.magnet && !A.vert && t < 0.6 && hs > 2) {
       A.magnet = true;
       const dx = this.vel.x / hs, dz = this.vel.z / hs;
       const lx = this.pos.x + this.vel.x * t, lz = this.pos.z + this.vel.z * t;
@@ -568,6 +580,7 @@ export class Player {
     const impact = -vn;
     this.normal.copy(n);
     this.groundTag = g.tag; this.groundVert = g.vert; this.gvx = g.vx; this.gvz = g.vz;
+    this.groundTrans = !!(g.surf ? g.surf.type === 'quarter' : g.tag && (g.vx || g.vz));
 
     const fail = this.landingProblem(impact, vtx, vtz);
     if (fail) { this.bail(fail); return; }

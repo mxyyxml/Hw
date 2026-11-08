@@ -45,6 +45,8 @@ export const PHYSICS = {
   lipLaunchSpeed: 1.6,      // speed (m/s) away from the ground at a sharp edge that launches you
   vertSlope: 2.6,           // ground steepness (rise/run) that counts as "vert" (≈69°)
   vertInwardSpeed: 0.55,    // on a vert launch, drift this fast back over the ramp
+  transPopNy: 0.8,          // ollie on a ramp steeper than this (normal.y) → pop stays in the ramp's plane
+  transPopUp: 0.9,          // fraction of the pop that goes straight up on a transition ollie
   landSpeedKeep: 0.96,      // fraction of speed kept on a clean landing
 
   // Bails
@@ -294,27 +296,30 @@ export const PHYSICS2 = {
 //  CLOSET — clothing & board options (Closet menu). Colours are hex numbers.
 // -----------------------------------------------------------------------------
 export const OUTFIT_OPTIONS = {
-  hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat']],
-  top:    [['tank', 'Tank top'], ['hoodie', 'Hoodie'], ['tee', 'T-shirt'], ['jacket', 'Jacket'], ['flannel', 'Flannel']],
-  pants:  [['jeans', 'Jeans'], ['cargo', 'Cargos'], ['shorts', 'Shorts']],
-  backpack: [[true, 'Yes'], [false, 'No']],
   body:   [['male', 'Male'], ['female', 'Female']],
+  hairStyle: [['buzz', 'Buzz cut'], ['short', 'Short'], ['fringe', 'Fringe'], ['flow', 'Skater flow'], ['long', 'Long'], ['curly', 'Curly'], ['mohawk', 'Mohawk'], ['bald', 'Bald']],
+  facialHair: [['none', 'None'], ['stubble', 'Stubble'], ['mustache', 'Mustache'], ['goatee', 'Goatee'], ['beard', 'Beard']],
+  hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat']],
+  glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],
+  top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['hoodie', 'Hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
+  pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts']],
+  backpack: [[true, 'Yes'], [false, 'No']],
   stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
   pushStyle: [['normal', 'Normal push'], ['mongo', 'Mongo (front foot)']],
 };
 export const OUTFIT_COLORS = {
+  skin:       [0xf6dcc4, 0xf3d2b3, 0xe8b98f, 0xe0ac69, 0xc68642, 0xa86b3c, 0x8d5524, 0x5c3a21],
+  hairColor:  [0x16110d, 0x2b1d14, 0x4a3020, 0x6e4a2e, 0xa0522d, 0xc89a5a, 0xe6c35c, 0xb0b0b0, 0xd94f8a, 0x3b6fd4],
   hatColor:   [0xf4743b, 0x1d1d1d, 0xe63946, 0x2a9d8f, 0xf2c14e, 0xffffff, 0x457b9d, 0x6a4c93],
-  topColor:   [0x2a9d8f, 0x1d1d1d, 0xe63946, 0xf2f2f2, 0x457b9d, 0xf4a261, 0x6a994e, 0x9b5de5, 0x8d6e63, 0xffafcc],
-  pantsColor: [0x2b3a55, 0x3d5a80, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
-  shoeColor:  [0xf1f1f1, 0x9a9a9a, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63],
-  skin:       [0xf3d2b3, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a21],
-  hairColor:  [0x2b1d14, 0x5a3825, 0xa0522d, 0xe6c35c, 0x1d1d1d, 0xb0b0b0, 0xd94f8a],
+  topColor:   [0xf2f2f2, 0x1d1d1d, 0x7a7d80, 0xe63946, 0x8b1e2d, 0x2a9d8f, 0x457b9d, 0x1f3a5f, 0xf4a261, 0x6a994e, 0x556b2f, 0x9b5de5, 0x8d6e63, 0xffafcc],
+  pantsColor: [0x2b3a55, 0x3d5a80, 0x6d8fb3, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
+  shoeColor:  [0xf1f1f1, 0x9a9a9a, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63, 0x2a9d8f],
   deckColor:  [0xe9c46a, 0xe63946, 0x2a9d8f, 0x6a4c93, 0xf4a261, 0x1d1d1d, 0xffffff, 0x90be6d],
 };
 export const DEFAULT_OUTFIT = {
-  hat: 'none', hatColor: 0xf4743b, top: 'tank', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
+  hat: 'none', hatColor: 0xf4743b, top: 'tee', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
   shoeColor: 0x9a9a9a, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0x1d1d1d, backpack: false,
-  stance: 'regular', pushStyle: 'normal', body: 'male',
+  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none',
 };
 
 // -----------------------------------------------------------------------------

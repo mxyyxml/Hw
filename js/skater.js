@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { DEFAULT_OUTFIT, PUSH } from './config.js';
 import { buildBody } from './body.js';
-import { fitSkeleton, buildHuman } from './human.js';
+import { fitSkeleton, buildHuman, hairTextures } from './human.js';
 import { getFabric } from './textures.js';
 
 const THIGH = 0.42, SHIN = 0.42;          // leg bone lengths
@@ -25,6 +25,22 @@ function joint(parent, x, y, z) {
 
 function hemi(r, sy = 1) { return new THREE.SphereGeometry(r, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, sy, 1); }
 
+// flannel: woven plaid (greyscale, tinted by the top colour)
+let _plaid = null;
+function plaidTexture() {
+  if (_plaid) return _plaid;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e8e8e8'; x.fillRect(0, 0, 128, 128);
+  x.fillStyle = 'rgba(30,30,30,0.55)'; x.fillRect(0, 40, 128, 34); x.fillRect(40, 0, 34, 128);
+  x.fillStyle = 'rgba(30,30,30,0.3)'; x.fillRect(0, 100, 128, 6); x.fillRect(100, 0, 6, 128);
+  x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillRect(0, 86, 128, 2); x.fillRect(86, 0, 2, 128);
+  for (let i = 0; i < 128; i += 2) { x.fillStyle = 'rgba(0,0,0,0.05)'; x.fillRect(i, 0, 1, 128); }
+  _plaid = new THREE.CanvasTexture(c);
+  _plaid.wrapS = _plaid.wrapT = THREE.RepeatWrapping; _plaid.repeat.set(3, 2.5); _plaid.colorSpace = THREE.SRGBColorSpace;
+  return _plaid;
+}
+
 export class Skater {
   constructor(scene) {
     this.scene = scene;
@@ -39,7 +55,14 @@ export class Skater {
       pack: M(0x264653), packDark: M(0x1b343d),
       grip: M(0x1d1d1d), deck: M(0xe9c46a), deckSide: M(0xc9a24a),
       truck: M(0xb8bcc2), wheel: M(0xf8f4e3), eye: M(0x1d1d1d),
+      brow: M(0x2b1d14), hairCard: M(0x2b1d14), stubble: M(0x2b1d14), lens: M(0x111111), frame: M(0x1d1d1d),
     };
+    // hair: strand textures; cards are alpha-cut ribbons, stubble is a faint shadow
+    { const ht = hairTextures(); this.mat.hair.map = ht.shell; this.mat.hairCard.map = ht.card; }
+    Object.assign(this.mat.hairCard, { alphaTest: 0.35, side: THREE.DoubleSide });
+    Object.assign(this.mat.stubble, { transparent: true, opacity: 0.38, depthWrite: false });
+    Object.assign(this.mat.lens, { transparent: true, opacity: 0.75 });
+    for (const k of ['top', 'pants', 'hair']) this.mat[k].side = THREE.DoubleSide;
     this.root = new THREE.Group();
     scene.add(this.root);
     const mesh = (parent, geo, mat, x = 0, y = 0, z = 0) => {
@@ -69,7 +92,7 @@ export class Skater {
     this.body = joint(this.bodyBase, 0, 0, 0);
     this.hips = bone(this.body, 0, 0.8, 0);
     const m = this.mat;
-    m.top.map = getFabric('cotton');
+    m.top.map = this._cotton = getFabric('cotton');
     m.pants.map = getFabric('denim');
     this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
@@ -204,9 +227,6 @@ export class Skater {
       eye.position.copy(e); this.head.add(eye);
       const iris = new THREE.Mesh(new THREE.SphereGeometry(0.0066, 10, 8).scale(1, 1, 0.5), m.eye);
       iris.position.set(e.x, e.y, e.z + 0.0105); this.head.add(iris);
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.006, 0.01), m.hair);
-      brow.position.set(e.x * 1.15, e.y + 0.021, e.z + 0.008); brow.rotation.z = (side === 'l' ? -1 : 1) * 0.1;
-      this.head.add(brow);
     }
     // fit hats & hair (designed for the old head) onto the real head
     const top = J['head-2'].y, eyeY = J['l-eye'].y;
@@ -232,11 +252,34 @@ export class Skater {
     for (const h of this.hair) h.visible = false;      // hair is painted on the real scalp instead
     this._hairless = true;
     // the bare feet are hidden inside the sneakers
-    const hidden = new THREE.MeshBasicMaterial({ visible: false });
-    this.bodyMesh = buildHuman(this, { skin: m.skin, top: m.top, pants: m.pants, shoe: hidden, hair: m.hair, belt: m.sole });
-    if (this.belt) this.belt.visible = false;           // the fitted waistband replaces it
+    this.bodyMesh = buildHuman(this);
+    if (this.belt) this.belt.visible = false;
+    this._makeGlasses(J);
     // proper sneakers on the real feet
     for (const L of this.legs) this._makeSneaker(L.foot);
+  }
+
+  // glasses on the real face (clear frames or shades)
+  _makeGlasses(J) {
+    const m = this.mat, g = new THREE.Group();
+    const neck = new THREE.Vector3(...[J.neck.x, J.neck.y, J.neck.z]);
+    for (const side of ['l', 'r']) {
+      const e = J[side + '-eye'].clone().sub(neck);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.0205, 18).scale(1.12, 0.86, 1), m.lens);
+      lens.position.set(e.x * 1.04, e.y - 0.002, e.z + 0.02); g.add(lens);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0023, 5, 20).scale(1.12, 0.86, 1), m.frame);
+      rim.position.copy(lens.position); g.add(rim);
+      const sx = Math.sign(e.x);
+      const temple = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.004, 0.105), m.frame);
+      temple.position.set(sx * 0.071, e.y + 0.002, e.z - 0.032); temple.rotation.y = -sx * 0.06; g.add(temple);
+    }
+    const e = J['l-eye'].clone().sub(neck);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.0035, 0.004), m.frame);
+    bridge.position.set(0, e.y + 0.004, e.z + 0.021); g.add(bridge);
+    g.traverse((o) => { o.castShadow = false; });
+    g.visible = false;
+    this.head.add(g);
+    this.glasses = g;
   }
 
   // A low-poly sneaker built from a foot-shaped outline: contoured rubber sole,
@@ -315,6 +358,16 @@ export class Skater {
     const m = this.mat, dark = (hex, f = 0.78) => new THREE.Color(hex).multiplyScalar(f);
     m.skin.color.setHex(o.skin); m.skinDark.color.copy(dark(o.skin, 0.86));
     m.hair.color.setHex(o.hairColor);
+    for (const k of ['brow', 'hairCard', 'stubble']) m[k].color.setHex(o.hairColor);
+    m.brow.color.multiplyScalar(0.8);
+    // hair textures are mid-grey: lift the colour so the tint matches the swatch
+    m.hair.color.multiplyScalar(1.25); m.hairCard.color.multiplyScalar(1.25);
+    if (this.glasses) {
+      this.glasses.visible = !!o.glasses && o.glasses !== 'none';
+      const shades = o.glasses === 'shades';
+      m.lens.color.setHex(shades ? 0x101418 : 0xdfe8ee); m.lens.opacity = shades ? 0.82 : 0.14;
+      m.frame.color.setHex(shades ? 0x111111 : o.glasses === 'round' ? 0xb08d57 : 0x222222);
+    }
     m.top.color.setHex(o.topColor); m.topDark.color.copy(dark(o.topColor, o.top === 'flannel' ? 0.55 : 0.78));
     m.pants.color.setHex(o.pantsColor); m.pantsDark.color.copy(dark(o.pantsColor));
     m.shoe.color.setHex(o.shoeColor);
@@ -326,7 +379,8 @@ export class Skater {
     show(P.jacketOpen, simple && o.top === 'jacket'); show(P.collar, simple && (o.top === 'jacket' || o.top === 'flannel'));
     show(P.flannel, simple && o.top === 'flannel');
     show(P.pack, !!o.backpack); show(P.packStraps, !!o.backpack);
-    show(P.cargo, o.pants === 'cargo');
+    show(P.cargo, simple && o.pants === 'cargo');
+    m.top.map = o.top === 'flannel' ? plaidTexture() : this._cotton || m.top.map;
     for (const A of this.arms) A.cuff.visible = !this.human && o.top !== 'tee' && o.top !== 'tank';
     for (const L of this.legs) L.sock.visible = !this.human && o.pants === 'shorts';
     if (this.seams) for (const r of this.seams) if (r && r.userData.hem) r.visible = o.pants !== 'shorts';
@@ -345,11 +399,18 @@ export class Skater {
     const pbr = level === 'high' || level === 'ultra';
     if (!this._lambert) this._lambert = { ...this.mat };
     if (!this._pbr) {
-      const R = { skin: 0.55, skinDark: 0.6, eye: 0.2, topTrim: 0.4, truck: 0.35, wheel: 0.5, grip: 0.95, deck: 0.6, deckSide: 0.6, sole: 0.8, shoe: 0.75, hair: 0.7 };
-      const metal = { truck: 0.75 };
+      const R = { skin: 0.5, skinDark: 0.55, eye: 0.15, topTrim: 0.3, truck: 0.35, wheel: 0.5, grip: 0.95, deck: 0.6, deckSide: 0.6, sole: 0.8, shoe: 0.75, hair: 0.55, hairCard: 0.55, brow: 0.7, stubble: 0.9, lens: 0.05, frame: 0.35 };
+      const metal = { truck: 0.75, frame: 0.2 };
       this._pbr = {};
       for (const [k, m] of Object.entries(this._lambert)) {
-        this._pbr[k] = new THREE.MeshStandardMaterial({ color: m.color, map: m.map || null, roughness: R[k] ?? 0.92, metalness: metal[k] ?? 0 });
+        const props = { color: m.color, map: m.map || null, roughness: R[k] ?? 0.92, metalness: metal[k] ?? 0,
+          side: m.side, transparent: m.transparent, opacity: m.opacity, alphaTest: m.alphaTest, depthWrite: m.depthWrite };
+        if (k === 'skin' || k === 'skinDark') {
+          // skin: a soft reddish sheen at grazing angles fakes light scattering under the skin
+          this._pbr[k] = new THREE.MeshPhysicalMaterial({ ...props, sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color(0xff8c6e), clearcoat: 0.06, clearcoatRoughness: 0.6 });
+        } else if (k === 'hair' || k === 'hairCard') {
+          this._pbr[k] = new THREE.MeshPhysicalMaterial({ ...props, sheen: 0.5, sheenRoughness: 0.35, sheenColor: new THREE.Color(0x8a7560) });
+        } else this._pbr[k] = new THREE.MeshStandardMaterial(props);
       }
     }
     const from = pbr ? this._lambert : this._pbr, to = pbr ? this._pbr : this._lambert;

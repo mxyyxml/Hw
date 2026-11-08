@@ -140,7 +140,8 @@ export class UI {
         const o = g.outfit;
         const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
           hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
-          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing', body: 'Body' };
+          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing', body: 'Body',
+          hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Glasses' };
         h = `<h2>Closet</h2><div class="closet">`;
         for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
           h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +

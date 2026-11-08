@@ -18,9 +18,21 @@ src, dst = sys.argv[1], sys.argv[2]
 # optional 3rd argument: folder holding MakeHuman .target files (all CC0)
 tdir = sys.argv[3] if len(sys.argv) > 3 else None
 MALE = [('universal-male-young-maxmuscle-averageweight.target', 0.42),
+        ('male-young-averagemuscle-averageweight-idealproportions.target', 0.7),
         ('female-young-averagemuscle-averageweight-mincup-averagefirmness.target', 1.0),   # flat chest
-        ('male-young-averagemuscle-averageweight-idealproportions.target', 0.7)]
-FEMALE = [('universal-female-young-maxmuscle-averageweight.target', 0.4)]
+        # athletic skater build: V-shaped back, broader chest & shoulders, slimmer
+        # hips and a flatter seat (all MakeHuman modelling targets, CC0)
+        ('torso-vshape-incr.target', 0.55),
+        ('torso-scale-horiz-incr.target', 0.25),
+        ('hip-scale-horiz-decr.target', 0.5),
+        ('buttocks-volume-decr.target', 0.7),
+        ('torso-muscle-pectoral-decr.target', 0.45),
+        ('neck-scale-horiz-incr.target', 0.3),
+        ('l-upperarm-shoulder-muscle-incr.target', 0.4),
+        ('r-upperarm-shoulder-muscle-incr.target', 0.4)]
+FEMALE = [('universal-female-young-maxmuscle-averageweight.target', 0.4),
+          ('buttocks-volume-decr.target', 0.35),
+          ('hip-scale-horiz-decr.target', 0.15)]
 
 def read_target(path):
     t = {}
@@ -79,6 +91,25 @@ to_body = lambda p: [p[0] * S, (p[1] - ymin) * S, (p[2] - zc) * S]
 P = [to_body(V[i]) for i in used]
 PF = [to_body(VF[i]) for i in used]
 JB = {k: to_body(v) for k, v in J.items()}
+
+# ---- sculpt: MakeHuman's base has a strong lower-back sway and very prominent
+# glutes. Flatten the seat and fill the lumbar curve a little so the silhouette
+# reads as a normal athletic young guy (and jeans hang straight from the seat).
+def sculpt(points, k):
+    hipY, waistY = JB['l-upper-leg'][1], JB['spine-4'][1]
+    g = lambda y, c, s_: math.exp(-((y - c) / s_) ** 2)
+    for p in points:
+        if p[2] >= 0:
+            continue
+        x, y = p[0], p[1]
+        if abs(x) > 0.2 and y < waistY:               # hanging arms/hands: leave alone
+            continue
+        seat = 0.24 * g(y, hipY + 0.005, 0.075)        # biggest at the widest part of the seat
+        fold = 0.1 * g(y, hipY - 0.07, 0.04)           # tighter under-butt fold
+        lumbar = 0.16 * g(y, waistY + 0.13, 0.05)      # fill the small of the back
+        p[2] *= 1 - k * (seat + fold) + k * lumbar
+sculpt(P, 0.45)
+sculpt(PF, 0.35)
 
 # ---- bones (game order) as segments: start joint → end joint, parent, side (+x = character's left)
 hips_bot = [0, JB['l-upper-leg'][1] - 0.06, JB['pelvis'][2]]

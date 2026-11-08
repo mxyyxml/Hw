@@ -65,9 +65,15 @@ Hold your phone sideways.
 | **? · CAM · WALK · ↺ · ❚❚** | Help, camera, walk, respawn, pause |
 
 ### 👕 Closet
-Title screen or Pause → **Closet**: hats, tops (hoodie, tee, jacket, flannel), jeans / cargos / shorts,
-colours for everything, skin tone, hair, backpack, board colour, **stance (Regular / Goofy)** and
-**push style (Normal / Mongo)**. Saved in your browser.
+Title screen or Pause → **Closet**: body type, 8 hairstyles (buzz, short, fringe, skater flow, long,
+curly, mohawk, bald), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
+9 tops (tee, oversized tee, tank, long sleeve, hoodie, flannel, jacket, jersey, shirtless),
+6 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts), colours for everything, skin tone,
+hair colour, backpack, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
+Saved in your browser.
+
+Clothes and hair are real layers cut from the body surface along smooth lines (necklines, sleeves,
+hems, hairlines), loosened where fabric hangs and skinned to the same bones, so they move with the body.
 
 ### 🛹 How the physics feels
 - **Drop in** by rolling off any deck or coping into a ramp — you stay on the ramp and pick up speed.
