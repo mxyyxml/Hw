@@ -186,6 +186,14 @@ export class CollisionWorld {
     return out;
   }
 
+  // lawns (grass / dirt you can ride onto, but it stops you)
+  addLawn(x0, z0, x1, z1) { (this.lawns || (this.lawns = [])).push([x0, z0, x1, z1]); }
+  onLawn(x, z) {
+    if (!this.lawns) return false;
+    for (const l of this.lawns) if (x > l[0] && x < l[2] && z > l[1] && z < l[3]) return true;
+    return false;
+  }
+
   zonesAt(x, z) {
     const tags = [];
     for (const zr of this.zones) if (this._inside(zr, x, z)) tags.push(zr.tag);

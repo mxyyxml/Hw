@@ -213,14 +213,21 @@ export class Player {
     const f = this._f || (this._f = new THREE.Vector3());
 
     // --- steering
-    const turn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
-    // grip-limited carving: turn rate = sideways grip / speed (like real urethane
-    // wheels) — tight turns when slow, long sweeping carves when bombing
-    let rate = Math.min(P.turnRateLow, P2.maxCarveAccel / Math.max(this.speed, 0.5));
+    const want = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+    // WEIGHT SHIFT: you lean into a carve (and back up out of it) over a fraction
+    // of a second instead of the board snapping to full lock — taps make small
+    // line corrections, holding builds into a full carve
+    this.steer = (this.steer || 0) + (want - (this.steer || 0)) * Math.min(1, dt * P2.steerResponse);
+    const turn = this.steer, sp = this.speed;
+    // TRUCKS + GRIP: the trucks can't turn tighter than ~1 m radius, and at speed the
+    // wheels' sideways grip limits the carve (long sweeping carves when bombing)
+    let rate = Math.min(P.turnRateLow, sp / P2.minCarveRadius, P2.maxCarveAccel / Math.max(sp, 0.5));
+    // KICK TURN: nearly stopped, you lift the nose and pivot on the back wheels
+    if (sp < P2.kickTurnSpeed) rate = Math.max(rate, P.turnRateLow * (1 - sp / P2.kickTurnSpeed));
     if (this.crouching) rate *= P.crouchTurnBonus;
     this.heading += turn * rate * dt;
     this.yawRate = turn * rate;
-    this.lean = turn * clamp(this.speed / 4, 0.3, 1);
+    this.lean = turn * clamp(sp / 4, 0.3, 1);
     // hard carving at speed scrubs a little speed off (wheels slip sideways)
     if (turn && this.speed > 3) this.speed -= Math.abs(turn) * this.speed * P2.carveScrub * dt;
 
@@ -251,6 +258,12 @@ export class Player {
     // different surfaces roll differently (rough street vs. smooth ramps)
     const grip = P2.surfaceFriction[this.groundTag] ?? 1;
     this.speed = Math.max(0, this.speed - (this.speed * P.rollFriction + P.rollDrag) * grip * dt);
+    // grass & dirt: small wheels dig in and you stop within a couple of metres
+    if (!this.groundTag && this.col.onLawn(this.pos.x, this.pos.z)) {
+      if (this.speed > P2.grassBailSpeed) { this.bail('Rolled into the grass!'); return; }
+      this.speed = Math.max(0, this.speed - P2.grassDecel * dt);
+      this.onGrass = true;
+    } else this.onGrass = false;
 
     // --- gravity along the slope
     this._tangent(this.heading, n, f);
@@ -1040,6 +1053,7 @@ export class Player {
       boardLift: A ? (A.trick ? 0.22 : 0.12) * Math.min(1, A.time * 6) : 0,
       grab: !!(A && A.grab), grabHand: A && A.grab ? A.grab.hand : 'front',
       sideways: !!(this.grind && this.grind.def.sideways),
+      airTime: A ? A.time : 0,
       manualPitch: this.grind ? -this.grind.def.pitch : (this.manual ? (this.manual.nose ? -0.3 : 0.3) + this.manual.b * 0.12 : 0),
       bailTime: this.bailInfo ? this.bailInfo.t : 0,
       bailRoll: this.bailInfo ? this.bailInfo.roll : 0,

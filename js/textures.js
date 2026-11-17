@@ -143,10 +143,10 @@ const PHOTO = {
 };
 const NORMALS = {
   concrete: 'assets/textures/concrete_n.jpg', tiles: 'assets/textures/tiles_n.jpg', asphalt: 'assets/textures/asphalt_n.jpg',
-  ramp: 'assets/textures/ramp_n.jpg', wood: 'assets/textures/wood_n.jpg', building: 'assets/textures/brick_n.jpg',
+  ramp: 'assets/textures/ramp_n.jpg', grass: 'assets/textures/grass_n.jpg', wood: 'assets/textures/wood_n.jpg', building: 'assets/textures/brick_n.jpg',
 };
 // average colour of each photo (used to tint the procedural fallback the same way)
-const PHOTO_AVG = { concrete: '#969590', tiles: '#96938c', asphalt: '#5f5f5f', ramp: '#9b9b98', wood: '#7e6141', grass: '#978359', building: '#644a3c' };
+const PHOTO_AVG = { concrete: '#969590', tiles: '#96938c', asphalt: '#5f5f5f', ramp: '#9b9b98', wood: '#7e6141', grass: '#606c30', building: '#644a3c' };
 
 function loadImage(url, ok) {
   const img = new Image();

@@ -487,6 +487,7 @@ class Game {
     p.sync(dt);
     this.combo.update(dt, p.isHoldingCombo());
     this.rig.update(realDt, p, this.world.col);
+    this._windT = (this._windT || 0) + realDt; this.world.foliage.update(this._windT);
     this.audio.update(p.state, p.displaySpeed());
     this.ui.updateHUD(realDt);
 

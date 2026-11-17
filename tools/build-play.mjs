@@ -24,8 +24,9 @@ const walk = (dir) => {
   for (const f of readdirSync(dir)) {
     const p = join(dir, f);
     if (statSync(p).isDirectory()) walk(p);
-    else if (/\.(jpe?g|png)$/i.test(f)) {
-      const mime = /\.png$/i.test(f) ? 'image/png' : 'image/jpeg';
+    else if (/\.(jpe?g|png|webp|gltf|bin)$/i.test(f)) {
+      const ext = f.split('.').pop().toLowerCase();
+      const mime = { png: 'image/png', webp: 'image/webp', gltf: 'model/gltf+json', bin: 'application/octet-stream' }[ext] || 'image/jpeg';
       assets[p.split('\\').join('/')] = `data:${mime};base64,${readFileSync(p).toString('base64')}`;
     }
   }

@@ -86,6 +86,14 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
   off a ledge). Press E — even running or mid-jump — to throw the board down and hop onto it with your speed.
 - **Right-mouse drag while skating** swings the camera around you; it springs back when you let go.
 - **Carving grip:** turn rate is limited by sideways grip (~0.75 g), so the faster you go, the wider you carve.
+- **Weight shift:** you lean into a carve over a fraction of a second — tap A / D for small line corrections,
+  hold for a full carve. The trucks can't turn tighter than about 1 m; nearly stopped, you **kick turn**
+  (pivot on the back wheels) instead.
+- **Grass & dirt** stop you within a couple of metres; roll onto a lawn too fast and you get thrown off.
+- **Ollie on a halfpipe / quarter / bowl wall** and you go up the ramp and come back down onto it.
+- **Footplant:** feet sit across the deck (toes hang a little over the edge), lift clear while the board flips
+  and come back down to catch it; the front foot slides up toward the nose on an ollie; ankles roll with the
+  deck in a carve.
 - **Mid-air board adjust:** coming down onto a ramp, the board tilts to match it so air drop-ins land.
 
 **How it works:** you get onto rails and ledges automatically when you're close and lined up
@@ -159,6 +167,8 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | `js/audio.js` | Web Audio sound effects |
 | `js/ui.js` | HUD, pop-ups, menus |
 | `js/storage.js` | Safe localStorage helper |
+| `js/foliage.js` | Instanced trees (bark trunks + real-leaf cluster cards with wind sway), bushes and grass tufts |
+| `js/props.js` | Photo-scanned street props (glTF), GPU-instanced |
 | `js/human.js` + `js/humanData.js` | The realistic MakeHuman body fitted to the skater's skeleton (`tools/convert-human.py` makes the data) |
 | `js/body.js` | Fallback hand-built body (used only if the human data can't load) |
 | `js/ragdoll.js` | Rapier physics ragdoll for bails + the flying board |
@@ -175,7 +185,9 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | 3D engine | [three.js](https://github.com/mrdoob/three.js) 0.160.0 | MIT |
 | Ragdoll / board physics | [Rapier](https://github.com/dimforge/rapier) (`@dimforge/rapier3d-compat` 0.12.0) | Apache-2.0 |
 | Skater body: base human mesh + body-shape targets (male athletic, flat chest, ideal proportions; female athletic) | [MakeHuman](http://www.makehumancommunity.org) (`base.obj`, macrodetails / breast / proportions targets) | CC0 |
-| Photo textures: concrete floor 02, concrete tiles, asphalt 02, brushed concrete 2, plywood, leafy grass, brick wall 001, denim fabric, cotton jersey | [Poly Haven](https://polyhaven.com) | CC0 |
+| Photo textures: concrete floor 02, concrete tiles, asphalt 02, brushed concrete 2, plywood, brick wall 001, denim fabric, cotton jersey, bark brown 02 | [Poly Haven](https://polyhaven.com) | CC0 |
+| Street props: metal trash can, utility box 01, barrel 03, old tyre, trash bag, wooden crate 02 (glTF, textures reduced to 256 px) | [Poly Haven](https://polyhaven.com) | CC0 |
+| Leaves (LeafSet024), grass blades (Foliage001) and lawn (Grass004) — made into tree / bush / grass-tuft textures by `tools/make-foliage.py` | [ambientCG](https://ambientcg.com) | CC0 |
 | Sky: Kloofendal 48d Partly Cloudy (Pure Sky) | [Poly Haven](https://polyhaven.com) | CC0 |
 
 Textures were resized to 512×512 (and the concrete ones colour-neutralised) to stay light on Chromebooks;

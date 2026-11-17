@@ -16,6 +16,8 @@ import * as THREE from 'three';
 import { CollisionWorld } from './physics.js';
 import { getTexture, getNormal, TEX_SCALE } from './textures.js';
 import { GAPS, PHYSICS } from './config.js';
+import { Foliage } from './foliage.js';
+import { Props } from './props.js';
 
 // ---- colour palette (natural, slightly muted tones) --------------------------
 const C = {
@@ -229,6 +231,8 @@ export class World {
     this.scene = scene;
     this.col = new CollisionWorld();
     this.geo = new GeoBuilder();
+    this.foliage = new Foliage(scene);            // real-leaf trees, bushes & grass (instanced)
+    this.props = new Props(scene);                // photo-scanned street props (Poly Haven, CC0)
     // Teleport spots. The first one is the default respawn point.
     this.spots = [
       { name: 'Plaza (spawn)',      x: 8,   y: 0,  z: 12,  heading: Math.PI },
@@ -245,6 +249,7 @@ export class World {
       { name: 'Titan Park – Giant Bowl & Wall', x: 190, y: 0, z: 200, heading: 0 },
     ];
     this._build();
+    this.props.load(() => this.props.setQuality(this._foliageLevel || 'low'));
   }
 
   // ---- combined builders (collision + visuals) ----------------------------------
@@ -399,6 +404,8 @@ export class World {
   // Low = cheap Lambert shading. High = physically based (MeshStandardMaterial)
   // with sharper (anisotropic) textures. Materials are cached per level.
   setQuality(level) {
+    if (this._foliageLevel !== level) { this._foliageLevel = level; this.foliage.build(level); }
+    this.props.setQuality(level);
     this._mats = this._mats || {};
     for (const mesh of this.mesh.children) {
       const cat = mesh.userData.cat, key = level + cat;
@@ -969,22 +976,21 @@ export class World {
     // lawns
     for (const [x0, z0, x1, z1] of [[-105, 46, -20, 105], [-105, 108, -20, 150], [100, 46, 112, 150], [-28, -105, 100, -78], [40, -66, 100, -40]]) {
       this.patch(x0, z0, x1, z1, C.grass, 0.012);
+      this.foliage.addLawn(x0, z0, x1, z1, 0.012);
+      this.col.addLawn(x0, z0, x1, z1);
     }
     // more trees & bushes on the lawns (deterministic scatter)
     let seed = 7;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const tree = (x, z, s = 1) => {
-      this.box({ x, z, w: 0.45 * s, d: 0.45 * s, h: 3 * s, tag: 'tree' }, C.trunk, C.trunk);
-      const blobs = [[0, 4.2, 0, 1.9], [0.9, 3.6, 0.4, 1.3], [-0.8, 3.7, -0.5, 1.3], [0.1, 5.3, 0.2, 1.2]];
-      blobs.forEach(([bx, by, bz, r], i) => this.geo.addGeometry(new THREE.IcosahedronGeometry(r * s, 1), new THREE.Matrix4().makeTranslation(x + bx * s, by * s, z + bz * s), i % 2 ? C.leaf : C.leaf2));
-      const cp = []; for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; cp.push([x + Math.cos(t) * 1.9 * s, 4.3 * s, z + Math.sin(t) * 1.9 * s]); }
-      this.geo.castShadow(cp, 0);
+      this.col.addBox({ x, z, w: 0.45 * s, d: 0.45 * s, h: 3 * s, tag: 'tree' });
+      this.foliage.addTree(x, z, s);
     };
     for (const [x0, z0, x1, z1, n] of [[-100, 50, -25, 100, 26], [-100, 112, -25, 148, 14], [-25, -102, 95, -82, 16], [44, -64, 96, -44, 10]]) {
       for (let i = 0; i < n; i++) {
         const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0);
         if (rnd() < 0.7) tree(x, z, 0.8 + rnd() * 0.5);
-        else for (const [bx, bz, r] of [[0, 0, 0.7], [0.5, 0.3, 0.5], [-0.4, -0.3, 0.55]]) this.geo.addGeometry(new THREE.IcosahedronGeometry(r, 1), new THREE.Matrix4().makeTranslation(x + bx, r * 0.6, z + bz), C.leaf2);
+        else { this.foliage.addBush(x, z, 0.9 + rnd() * 0.4); this.foliage.addBush(x + 0.8, z + 0.5, 0.6 + rnd() * 0.3); }
       }
     }
     // hydrants
@@ -1220,16 +1226,9 @@ export class World {
     const trees = [[-30, 32], [30, -25], [-30, -25], [40, 40], [-40, 40], [45, -30], [-70, -20], [-70, 40],
       [-20, 60], [20, 60], [-20, 100], [20, 100], [90, -40], [105, 45], [30, 90], [-60, 90], [-25, -70], [10, -75], [50, -70]];
     for (const [x, z] of trees) {
-      this.box({ x, z, w: 0.5, d: 0.5, h: 3, tag: 'tree' }, C.trunk, C.trunk);
-      // leafy crown made of a few low-poly blobs
-      const blobs = [[0, 4.2, 0, 1.9], [0.9, 3.6, 0.4, 1.3], [-0.8, 3.7, -0.5, 1.3], [0.1, 5.3, 0.2, 1.2]];
-      const cp = [];
-      for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; cp.push([x + Math.cos(t) * 1.9, 4.3, z + Math.sin(t) * 1.9], [x + Math.cos(t) * 1.2, 5.6, z + Math.sin(t) * 1.2]); }
-      this.geo.castShadow(cp, 0);
-      blobs.forEach(([bx, by, bz, r], i) => {
-        const crown = new THREE.IcosahedronGeometry(r, 0);
-        this.geo.addGeometry(crown, new THREE.Matrix4().makeTranslation(x + bx, by, z + bz), (i + x) % 2 ? C.leaf : C.leaf2);
-      });
+      this.col.addBox({ x, z, w: 0.5, d: 0.5, h: 3, tag: 'tree' });
+      this.foliage.addTree(x, z, 1.05);
+      this.foliage.addLawn(x - 1.6, z - 1.6, x + 1.6, z + 1.6, 0);
     }
     // lamp posts
     for (const [x, z] of [[-30, 0], [30, 0], [-30, 30], [30, 30], [12, -30], [-50, -10], [63, -10], [63, 42]]) {
@@ -1241,22 +1240,34 @@ export class World {
 
   // ---------------------------------------------------------------- street furniture
   _props() {
-    // trash cans
+    // trash cans (photo-scanned model), with trash bags piled next to some
+    let k = 0;
     for (const [x, z] of [[-18, 30], [18, -28], [-33, 10], [33, 12], [5, 34], [-45, -5], [56, 20]]) {
-      this.col.addBox({ x, z, w: 0.6, d: 0.6, h: 0.95, tag: 'bin' });
-      const can = new THREE.CylinderGeometry(0.3, 0.27, 0.9, 10);
-      this.geo.addGeometry(can, new THREE.Matrix4().makeTranslation(x, 0.45, z), 0x3e5641);
-      const lid = new THREE.CylinderGeometry(0.33, 0.33, 0.06, 10);
-      this.geo.addGeometry(lid, new THREE.Matrix4().makeTranslation(x, 0.93, z), 0x2f3d31);
-      const pts = []; for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; pts.push([x + Math.cos(t) * 0.3, 0, z + Math.sin(t) * 0.3], [x + Math.cos(t) * 0.3, 0.95, z + Math.sin(t) * 0.3]); }
-      this.geo.castShadow(pts, 0);
+      // the model is a pair of cans side by side (≈2 m along its local x)
+      this.col.addBox({ x: x - 0.17, z, w: 2.0, d: 0.6, h: 0.95, tag: 'bin' });
+      this.props.add('metal_trash_can', x, z, 0);
+      if (k % 2 === 0) this.props.add('trashbag', x + 0.55, z + 0.35, k * 2.1, 0.9);
+      k++;
     }
+    // sidewalk utility boxes
+    for (const [x, z, yaw] of [[-38, 35.2, 0], [36, 35.2, 0], [-8, 35.4, 0]]) {
+      this.col.addBox({ x, z, w: 0.6, d: 0.5, h: 1.12, tag: 'utility' });
+      this.props.add('utility_box_01', x, z, yaw);
+    }
+    // DIY corners: oil drums, crates and an old tyre
+    const drum = (x, z) => { this.col.addBox({ x, z, w: 0.62, d: 0.62, h: 0.93, tag: 'drum' }); this.props.add('barrel_03', x, z, x * 3.1); };
+    const crate = (x, z, yaw) => {
+      const c = Math.abs(Math.cos(yaw)), sn = Math.abs(Math.sin(yaw));
+      this.col.addBox({ x, z, w: 0.52 * c + 1.16 * sn, d: 0.52 * sn + 1.16 * c, h: 0.45, tag: 'crate' });
+      this.props.add('wooden_crate_02', x, z, yaw);
+    };
+    drum(42, 30); drum(42.7, 30.7); drum(41.4, 31.1); crate(44.2, 29.6, 0.3); this.props.add('old_tyre', 43.6, 31.9, 1.2, 1, 0.3);
+    drum(-40, -19); crate(-41.3, -20.4, 1.4); crate(-39.6, -21.2, 0.1); this.props.add('old_tyre', -38.8, -19.6, 0.4, 1, 0.3);
+    this.props.add('trashbag', -40.8, -18.2, 0.7); this.props.add('trashbag', 40.6, 29.6, 2.0, 1.1);
     // planters with bushes (their edges are grindable)
     for (const [x, z] of [[-26, -18], [26, 17], [-12, 36], [40, -10]]) {
       this.ledge({ x, z, w: 1.6, d: 1.6, h: 0.5, tag: 'planter' }, C.concrete, C.concreteSide, 'planter');
-      for (const [bx, bz, r] of [[0, 0, 0.6], [0.3, 0.25, 0.4], [-0.3, -0.2, 0.45]]) {
-        this.geo.addGeometry(new THREE.IcosahedronGeometry(r, 0), new THREE.Matrix4().makeTranslation(x + bx, 0.75 + r * 0.3, z + bz), C.leaf2);
-      }
+      this.foliage.addBush(x, z, 0.75, 0.5); this.foliage.addBush(x + 0.3, z + 0.25, 0.5, 0.5);
     }
     // parked cars near the bottom of the hill
     const CAR_COLORS = [0xb23a48, 0x2d4059, 0xe0e0e0, 0x3a6351];

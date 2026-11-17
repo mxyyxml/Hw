@@ -526,11 +526,31 @@ export class Skater {
     // leg 0 is at body -X: the front foot when regular, the back foot when goofy
     const frontIdx = s > 0 ? 0 : 1;
     const footPos = (i) => (i === 0 ? -1 : 1) * (i === frontIdx ? FRONT_FOOT : BACK_FOOT);
+    // FOOTPLANT
+    //  * feet sit centred across the deck: heels just over the heel edge, toes
+    //    hanging a little over the toe edge (shoes are longer than a deck is wide)
+    //  * while a flip / shuvit spins under you, both feet lift clear of the
+    //    board (front foot flicks off toward the toe side) and come back down
+    //    onto it as it finishes — the catch
+    //  * on the ollie the front foot slides up toward the nose
+    //  * ankles roll with the deck when it tilts on its trucks in a carve
+    const fa = st.flipAngle || 0, sa = st.shuvAngle || 0;
+    const spin = Math.min(1, 2.6 * (Math.abs(Math.sin(fa / 2)) + Math.abs(Math.sin(sa / 2))));
+    a.clear = damp(a.clear || 0, mode === 'air' ? spin : 0, 22, dt);
+    a.slideUp = damp(a.slideUp || 0, mode === 'air' && (st.airTime || 0) < 0.35 ? 1 : 0, 10, dt);
     for (let i = 0; i < 2; i++) {
-      const L = this.legs[i];
-      this._legIK(L, footPos(i) - L.sgn * this.hipX, -hipH + this.footH, 0);
+      const L = this.legs[i], front = i === frontIdx;
+      const nose = s > 0 ? -1 : 1;                                  // body-X direction of the nose
+      const x = footPos(i) + (front ? nose * 0.07 * a.slideUp * (1 - a.clear) : 0);
+      const lift = a.clear * (front ? 0.2 : 0.15);
+      const zOff = -0.045 + (front ? a.clear * 0.09 : a.clear * 0.02);
+      this._legIK(L, x - L.sgn * this.hipX, -hipH + this.footH + lift, zOff);
       // real footplant: front foot angled toward the nose, back foot across the tail
-      L.foot.rotation.y = i === frontIdx ? -s * 0.42 : s * 0.12;
+      L.foot.rotation.y = front ? -s * 0.42 : s * 0.12;
+      // ankle follows the deck's roll (toe / heel edge pressure in a carve)
+      L.foot.rotation.x += s * (a.deckRoll || 0) * 0.9;
+      // pointed toes while flicking
+      L.foot.rotation.x += a.clear * (front ? 0.35 : 0.15);
     }
     // ---------------- push stroke: the pushing foot steps off, plants beside the
     // board, sweeps back toward the tail, lifts and comes back to the deck.
@@ -556,7 +576,7 @@ export class Skater {
       L.knee.rotation.x = lerp(cur[2], L.knee.rotation.x, a.push);
       L.foot.rotation.x = lerp(cur[3], L.foot.rotation.x, a.push);
     }
-    if (a.tuck > 0.01) for (const L of this.legs) { L.knee.rotation.x += a.tuck * 0.35; L.hip.rotation.x -= a.tuck * 0.15; }
+    // (air tuck comes from the lower hips; the IK keeps the feet on the board)
 
     // torso, head, arms
     // upper body: lean (minus what the pelvis already tilts), shoulders opened toward the nose
