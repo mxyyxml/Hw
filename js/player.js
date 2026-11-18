@@ -275,6 +275,13 @@ export class Player {
     // pumping: hold W on a ramp transition while dropping in to gain speed
     if (inp.held.up && !this.crouching && !this.manual && n.y < 0.985 && f.y < -0.05) this.speed += P.pumpAccel * dt;
     this.speed = Math.min(this.speed, P.maxSpeed);
+    // WHEEL CHATTER: rough ground buzzes through the board (stronger the faster you go)
+    const rough = this.onGrass ? 1 : this.groundTag === 'street' ? 0.8 : (P2.surfaceFriction[this.groundTag] ?? 1) < 1 ? 0.12 : 0.4;
+    this.chatter = Math.min(1, this.speed / 12) * rough;
+    // SPEED WOBBLES: bombing fast standing tall makes the trucks wobble; crouch to calm them
+    const wob = this.speed > P2.wobbleSpeed && !this.crouching && !this.manual;
+    this.wobble = clamp((this.wobble || 0) + (wob ? dt * 0.5 : -dt * 2.5), 0, 1);
+    if (this.wobble > 0) this.heading += Math.sin(this.time * 11) * this.wobble * 0.35 * dt;
     this.vel.copy(f).multiplyScalar(this.speed);
 
     this._moveGrounded(dt);
@@ -1062,6 +1069,7 @@ export class Player {
       bailRoll: this.bailInfo ? this.bailInfo.roll : 0,
       walkSpeed: this.walkSpeed,
       wheelSpeed: this.wheelSpeed || 0,
+      chatter: this.state === 'ride' ? this.chatter || 0 : 0, wobble: this.state === 'ride' ? this.wobble || 0 : 0,
       landDip: this._takeDip(),
     };
   }

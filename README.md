@@ -69,7 +69,7 @@ Title screen or Pause → **Closet**: body type, 9 hairstyles (real modelled sho
 ponytail and afro hair, plus buzz, mohawk, bald), hats fitted to the head (beanie, cap, backwards cap,
 bucket hat, helmet, kippah), a padded backpack with fitted straps (8 colours), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
 9 tops (tee, oversized tee, tank, long sleeve, hoodie, flannel, jacket, jersey, shirtless),
-6 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts), colours for everything, skin tone,
+7 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts, board shorts), colours for everything, skin tone,
 hair colour, backpack, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
 Saved in your browser.
 
@@ -80,7 +80,9 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
 A Mediterranean beachfront on the west side of the city: open sea, a sand beach (sand slows you down)
 with umbrellas, loungers and a lifeguard tower, a raised tiled promenade with a grindable sea-wall edge,
 three stair sets with handrails down to the sand, banks up from the street, palm trees, granite benches
-and white Bauhaus-style apartment blocks on pilotis across the beach road.
+and white Bauhaus-style apartment blocks on pilotis across the beach road. Israeli flags line the promenade
+and rooftops, Stars of David are set into the promenade, on the buildings and as a big beach sculpture,
+with a golden menorah monument, a synagogue, blue-and-white bunting and Hebrew signs.
 
 ### 🛹 How the physics feels
 - **Drop in** by rolling off any deck or coping into a ramp — you stay on the ramp and pick up speed.
@@ -96,6 +98,8 @@ and white Bauhaus-style apartment blocks on pilotis across the beach road.
 - **Weight shift:** you lean into a carve over a fraction of a second — tap A / D for small line corrections,
   hold for a full carve. The trucks can't turn tighter than about 1 m; nearly stopped, you **kick turn**
   (pivot on the back wheels) instead.
+- **Wheel chatter & speed wobbles:** rough asphalt and sand buzz through the board; bombing faster than
+  ~47 km/h standing tall starts speed wobbles — crouch (hold Space) to settle them.
 - **Grass & dirt** stop you within a couple of metres; roll onto a lawn too fast and you get thrown off.
 - **Ollie on a halfpipe / quarter / bowl wall** and you go up the ramp and come back down onto it.
 - **Footplant:** feet sit across the deck (toes hang a little over the edge), lift clear while the board flips

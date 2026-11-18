@@ -264,6 +264,7 @@ export const DEFAULT_SETTINGS = {
 // -----------------------------------------------------------------------------
 export const PHYSICS2 = {
   carveScrub: 0.035,         // speed lost per second while turning hard (tyres scrub)
+  wobbleSpeed: 13,          // m/s: above this, standing tall gives speed wobbles (crouch = Space to stop them)
   steerResponse: 9,         // how fast you shift your weight into / out of a carve (1/s)
   minCarveRadius: 1.0,      // tightest turn the trucks allow (m)
   kickTurnSpeed: 1.6,       // below this you pivot on the back wheels instead of carving
@@ -308,7 +309,7 @@ export const OUTFIT_OPTIONS = {
   hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat'], ['kippah', 'Kippah']],
   glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],
   top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['hoodie', 'Hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
-  pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts']],
+  pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts'], ['boardshorts', 'Board shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
   stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
   pushStyle: [['normal', 'Normal push'], ['mongo', 'Mongo (front foot)']],

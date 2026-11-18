@@ -486,6 +486,7 @@ class Game {
 
     p.sync(dt);
     this.combo.update(dt, p.isHoldingCombo());
+    if (p.state === 'ride') this.rig.addShake(((p.chatter || 0) * 0.0025 + (p.wobble || 0) * 0.004) * realDt * 60);
     this.rig.update(realDt, p, this.world.col);
     this._windT = (this._windT || 0) + realDt; this.world.foliage.update(this._windT);
     this.audio.update(p.state, p.displaySpeed());

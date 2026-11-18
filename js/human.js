@@ -61,6 +61,7 @@ export const PANTS = {
   baggy:  { rise: -0.03, hem: 'ankle', base: 0.011, bag: 0.03, flare: 0.022 },
   cargo:  { rise: -0.01, hem: 'ankle', base: 0.011, bag: 0.022, flare: 0.012 },
   shorts: { rise: -0.01, hem: 'knee', base: 0.009, bag: 0.016, flare: 0.012 },
+  boardshorts: { rise: -0.015, hem: 'knee', base: 0.011, bag: 0.03, flare: 0.026, kneeDrop: 0.04 },
   chinos: { rise: 0, hem: 'calf', base: 0.007, bag: 0.01, flare: 0.004 },
 };
 // hair: shell thickness on top / at the sides, plus hanging strand cards
@@ -300,7 +301,7 @@ export function buildHuman(sk) {
     const r = reg[i];
     if (ARM(r) || HEAD(r)) return 1;
     const y = base[i * 3 + 1];
-    const hemY = P.hem === 'knee' ? kneeY + 0.03 : P.hem === 'calf' ? ankleY + 0.1 : ankleY + 0.035;
+    const hemY = P.hem === 'knee' ? kneeY + 0.03 - (P.kneeDrop || 0) : P.hem === 'calf' ? ankleY + 0.1 : ankleY + 0.035;
     return Math.max(y - (waistY + P.rise), hemY - y);
   };
   const pantsThick = (i, P) => {

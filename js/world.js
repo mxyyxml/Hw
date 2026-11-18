@@ -59,6 +59,19 @@ const CAT_REF = { concrete: C.concrete, tiles: C.plaza, asphalt: C.street, wood:
 // (measured from the sky photo: elevation ≈ 48°, so shadows line up with the sun in the sky)
 export const SUN = { x: 53.4, y: 74.3, z: 40.3 };
 
+// merge non-indexed copies of several geometries (position + normal only)
+function mergeGeos(list) {
+  const pos = [], nor = [];
+  for (let g of list) {
+    g = g.index ? g.toNonIndexed() : g; g.computeVertexNormals();
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  return out;
+}
+
 // convex hull of 2D points (monotone chain) — used for the fake ground shadows
 function hull2D(pts) {
   pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -387,6 +400,7 @@ export class World {
     this._titanPark();
     this._cityDetail();
     this._telAviv();
+    this._telAvivJewish();
     this._terrain();
     this._decor();
     this.col.linkRails();
@@ -1142,6 +1156,111 @@ export class World {
         this.geo.prism({ x: x - w / 2 - 0.9, z, w: 1.8, d: d - 5 }, [y + 0.35, y + 0.35, y + 0.35, y + 0.35], y - 0.55, C.stucco, C.stuccoShade);
       }
       this.geo.prism({ x, z, w: w + 0.4, d: d + 0.4 }, [h + 0.3, h + 0.3, h + 0.3, h + 0.3], h, C.stuccoShade, C.stuccoShade);   // roof parapet
+    }
+  }
+
+  // Star of David: two interlaced triangle outlines (extruded), centred, in the XY plane
+  _starOfDavid(size, bar, depth = 0.05) {
+    const tri = (rot) => {
+      const sh = new THREE.Shape(), hole = new THREE.Path();
+      const P = (r, k) => [Math.sin(rot + k * 2 * Math.PI / 3) * r, Math.cos(rot + k * 2 * Math.PI / 3) * r];
+      const ro = size, ri = size - bar * 2;
+      sh.moveTo(...P(ro, 0)); sh.lineTo(...P(ro, 1)); sh.lineTo(...P(ro, 2)); sh.closePath();
+      hole.moveTo(...P(ri, 0)); hole.lineTo(...P(ri, 2)); hole.lineTo(...P(ri, 1)); hole.closePath();
+      sh.holes.push(hole);
+      return new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false });
+    };
+    const a = tri(0), b = tri(Math.PI);
+    const g = mergeGeos([a, b]);
+    g.translate(0, 0, -depth / 2);
+    return g;
+  }
+
+  // flag / sign with a canvas texture (a separate mesh: it needs its own picture)
+  _canvasPlane(w, h, draw, pos, rotY = 0, wave = 0) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = Math.round(512 * h / w);
+    draw(c.getContext('2d'), c.width, c.height);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    const g = new THREE.PlaneGeometry(w, h, wave ? 12 : 1, 1);
+    if (wave) { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i) + w / 2; p.setZ(i, Math.sin(x * 2.2) * wave * (x / w)); } g.computeVertexNormals(); }
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
+    m.position.set(...pos); m.rotation.y = rotY; m.castShadow = true;
+    this.scene.add(m);
+    return m;
+  }
+
+  // Jewish & Israeli character for the Tel Aviv beachfront
+  _telAvivJewish() {
+    const BLUE = 0x0038b8, GOLD = 0xc9a227, PH = 1.2;
+    const israelFlag = (x, w, h) => {
+      x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#0038b8';
+      x.fillRect(0, h * 0.1, w, h * 0.15); x.fillRect(0, h * 0.75, w, h * 0.15);
+      // Star of David in the middle
+      const cx = w / 2, cy = h / 2, r = h * 0.2;
+      x.lineWidth = h * 0.035; x.strokeStyle = '#0038b8';
+      for (const rot of [0, Math.PI]) {
+        x.beginPath();
+        for (let k = 0; k < 3; k++) { const a = rot + k * 2 * Math.PI / 3; x[k ? 'lineTo' : 'moveTo'](cx + Math.sin(a) * r, cy - Math.cos(a) * r); }
+        x.closePath(); x.stroke();
+      }
+    };
+    const flagPole = (px, py, pz, hgt = 6, rotY = 0) => {
+      this.col.addBox({ x: px, z: pz, w: 0.2, d: 0.2, h: py + hgt, tag: 'pole' });
+      this.geo.beam([px, py, pz], [px, py + hgt, pz], 0.08, 0xdddddd);
+      this._canvasPlane(1.8, 1.3, israelFlag, [px + Math.cos(rotY) * 0.92, py + hgt - 0.7, pz - Math.sin(rotY) * 0.92], rotY, 0.12);
+    };
+    // flags along the promenade (sea side) and on every apartment roof
+    for (let z = 166; z < 392; z += 28) flagPole(-84.5, PH, z, 6);
+    for (let z = 172, k = 0; z < 384; z += 30, k++) { const x = -30 + (k % 2) * 6, h = 12 + (k % 3) * 3.2; flagPole(x, h + 0.3, z, 3.2); }
+    // Stars of David inlaid in the promenade, between the benches
+    for (let z = 180; z < 390; z += 28) {
+      this.geo.addGeometry(this._starOfDavid(1.3, 0.16, 0.02).rotateX(-Math.PI / 2), new THREE.Matrix4().makeTranslation(-73, PH + 0.012, z), BLUE);
+    }
+    // a blue Star of David on the street-facing wall of each building
+    for (let z = 172, k = 0; z < 384; z += 30, k++) {
+      const x = -30 + (k % 2) * 6, h = 12 + (k % 3) * 3.2;
+      this.geo.addGeometry(this._starOfDavid(1.6, 0.2, 0.08).rotateY(-Math.PI / 2), new THREE.Matrix4().makeTranslation(x - 8.06, h - 2.2, z - 4), BLUE);
+    }
+    // big Star of David sculpture on the beach and a menorah at the promenade entrance
+    this.geo.addGeometry(this._starOfDavid(2.4, 0.28, 0.3).rotateY(Math.PI / 2), new THREE.Matrix4().makeTranslation(-100, 3.1, 258), BLUE);
+    this.geo.beam([-100, 0, 258], [-100, 0.8, 258], 0.4, 0xd6d0c4);
+    this.col.addBox({ x: -100, z: 258, w: 0.6, d: 0.6, h: 5.5, tag: 'sculpture' });
+    { // seven-branched menorah on a stone plinth
+      const x = -64, z = 161, y0 = PH;
+      this.box({ x, z, w: 3.2, d: 1.2, h: y0 + 0.9, base: y0, tag: 'menorah_plinth' }, 0xd6d0c4, 0xc9c2b4);
+      const top = y0 + 0.9 + 3.2;
+      this.geo.beam([x, y0 + 0.9, z], [x, top, z], 0.16, GOLD);
+      for (let i = 1; i <= 3; i++) {
+        const r = i * 0.42, pts = [];
+        for (let k = 0; k <= 10; k++) { const a = Math.PI * k / 10; pts.push([x - Math.cos(a) * r, top - Math.sin(a) * r * 1.15, z]); }
+        for (let k = 0; k < 10; k++) this.geo.beam(pts[k], pts[k + 1], 0.12, GOLD);
+        for (const sx of [-1, 1]) this.geo.prism({ x: x + sx * r, z, w: 0.22, d: 0.22 }, [top + 0.12, top + 0.12, top + 0.12, top + 0.12], top - 0.02, GOLD, GOLD);
+      }
+      this.geo.prism({ x, z, w: 0.22, d: 0.22 }, [top + 0.12, top + 0.12, top + 0.12, top + 0.12], top - 0.02, GOLD, GOLD);
+      this._canvasPlane(3.0, 0.5, (c, w, h) => { c.fillStyle = '#2f3b47'; c.fillRect(0, 0, w, h); c.fillStyle = '#f2e6c0'; c.font = `bold ${h * 0.62}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('תל אביב–יפו', w / 2, h / 2); }, [x, y0 + 0.5, z - 0.62], Math.PI);
+    }
+    // synagogue on the beach road: white hall, arched windows, a Star of David window and roof star
+    { const x = -4, z = 252, w = 14, d = 10, h = 9;
+      this.box({ x, z: z - 2, w, d, h, tag: 'synagogue' }, C.stuccoShade, C.stucco);
+      for (let i = -2; i <= 2; i++) this.geo.prism({ x: x - w / 2 - 0.04, z: z - 2 + i * 1.8, w: 0.1, d: 0.9 }, [6.5, 6.5, 6.5, 6.5], 2.5, 0x3d5a80, 0x3d5a80);
+      this.geo.addGeometry(this._starOfDavid(1.5, 0.22, 0.12).rotateY(-Math.PI / 2), new THREE.Matrix4().makeTranslation(x - w / 2 - 0.1, 7.4, z - 2), BLUE);
+      this.geo.addGeometry(this._starOfDavid(0.9, 0.14, 0.12), new THREE.Matrix4().makeTranslation(x, h + 1.2, z - 2), GOLD);
+      this.geo.beam([x, h, z - 2], [x, h + 0.3, z - 2], 0.1, GOLD);
+      this._canvasPlane(5, 0.8, (c, w2, h2) => { c.fillStyle = '#f0ede4'; c.fillRect(0, 0, w2, h2); c.fillStyle = '#0038b8'; c.font = `bold ${h2 * 0.6}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('בית כנסת', w2 / 2, h2 / 2); }, [x - w / 2 - 0.08, 1.9, z - 2], -Math.PI / 2);
+    }
+    // blue & white bunting over the beach road, and Hebrew beach signs
+    for (let z = 186; z < 380; z += 40) {
+      for (let k = 0; k < 9; k++) {
+        const xx = -52 + k * 1.1, sag = Math.sin(Math.PI * k / 8) * 0.8;
+        this._canvasPlane(0.6, 0.45, israelFlag, [xx, 7 - sag, z], 0);
+      }
+      this.geo.beam([-52.6, 0, z], [-52.6, 7.2, z], 0.1, C.metal); this.geo.beam([-42.6, 0, z], [-42.6, 7.2, z], 0.1, C.metal);
+      this.col.addBox({ x: -52.6, z, w: 0.2, d: 0.2, h: 7.2, tag: 'pole' }); this.col.addBox({ x: -42.6, z, w: 0.2, d: 0.2, h: 7.2, tag: 'pole' });
+    }
+    for (const [z, text] of [[200, 'חוף הים'], [270, 'שלום'], [340, 'ברוכים הבאים']]) {
+      this._canvasPlane(2.4, 0.6, (c, w, h) => { c.fillStyle = '#0038b8'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffffff'; c.font = `bold ${h * 0.58}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, w / 2, h / 2); }, [-85.8, PH + 2.6, z + 4], -Math.PI / 2);
+      this.geo.beam([-85.8, PH, z + 4], [-85.8, PH + 2.3, z + 4], 0.07, C.metal);
     }
   }
 

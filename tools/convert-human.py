@@ -31,6 +31,7 @@ MALE = [('universal-male-young-maxmuscle-averageweight.target', 0.85),   # muscu
         ('r-upperarm-shoulder-muscle-incr.target', 0.7),
         ('l-upperarm-muscle-incr.target', 0.6),
         ('r-upperarm-muscle-incr.target', 0.6),
+        ('torso-muscle-pectoral-incr.target', 0.85),      # a real, muscular chest
         ('caucasian-male-young.target', 0.8)]               # male face & frame
 # a real young woman: female face and figure (chest, waist, hips), typical build
 FEMALE = [('caucasian-female-young.target', 1.0),
