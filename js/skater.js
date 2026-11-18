@@ -25,6 +25,16 @@ function joint(parent, x, y, z) {
 
 function hemi(r, sy = 1) { return new THREE.SphereGeometry(r, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, sy, 1); }
 
+// sneaker canvas: fine cross weave (greyscale, tinted by the shoe colour)
+function canvasWeave() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e4e4e4'; x.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 64; i += 2) { x.fillStyle = 'rgba(0,0,0,0.07)'; x.fillRect(i, 0, 1, 64); x.fillStyle = 'rgba(0,0,0,0.05)'; x.fillRect(0, i, 64, 1); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 6); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 // flannel: woven plaid (greyscale, tinted by the top colour)
 let _plaid = null;
 function plaidTexture() {
@@ -93,6 +103,7 @@ export class Skater {
     this.hips = bone(this.body, 0, 0.8, 0);
     const m = this.mat;
     m.top.map = this._cotton = getFabric('cotton');
+    m.shoe.map = canvasWeave();
     m.pants.map = getFabric('denim');
     this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
@@ -301,13 +312,13 @@ export class Skater {
     };
     const fh = this.footH;
     // sole: thick rubber, slightly flared
-    const sole = new THREE.ExtrudeGeometry(outline(0), { depth: 0.022, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.005, bevelSegments: 2, curveSegments: 4 });
-    sole.rotateX(Math.PI / 2); sole.translate(0, -fh + 0.028, 0);
+    const sole = new THREE.ExtrudeGeometry(outline(0), { depth: 0.015, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 4 });
+    sole.rotateX(Math.PI / 2); sole.translate(0, -fh + 0.019, 0);           // thin vulcanised sole, bottom at -fh
     const soleM = new THREE.Mesh(sole, m.soleW); soleM.castShadow = true; foot.add(soleM);
     // upper: rounded, lower over the toes
     const up = new THREE.ExtrudeGeometry(outline(0.007), { depth: 0.058, bevelEnabled: true, bevelThickness: 0.016, bevelSize: 0.012, bevelSegments: 3, curveSegments: 6 });
-    up.rotateX(Math.PI / 2); up.translate(0, -fh + 0.03 + 0.074, 0);
-    const pa = up.attributes.position, base = -fh + 0.028;
+    up.rotateX(Math.PI / 2); up.translate(0, -fh + 0.021 + 0.074, 0);
+    const pa = up.attributes.position, base = -fh + 0.019;
     for (let i = 0; i < pa.count; i++) {
       const z = pa.getZ(i), y = pa.getY(i);
       const t = Math.min(1, Math.max(0, (z - 0.06) / 0.155));
@@ -317,12 +328,19 @@ export class Skater {
     const upM = new THREE.Mesh(up, m.shoe); upM.castShadow = true; foot.add(upM);
     // heel collar, tongue, laces
     const collar = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.011, 6, 14).rotateX(Math.PI / 2).scale(0.95, 1, 1.15), m.shoe);
-    collar.position.set(0, -fh + 0.112, -0.022); foot.add(collar);
+    collar.position.set(0, -fh + 0.103, -0.022); foot.add(collar);
     const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.01, 0.075), m.shoe);
-    tongue.position.set(0, -fh + 0.118, 0.04); tongue.rotation.x = -0.45; foot.add(tongue);
+    tongue.position.set(0, -fh + 0.109, 0.04); tongue.rotation.x = -0.45; foot.add(tongue);
     for (let i = 0; i < 4; i++) {
       const lace = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.006, 0.007), m.lace);
-      lace.position.set(0, -fh + 0.103 - i * 0.008, 0.045 + i * 0.022); foot.add(lace);
+      lace.position.set(0, -fh + 0.094 - i * 0.008, 0.045 + i * 0.022); foot.add(lace);
+    }
+    // rubber toe cap and a plain side stripe (classic skate-shoe look, no logos)
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.046, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 0.55, 0.9), m.soleW);
+    cap.position.set(0, -fh + 0.026, 0.172); foot.add(cap);
+    for (const sx of [-1, 1]) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.011, 0.1), m.soleW);
+      st.position.set(sx * 0.05, -fh + 0.052, 0.035); st.rotation.x = 0.32; st.rotation.y = sx * 0.08; foot.add(st);
     }
   }
 

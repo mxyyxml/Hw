@@ -23,8 +23,8 @@ export const PHYSICS = {
   maxSpeed: 24,             // absolute cap (gravity can take you past pushMaxSpeed)
 
   // Rolling resistance
-  rollFriction: 0.045,      // fraction of speed lost per second
-  rollDrag: 0.18,           // constant deceleration (m/s²)
+  rollFriction: 0.032,      // fraction of speed lost per second
+  rollDrag: 0.13,           // constant deceleration (m/s²)
   airDrag: 0.01,            // fraction of air speed lost per second
 
   // Braking (S / ↓)
@@ -52,6 +52,7 @@ export const PHYSICS = {
   // Bails
   maxLandingImpact: 12.5,   // m/s into the ground — harder than this = bail
   wallBailSpeed: 8.5,       // m/s straight into a wall = bail
+  curbBailSpeed: 3.5,       // m/s straight into something knee-high (ledge, pad, curb) = trip & bail
   landAngleTolerance: 32,   // DEGREES board may be off the travel direction
   flipCompleteThreshold: 0.75, // flip must be this % done when you land
   bailIfGrabbingOnLand: false,
@@ -262,7 +263,7 @@ export const DEFAULT_SETTINGS = {
 //  EXTRA PHYSICS (realism)
 // -----------------------------------------------------------------------------
 export const PHYSICS2 = {
-  carveScrub: 0.07,         // speed lost per second while turning hard (tyres scrub)
+  carveScrub: 0.035,         // speed lost per second while turning hard (tyres scrub)
   steerResponse: 9,         // how fast you shift your weight into / out of a carve (1/s)
   minCarveRadius: 1.0,      // tightest turn the trucks allow (m)
   kickTurnSpeed: 1.6,       // below this you pivot on the back wheels instead of carving

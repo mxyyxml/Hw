@@ -336,6 +336,9 @@ export class Player {
     const vn = this.vel.x * nrm.x + this.vel.z * nrm.z;
     if (vn < 0) {
       if (-vn > P.wallBailSpeed && this.state !== 'walk') { this.bail('Hit a wall!'); return true; }
+      // knee-high obstacles (pads, ledges, curbs) trip the board instead of stopping you dead
+      const top = blk.type === 'box' ? blk.h : null;
+      if (top !== null && top - this.pos.y < 0.5 && -vn > P.curbBailSpeed && this.state === 'ride') { this.bail('Tripped on the ledge!'); return true; }
       // slide along the wall; a near head-on hit just stops you
       const vh = Math.hypot(this.vel.x, this.vel.z);
       this.vel.x -= vn * nrm.x * 1.05; this.vel.z -= vn * nrm.z * 1.05;
