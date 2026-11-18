@@ -32,7 +32,7 @@ export class CameraRig {
 
   // C cycles: close follow → wide filmer → low fisheye filmer
   toggle() {
-    const order = ['follow', 'filmer', 'fisheye'];
+    const order = ['follow', 'filmer', 'fisheye', 'first'];
     this.mode = order[(order.indexOf(this.mode) + 1) % order.length];
     return this.mode;
   }
@@ -52,8 +52,12 @@ export class CameraRig {
       if (h > 3 && !(player.air && player.air.vert)) want = Math.atan2(player.vel.x, player.vel.z);
     }
     if (this.first) { this.yaw = want; }
+    if (this.mode === 'first' && player.skater && player.skater._eyes) return this._firstPerson(dt, player, want, cfg);
     // walking: stay right behind the player so turning the camera = turning the player
-    const lag = player.state === 'walk' ? Math.max(cfg.lag * 2.4, 12) : cfg.lag;
+    let lag = player.state === 'walk' ? Math.max(cfg.lag * 2.4, 12) : cfg.lag;
+    // just rolled back down a ramp (fakie): glide round to the new direction over ~1 s
+    // instead of whipping 180° in a blink
+    if (player.reversedAt !== undefined && player.time - player.reversedAt < 1.6) lag = Math.min(lag, 1.4);
     this.yaw = dampAngle(this.yaw, want, lag * this.sensitivity, dt);
     // right-mouse orbit while skating (springs back when you let go)
     this.orbit = this.orbit || 0;
@@ -85,6 +89,32 @@ export class CameraRig {
       this.camera.fov += (fov - this.camera.fov) * (1 - Math.exp(-3 * dt));
       this.camera.updateProjectionMatrix();
     }
+    this.first = false;
+  }
+
+  // FIRST PERSON: the camera is the rider's eyes (between the two eyeballs, a touch
+  // forward), so it carries every real head movement — the push stroke, crouches,
+  // landings, balance sway, bails. It looks where you're going, tipped down to see
+  // the board and the ground ahead; right-mouse drag looks around.
+  _firstPerson(dt, player, want, cfg) {
+    const sk = player.skater, e0 = sk._eyes[0], e1 = sk._eyes[1];
+    const a = this._fpA || (this._fpA = new THREE.Vector3()), b = this._fpB || (this._fpB = new THREE.Vector3());
+    sk.root.updateMatrixWorld(true);
+    e0.getWorldPosition(a); e1.getWorldPosition(b); a.add(b).multiplyScalar(0.5);
+    this.yaw = dampAngle(this.yaw, want, (player.state === 'walk' ? 14 : 7) * this.sensitivity, dt);
+    this.orbit = this.orbit || 0;
+    if (!this.dragging) this.orbit *= Math.exp(-2.5 * dt);
+    const yaw = this.yaw + this.orbit;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    a.x += fx * 0.11; a.z += fz * 0.11; a.y += 0.015;    // just in front of the eyes (head & shoulders stay behind the near plane)
+    const pitchWant = player.state === 'walk' ? -0.08 : player.state === 'air' ? -0.42 : -0.3;
+    this._fpPitch = (this._fpPitch ?? pitchWant) + (pitchWant - (this._fpPitch ?? pitchWant)) * (1 - Math.exp(-4 * dt));
+    const cp = Math.cos(this._fpPitch);
+    this.camera.position.copy(a);
+    if (this.shake > 0.001) { this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.4; this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.4; this.shake *= Math.exp(-9 * dt); }
+    this.camera.lookAt(a.x + fx * cp, a.y + Math.sin(this._fpPitch), a.z + fz * cp);
+    const fov = cfg.fov + Math.min(10, player.displaySpeed() * 0.4);
+    if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov += (fov - this.camera.fov) * (1 - Math.exp(-3 * dt)); this.camera.updateProjectionMatrix(); }
     this.first = false;
   }
 }

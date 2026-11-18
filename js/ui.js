@@ -50,7 +50,9 @@ const CONTROLS = [
   ['Off the board', 'A / D (or hold the RIGHT mouse button and drag) turn you and the camera together. W runs (keeps speeding up into a sprint, or hold Shift), S backs up, Space jumps. E hops back on the board'],
   ['Right mouse + drag (skating)', 'Look around — the camera swings back behind you when you let go'],
   ['<kbd>R</kbd> / <kbd>T</kbd>', 'Respawn at your spot / set a custom drop spot'],
-  ['<kbd>C</kbd>', 'Switch camera (follow / filmer / fisheye)'],
+  ['<kbd>C</kbd>', 'Switch camera (follow / filmer / fisheye / first person)'],
+  ['<kbd>Q</kbd>', 'Revert: spin the board 180° on its wheels and roll away (hold Q when landing to revert out of it)'],
+  ['<kbd>F</kbd> (air)', 'Backflip — hold W for a frontflip. Needs big air (mega ramp / big kickers)'],
   ['<kbd>Y</kbd>', 'Cinematic replay of the last 12 seconds (Y again to go back)'],
   ['<kbd>H</kbd>', 'Show / hide this help'],
   ['<kbd>P</kbd> / <kbd>Esc</kbd>', 'Pause menu'],
@@ -180,7 +182,8 @@ export class UI {
           <div class="setting"><span>Camera</span><span class="row-buttons">
             <button data-set="camera" data-val="follow" class="${g.rig.mode === 'follow' ? 'sel' : ''}">Follow</button>
             <button data-set="camera" data-val="filmer" class="${g.rig.mode === 'filmer' ? 'sel' : ''}">Filmer</button>
-            <button data-set="camera" data-val="fisheye" class="${g.rig.mode === 'fisheye' ? 'sel' : ''}">Fisheye</button></span></div>
+            <button data-set="camera" data-val="fisheye" class="${g.rig.mode === 'fisheye' ? 'sel' : ''}">Fisheye</button>
+            <button data-set="camera" data-val="first" class="${g.rig.mode === 'first' ? 'sel' : ''}">First person</button></span></div>
           ${backBtn}`;
         break;
       }

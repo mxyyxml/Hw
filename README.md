@@ -77,6 +77,16 @@ Saved in your browser.
 Clothes and hair are real layers cut from the body surface along smooth lines (necklines, sleeves,
 hems, hairlines), loosened where fabric hangs and skinned to the same bones, so they move with the body.
 
+### 🆕 More tricks, reverts, flips & first person
+- New flick tricks (hold Space, then the arrows): **Hardflip** → ↓ ←, **Inward Heelflip** ← ↓ →,
+  **360 Shuvit** ← ← (FS: → →), **Impossible** ↑ ↑, **Nollie Flip / Heelflip** ↑ ← / ↑ →.
+- **Q = Revert** (the board spins 180° on its wheels; hold Q as you land to revert straight out of it).
+- **F in the air = Backflip**, hold **W** for a **Frontflip**. The rider tucks tighter to rotate faster,
+  but needs real air (big kickers, mega ramp, Titan Park); land short of a full rotation and you slam.
+- **C** now cycles follow → filmer → fisheye → **first person** (you see through the rider's eyes, with
+  every push, crouch and landing).
+- Rolling back down a ramp (fakie) no longer whips the camera round — it glides round smoothly.
+
 ### 🎬 Replay & sound
 Press **Y** for a cinematic replay of the last 12 seconds (tracking, orbit and tripod shots). Wheels
 sound different on smooth ramps, concrete (with the clack of paving joints), rough street and sand;

@@ -90,6 +90,13 @@ export const FLIP_TRICKS = [
   { seq: ['down', 'right', 'right'],name: 'Double Heelflip', flips: -2, shuv: 0,  time: 0.62, points: 750 },
   { seq: ['left', 'down', 'left'],  name: 'Varial Kickflip', flips: 1,  shuv: 1,  time: 0.5,  points: 600 },
   { seq: ['right', 'down', 'right'],name: 'Varial Heelflip', flips: -1, shuv: -1, time: 0.5,  points: 600 },
+  { seq: ['right', 'down', 'left'], name: 'Hardflip',        flips: 1,  shuv: -1, time: 0.52, points: 700 },
+  { seq: ['left', 'down', 'right'], name: 'Inward Heelflip', flips: -1, shuv: 1,  time: 0.52, points: 650 },
+  { seq: ['left', 'left'],          name: '360 Shuvit',      flips: 0,  shuv: 2,  time: 0.5,  points: 500 },
+  { seq: ['right', 'right'],        name: 'FS 360 Shuvit',   flips: 0,  shuv: -2, time: 0.5,  points: 500 },
+  { seq: ['up', 'up'],              name: 'Impossible',      flips: 0,  shuv: 0, pitch: 1, time: 0.5, points: 700 },
+  { seq: ['up', 'left'],            name: 'Nollie Flip',     flips: 1,  shuv: 0,  time: 0.42, points: 550 },
+  { seq: ['up', 'right'],           name: 'Nollie Heelflip', flips: -1, shuv: 0,  time: 0.42, points: 550 },
   { seq: ['down', 'left'],          name: 'Kickflip',        flips: 1,  shuv: 0,  time: 0.42, points: 400 },
   { seq: ['down', 'right'],         name: 'Heelflip',        flips: -1, shuv: 0,  time: 0.42, points: 400 },
   { seq: ['down', 'up'],            name: 'Ollie',           flips: 0,  shuv: 0,  time: 0,    points: 100 },
@@ -102,6 +109,14 @@ export const QUICK_TRICKS = {
 };
 // What you get when nothing matches (plain release of Space)
 export const DEFAULT_POP = { name: 'Ollie', flips: 0, shuv: 0, time: 0, points: 100 };
+
+// F in the air: a full body flip (hold S for a backflip, W for a frontflip; default backflip)
+export const BODY_FLIPS = {
+  back:  { name: 'Backflip',  dir: 1,  time: 0.95, points: 1500 },
+  front: { name: 'Frontflip', dir: -1, time: 1.0,  points: 1600 },
+};
+// Q while rolling: revert — spin the board 180° on its wheels and ride away the other way
+export const REVERT = { name: 'Revert', time: 0.32, points: 150, speedKeep: 0.88 };
 
 // Shift + ← / → in the air
 export const SHUVITS = {
@@ -210,6 +225,7 @@ export const CAMERA = {
   follow: { distance: 3.7, height: 1.45, lookHeight: 1.05, fov: 64, lag: 5.5 },
   filmer: { distance: 7.5, height: 1.2, side: 3.2, lookHeight: 0.8, fov: 74, lag: 2.6 },
   fisheye: { distance: 2.0, height: 0.45, side: 1.1, lookHeight: 0.65, fov: 108, lag: 4.5 },
+  first:   { distance: 0, height: 0, lookHeight: 0, fov: 82, lag: 7 },
   minAboveGround: 0.6,
 };
 
@@ -246,7 +262,9 @@ export const KEYS = {
   popshuv: ['KeyB'],
   pause:  ['KeyP', 'Escape'],
   help:   ['KeyH'],
-  replay: ['KeyY'],         // cinematic replay of the last 12 seconds
+  replay: ['KeyY'],
+  bodyflip: ['KeyF'],       // in the air: backflip (S) / frontflip (W)
+  revert: ['KeyQ'],         // on the ground: revert (spin the board 180° and roll away fakie)         // cinematic replay of the last 12 seconds
 };
 
 // -----------------------------------------------------------------------------

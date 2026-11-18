@@ -694,7 +694,7 @@ export class Skater {
     const now = performance.now() / 1000, ch = st.chatter || 0, wb = st.wobble || 0;
     const buzz = ch * 0.012 * Math.sin(now * 83) + ch * 0.008 * Math.sin(now * 131);
     this.board.rotation.z = (st.flipAngle || 0) + a.deckRoll + shake + buzz + wb * 0.09 * Math.sin(now * 11);
-    this.board.rotation.x = ch * 0.006 * Math.sin(now * 97);
+    this.board.rotation.x = ch * 0.006 * Math.sin(now * 97) + (st.pitchAngle || 0);
     this.board.position.y = DECK_Y - 0.012 + (st.boardLift || 0);
 
     // manual pivot (tail wheels for manual, nose wheels for nose manual)

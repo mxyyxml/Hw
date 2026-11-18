@@ -14,8 +14,9 @@ import { QUICK_TRICKS, FLIP_TRICKS } from './config.js';
 import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE,
   GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
-import { PHYSICS2 as P2, PUSH } from './config.js';
+import { PHYSICS2 as P2, PUSH, BODY_FLIPS, REVERT } from './config.js';
 
+const smoothstep01 = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -93,7 +94,9 @@ export class Player {
   modelYaw() {
     if (this.state === 'air' && this.air) return this.air.yaw;
     // (grind: heading follows the rail; sideways slides are drawn by the skater)
-    return this.heading + (this.fakie ? Math.PI : 0);
+    let y = this.heading + (this.fakie ? Math.PI : 0);
+    if (this.revert) y += this.revert.dir * Math.PI * smoothstep01(this.revert.t / REVERT.time);
+    return y;
   }
 
   // ------------------------------------------------------------------ per-frame input (edges)
@@ -258,6 +261,18 @@ export class Player {
     const ln = lx * n.x + lz * n.z;
     if (n.y < 0.999) this.heading += clamp(P.gravity * ln * n.y / Math.max(this.speed, 1.5), -4, 4) * dt;
 
+    // --- REVERT (Q): the board spins 180° on its wheels; you keep rolling the same way, now fakie
+    if (inp.pressed.revert && !this.revert && !this.manual && this.speed > 1.2) {
+      this.revert = { t: 0, dir: (inp.held.right ? -1 : 1) * (this.fakie ? -1 : 1) };
+    }
+    if (this.revert) {
+      this.revert.t += dt;
+      this.speed -= this.speed * (1 - REVERT.speedKeep) / REVERT.time * dt;     // wheels scrub sideways
+      if (this.revert.t >= REVERT.time) {
+        this.fakie = !this.fakie; this.revert = null;
+        this.emit('revert', { name: REVERT.name, points: REVERT.points });
+      }
+    }
     // --- manual balance (W / S lean)
     if (this.manual) { if (this.updateManual(dt)) return; }
 
@@ -294,6 +309,7 @@ export class Player {
     this.speed += -P.gravity * f.y * dt;
     if (this.speed < 0) { // rolling backwards → you're now riding fakie
       this.heading += Math.PI; this.fakie = !this.fakie; this.speed = -this.speed;
+      this.reversedAt = this.time;                  // the camera swings round smoothly instead of whipping
       this._tangent(this.heading, n, f);
     }
     // pumping: hold W on a ramp transition while dropping in to gain speed
@@ -587,7 +603,8 @@ export class Player {
       const e = 1 - (1 - p) * (1 - p) * 0.35 - 0.65 * (1 - p); // slightly eased
       A.flipAngle = A.trick.def.flips * TAU * e;
       A.shuvAngle = A.trick.def.shuv * Math.PI * e;
-      if (p >= 1 && !this._extendFlip(A)) { A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; }
+      A.pitchAngle = (A.trick.def.pitch || 0) * TAU * e;
+      if (p >= 1 && !this._extendFlip(A)) { A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; A.pitchAngle = 0; }
     }
     // --- late flip: a one-key trick right after take-off replaces the plain ollie
     if (A.lateTrick) {
@@ -597,6 +614,28 @@ export class Player {
         A.tricks = [];
         this.startAirTrick(def, A.lateKey);
       }
+    }
+    // --- F = body flip: the whole rider + board rotate about the board's long axis
+    if (inp.pressed.bodyflip && !A.bodyFlip && !A.grab) {
+      const def = inp.held.up || inp.pressed.up ? BODY_FLIPS.front : BODY_FLIPS.back;
+      // tucking tighter spins you faster (smaller moment of inertia): the flip takes
+      // as long as the air you have left, but a body can't turn it faster than ~0.62 s
+      // air left: follow the ballistic path until it meets the ground under it
+      let left = 2;
+      for (let t = 0.02; t < 2; t += 0.02) {
+        const x = this.pos.x + this.vel.x * t, z = this.pos.z + this.vel.z * t, y = this.pos.y + this.vel.y * t - 0.5 * P.gravity * t * t;
+        if (y <= this.col.ground(x, z, y + 0.3).h) { left = t; break; }
+      }
+      A.bodyFlip = { def, t: 0, dur: clamp(left * 0.93, 0.62, 1.15) };
+      const entry = { name: def.name, base: def.name, points: def.points };
+      A.tricks.push(entry);
+      this.emit('trick', { name: def.name });
+    }
+    if (A.bodyFlip) {
+      const BF = A.bodyFlip;
+      BF.t = Math.min(BF.dur, BF.t + dt);
+      const p = BF.t / BF.dur;
+      BF.angle = BF.def.dir * TAU * (p < 0.5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p));   // tuck in, open out
     }
     // --- Shift + ← / → = shuvit (one at a time, not while grabbing)
     if (!A.trick && !A.grab && inp.held.shift && (inp.pressed.left || inp.pressed.right)) {
@@ -675,6 +714,7 @@ export class Player {
     // landing with Space still held → keep the crouch for the next pop
     if (this.input.held.pop) { this.crouching = true; this.spaceStart = performance.now() / 1000; }
     const queued = A.manualQueued || this.input.held.manual;
+    if (this.input.held.revert && this.speed > 1.2) this.revert = { t: 0, dir: this.fakie ? -1 : 1 };
     this.emit('land', info);
     if (queued && this.speed > 0.8) this.startManual(this.input.held.up);
   }
@@ -692,9 +732,10 @@ export class Player {
     if (A.trick) {
       const p = A.trick.t / A.trick.def.time;
       if (p < P.flipCompleteThreshold) return 'Didn\'t finish the ' + A.trick.def.name + '!';
-      A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; // close enough — snap it
+      A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; A.pitchAngle = 0; // close enough — snap it
     }
     if (A.grab && P.bailIfGrabbingOnLand) return 'Still grabbing!';
+    if (A.bodyFlip && A.bodyFlip.t / A.bodyFlip.dur < 0.9) return 'Under-rotated the ' + A.bodyFlip.def.name + '!';
     const vth = Math.hypot(vtx, vtz);
     if (vth > 0.8) {
       const travel = Math.atan2(vtx, vtz);
@@ -1099,6 +1140,15 @@ export class Player {
       if (hAvg > this.pos.y && hAvg - this.pos.y < 0.15) { pos = this._cp || (this._cp = new THREE.Vector3()); pos.copy(this.pos); pos.y = hAvg; }
     }
     sk.setTransform(pos, yaw, n, dt, rate, this.bankSmooth);
+    if (this.state === 'air' && this.air.bodyFlip && this.air.bodyFlip.angle) {
+      const r = sk.root, q = this._bfq || (this._bfq = new THREE.Quaternion()), ax = this._bfa || (this._bfa = new THREE.Vector3());
+      ax.set(0, 0, 1).applyQuaternion(r.quaternion);                         // board's long axis
+      q.setFromAxisAngle(ax, this.air.bodyFlip.angle * (sk.stance || 1));
+      const pivot = this._bfp || (this._bfp = new THREE.Vector3());
+      pivot.set(0, 0.95, 0).applyQuaternion(r.quaternion).add(r.position);   // spin around the centre of mass
+      r.position.sub(pivot).applyQuaternion(q).add(pivot);
+      r.quaternion.premultiply(q);
+    }
     if (this.state === 'bail') sk.setLooseBoard(true, this.bailInfo.boardPos, this.bailInfo.boardQuat);
     else if (this.state === 'walk' && this.groundBoard) sk.setLooseBoard(true, this.groundBoard.pos, this.groundBoard.quat);
     else sk.setLooseBoard(false);
@@ -1124,6 +1174,8 @@ export class Player {
       pushPhase: this.pushPhase,
       flipAngle: A ? A.flipAngle : 0,
       shuvAngle: A ? A.shuvAngle : 0,
+      pitchAngle: A ? A.pitchAngle || 0 : 0,
+      reverting: !!this.revert,
       boardLift: A ? (A.trick ? 0.22 : 0.12) * Math.min(1, A.time * 6) : 0,
       grab: !!(A && A.grab), grabHand: A && A.grab ? A.grab.hand : 'front',
       sideways: !!(this.grind && this.grind.def.sideways),

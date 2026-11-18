@@ -395,6 +395,7 @@ class Game {
         this.challenges.onManual(d);
         break;
       case 'powerslide': this.combo.add({ name: d.name, base: d.name, points: d.points }); break;
+      case 'revert': this.combo.add({ name: d.name, base: d.name, points: d.points }); ui.popup(d.name); break;
       case 'bail':
         ui.popup('BAIL! ' + d.reason, 'bail');
         au.bail();
@@ -475,7 +476,7 @@ class Game {
   step(realDt) {
     const p = this.player, inp = this.input;
     const now = performance.now() / 1000;
-    if (inp.pressed.camera) this.ui.toast('Camera: ' + { follow: 'Follow', filmer: 'Filmer', fisheye: 'Fisheye filmer' }[this.rig.toggle()], '', 1200);
+    if (inp.pressed.camera) this.ui.toast('Camera: ' + { follow: 'Follow', filmer: 'Filmer', fisheye: 'Fisheye filmer', first: 'First person' }[this.rig.toggle()], '', 1200);
     p.camYaw = this.rig.yaw;                 // walking is camera-relative
     p.assist = this.settings.assist !== false;
     p.frameInput(now);
