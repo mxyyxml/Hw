@@ -225,52 +225,58 @@ export class Skater {
   _useHuman() {
     const m = this.mat;
     const fit = fitSkeleton(this);
-    this.thigh = fit.thigh; this.shin = fit.shin; this.footH = fit.footH; this.hipX = fit.hipX;
     this.human = true;
-    const J = fit.joints;
     for (const p of this.faceParts) p.visible = false;
     for (const A of this.arms) { A.hand.visible = false; A.cuff.visible = false; }
     for (const L of this.legs) { for (const c of L.foot.children) c.visible = false; L.sock.visible = false; }
-    // eyes & eyebrows on the real face (positions from the model's eye markers)
-    const neck = J.neck;
-    for (const side of ['l', 'r']) {
-      const e = J[side + '-eye'].clone().sub(neck);
-      // eyeball with a photo iris (MakeHuman CC0 eye texture, projected from the front)
+    // eyeballs with a photo iris (MakeHuman CC0 eye texture, projected from the front)
+    this._eyes = [0, 1].map(() => {
       const eg = new THREE.SphereGeometry(0.0118, 20, 14), ep = eg.attributes.position, euv = eg.attributes.uv;
       for (let k = 0; k < ep.count; k++) euv.setXY(k, ep.getX(k) / 0.0118 * 0.5 + 0.5, ep.getY(k) / 0.0118 * 0.5 + 0.5);
-      const eye = new THREE.Mesh(eg, m.eyeball);
-      eye.position.copy(e); this.head.add(eye);
-    }
-    // fit hats & hair (designed for the old head) onto the real head
-    const top = J['head-2'].y, eyeY = J['l-eye'].y;
-    const ry = (top - eyeY) * 1.149, rx = 0.082, rz = 0.1;
-    const oldC = new THREE.Vector3(0, 0.2, 0.004), oldR = new THREE.Vector3(0.1196, 0.139, 0.127);
-    const scale = new THREE.Vector3(rx / oldR.x, ry / oldR.y, rz / oldR.z);
-    const newC = new THREE.Vector3(0, top - ry, J['l-eye'].z - 0.088).sub(neck);
+      const eye = new THREE.Mesh(eg, m.eyeball); this.head.add(eye); return eye;
+    });
     this.headWear = new THREE.Group();
-    this.headWear.scale.copy(scale);
-    this.headWear.position.copy(newC).sub(oldC.clone().multiply(scale));
     this.head.add(this.headWear);
     for (const g of [...Object.values(this.hats), ...this.hair]) this.headWear.add(g);
     // clothing extras that only fit the simple body
     const P = this.parts;
     for (const x of [P.pocket, ...P.strings, P.jacketOpen, P.collar, ...P.flannel]) x.visible = false;
     this._hideExtras = true;
+    for (const h of this.hair) h.visible = false;      // real hair meshes / scalp layers instead
+    this._hairless = true;
+    m.skin.map = humanTex('skin.jpg');                 // photo skin (MakeHuman CC0), tinted by skin tone
+    this.onRefit = (f) => this._fitBody(f);            // the woman's body re-fits the skeleton
+    this._fitBody(fit);
+    this.bodyMesh = buildHuman(this);
+    if (this.belt) this.belt.visible = false;
+    // proper sneakers on the real feet
+    for (const L of this.legs) this._makeSneaker(L.foot);
+  }
+
+  // everything that depends on the body's proportions: leg lengths for the IK,
+  // eyes, hats, glasses, hood and backpack
+  _fitBody(fit) {
+    this.thigh = fit.thigh; this.shin = fit.shin; this.footH = fit.footH; this.hipX = fit.hipX;
+    const J = fit.joints, neck = J.neck;
+    ['l', 'r'].forEach((side, i) => this._eyes[i].position.copy(J[side + '-eye']).sub(neck));
+    // fit hats (designed for the old head) onto the real head
+    const top = J['head-2'].y, eyeY = J['l-eye'].y;
+    const ry = (top - eyeY) * 1.149, rx = 0.082 * Math.abs(J['l-eye'].x) / 0.0298, rz = 0.1;
+    const oldC = new THREE.Vector3(0, 0.2, 0.004), oldR = new THREE.Vector3(0.1196, 0.139, 0.127);
+    const scale = new THREE.Vector3(rx / oldR.x, ry / oldR.y, rz / oldR.z);
+    const newC = new THREE.Vector3(0, top - ry, J['l-eye'].z - 0.088).sub(neck);
+    this.headWear.scale.copy(scale);
+    this.headWear.position.copy(newC).sub(oldC.clone().multiply(scale));
+    const P = this.parts;
     const chestY = J['l-shoulder'].y - J['spine-4'].y - 0.14;
     P.pack.position.set(0, chestY, -0.16);
     P.packStraps.forEach((st, i) => st.position.set(i ? 0.08 : -0.08, chestY, 0.11));
     P.hood.position.set(0, J.neck.y - J['spine-4'].y - 0.01, -0.085);
     P.hood.scale.set(0.85, 0.85, 0.85);
-    if (this.belt) { this.belt.position.y = J['spine-4'].y - (J['l-upper-leg'].y) - 0.02; this.belt.scale.set(0.84, 1, 0.92); }
-    for (const h of this.hair) h.visible = false;      // hair is painted on the real scalp instead
-    this._hairless = true;
-    // the bare feet are hidden inside the sneakers
-    m.skin.map = humanTex('skin.jpg');                 // photo skin (MakeHuman CC0), tinted by skin tone
-    this.bodyMesh = buildHuman(this);
-    if (this.belt) this.belt.visible = false;
+    if (this.belt) this.belt.position.y = J['spine-4'].y - (J['l-upper-leg'].y) - 0.02;
+    if (this.glasses) { this.head.remove(this.glasses); this.glasses = null; }
     this._makeGlasses(J);
-    // proper sneakers on the real feet
-    for (const L of this.legs) this._makeSneaker(L.foot);
+    if (this.outfit) this.glasses.visible = !!this.outfit.glasses && this.outfit.glasses !== 'none';
   }
 
   // glasses on the real face (clear frames or shades)

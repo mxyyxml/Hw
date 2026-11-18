@@ -79,9 +79,11 @@ export const HAIR = {
 
 // Re-shape the skeleton to the human's proportions and set the bind pose.
 // Returns the leg measurements the animation needs.
-export function fitSkeleton(sk) {
+export function fitSkeleton(sk, joints = HUMAN.joints) {
   const J = {};
-  for (const [k, v] of Object.entries(HUMAN.joints)) J[k] = V(v);
+  for (const [k, v] of Object.entries(joints)) J[k] = V(v);
+  // back to the bind pose (straight spine & head) before measuring
+  sk.hips.quaternion.identity(); sk.torso.quaternion.identity(); sk.head.quaternion.identity();
   const hipsY = (J['l-upper-leg'].y + J['r-upper-leg'].y) / 2;
   sk.hips.position.set(0, hipsY, 0);
   sk.torso.position.copy(J['spine-4']).sub(new THREE.Vector3(0, hipsY, 0)).setX(0);
@@ -163,15 +165,20 @@ export function buildHuman(sk) {
   const swf = new Float32Array(sw.length);
   for (let i = 0; i < sw.length; i++) swf[i] = sw[i] / 255;
   const reg = dec(HUMAN.regions, Uint8Array);
-  const J = HUMAN.joints;
-  const eyeY = J['l-eye'][1], eyeZ = J['l-eye'][2], eyeX = J['l-eye'][0], mouthY = J.mouth[1];
-  const neckY = J.neck[1], shY = J['l-shoulder'][1], shX = J['l-shoulder'][0];
-  const waistY = J['spine-4'][1], hipY = J['l-upper-leg'][1], kneeY = J['l-knee'][1], ankleY = J['l-ankle'][1];
-  const headC = [0, (eyeY + J['head-2'][1]) / 2 - 0.02, eyeZ - 0.09];
+  // body landmarks (the clothing cut lines follow them) — per body shape
+  let J, eyeY, eyeZ, eyeX, mouthY, neckY, shY, shX, waistY, hipY, kneeY, ankleY, headC, shoulder, wrist;
+  const landmarks = (src) => {
+    J = src;
+    eyeY = J['l-eye'][1]; eyeZ = J['l-eye'][2]; eyeX = J['l-eye'][0]; mouthY = J.mouth[1];
+    neckY = J.neck[1]; shY = J['l-shoulder'][1]; shX = J['l-shoulder'][0];
+    waistY = J['spine-4'][1]; hipY = J['l-upper-leg'][1]; kneeY = J['l-knee'][1]; ankleY = J['l-ankle'][1];
+    headC = [0, (eyeY + J['head-2'][1]) / 2 - 0.02, eyeZ - 0.09];
+    shoulder = { l: V(J['l-shoulder']), r: V(J['r-shoulder']) }; wrist = { l: V(J['l-hand']), r: V(J['r-hand']) };
+  };
+  landmarks(HUMAN.joints);
 
   // per-vertex arm parameter: 0 at the shoulder → 1 at the wrist (arm regions only)
   const armT = new Float32Array(n);
-  const shoulder = { l: V(J['l-shoulder']), r: V(J['r-shoulder']) }, wrist = { l: V(J['l-hand']), r: V(J['r-hand']) };
   const tmp = new THREE.Vector3();
 
   // ---------------------------------------------------------------- the skin
@@ -187,6 +194,7 @@ export function buildHuman(sk) {
   const useShape = (want) => {
     if (want === shape) return;
     shape = want; base = want === 'female' ? female : male;
+    landmarks(want === 'female' && HUMAN.jointsF ? HUMAN.jointsF : HUMAN.joints);
     pos.set(base); g.setIndex(new THREE.BufferAttribute(index, 1)); g.computeVertexNormals();
     normals = g.attributes.normal.array.slice();
     for (let i = 0; i < n; i++) {
@@ -262,7 +270,7 @@ export function buildHuman(sk) {
     // neckline
     let ny;
     const bell = (w) => Math.max(0, 1 - (ax / w) * (ax / w));
-    if (T.neck === 'scoop') ny = shY + 0.035 - 0.15 * front * bell(0.115) - 0.06 * (1 - front) * bell(0.1);
+    if (T.neck === 'scoop') ny = shY + 0.035 - 0.09 * front * bell(0.095) - 0.05 * (1 - front) * bell(0.1);
     else if (T.neck === 'vee') ny = neckY - 0.02 - 0.1 * front * Math.max(0, 1 - ax / 0.07);
     else if (T.neck === 'hood') ny = neckY - 0.005 - 0.03 * front * bell(0.08);
     else if (T.neck === 'collar') ny = neckY + 0.012 - 0.07 * front * Math.max(0, 1 - ax / 0.055);
@@ -270,7 +278,7 @@ export function buildHuman(sk) {
     f = Math.max(f, y - ny);
     if (T.sleeve === null) {
       // tank armhole: an oval around the shoulder joint, leaving a strap on top
-      const ex = (ax - (shX + 0.02)) / 0.095, ey = (y - (shY - 0.07)) / 0.15;
+      const ex = (ax - (shX + 0.045)) / 0.075, ey = (y - (shY - 0.06)) / 0.14;   // (outside the chest on both bodies)
       f = Math.max(f, 1 - Math.sqrt(ex * ex + ey * ey)) ;
       if (r === R.upperArm || armT[i] > 0.02) f = Math.max(f, 0.02);
     }
@@ -487,6 +495,16 @@ export function buildHuman(sk) {
   const bindMatrix = mesh.bindMatrix.clone();
   const headIndex = sk.bones.indexOf(sk.head);
 
+  // re-fit the skeleton to the current body (the woman has her own proportions)
+  // and re-measure the bind pose of every bone relative to the body
+  const refit = () => {
+    const fit = fitSkeleton(sk, J);
+    sk.root.updateMatrixWorld(true);
+    const bodyInv = new THREE.Matrix4().copy(sk.body.matrixWorld).invert(), rel = new THREE.Matrix4();
+    skel.bones.forEach((b, i) => { rel.multiplyMatrices(bodyInv, b.matrixWorld); skel.boneInverses[i].multiplyMatrices(bindMatrix, rel).invert(); });
+    if (sk.onRefit) sk.onRefit(fit);
+  };
+
   const layers = [];
   const addLayer = (geo, mat, opts = {}) => {
     if (!geo) return null;
@@ -579,7 +597,7 @@ export function buildHuman(sk) {
   const setOutfit = (o) => {
     const prevShape = shape;
     useShape(o.body === 'female' ? 'female' : 'male');
-    if (shape !== prevShape) syncSkin();
+    if (shape !== prevShape) { syncSkin(); refit(); }
     clearLayers();
     const M = sk.mat;
     const T = TOPS[o.top] === undefined ? TOPS.tee : TOPS[o.top];
