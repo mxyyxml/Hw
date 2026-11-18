@@ -70,11 +70,18 @@ ponytail and afro hair, plus buzz, mohawk, bald), hats fitted to the head (beani
 bucket hat, helmet, kippah), a padded backpack with fitted straps (8 colours), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
 9 tops (tee, oversized tee, tank, long sleeve, hoodie, flannel, jacket, jersey, shirtless),
 7 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts, board shorts), colours for everything, skin tone,
-hair colour, backpack, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
+hair colour, backpack, shirt prints, socks (crew / high / ankle) and sock colour, deck graphics,
+wheel size (52–60 mm) and colour, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
 Saved in your browser.
 
 Clothes and hair are real layers cut from the body surface along smooth lines (necklines, sleeves,
 hems, hairlines), loosened where fabric hangs and skinned to the same bones, so they move with the body.
+
+### 🎬 Replay & sound
+Press **Y** for a cinematic replay of the last 12 seconds (tracking, orbit and tripod shots). Wheels
+sound different on smooth ramps, concrete (with the clack of paving joints), rough street and sand;
+metal grinds and wood/concrete slides sound different; footsteps off the board; city hum and waves
+at the beach.
 
 ### 🏖️ Tel Aviv Beach (teleport: "Tel Aviv Beach Promenade")
 A Mediterranean beachfront on the west side of the city: open sea, a sand beach (sand slows you down)
@@ -98,6 +105,14 @@ with a golden menorah monument, a synagogue, blue-and-white bunting and Hebrew s
 - **Weight shift:** you lean into a carve over a fraction of a second — tap A / D for small line corrections,
   hold for a full carve. The trucks can't turn tighter than about 1 m; nearly stopped, you **kick turn**
   (pivot on the back wheels) instead.
+- **Balance:** after landings, curbs and bumps your centre of mass is a real inverted pendulum —
+  your reflexes pull it back (stronger crouched), leaning A / D against the fall helps, and past
+  ~35° you go down. Crooked or hard landings throw your weight more.
+- **Knees** are a spring-damper that soaks up every landing; popping while still compressed gives a
+  weaker ollie.
+- **Two-truck contact:** the board sits on its front and back wheels, so it pitches across ramp
+  bottoms, lips and curbs instead of floating on one point.
+- **Wheels matter:** bigger wheels (Closet) roll over rough ground more easily and chatter less.
 - **Wheel chatter & speed wobbles:** rough asphalt and sand buzz through the board; bombing faster than
   ~47 km/h standing tall starts speed wobbles — crouch (hold Space) to settle them.
 - **Grass & dirt** stop you within a couple of metres; roll onto a lawn too fast and you get thrown off.

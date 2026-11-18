@@ -78,6 +78,32 @@ export const HAIR = {
   curly:    { top: 0.004, side: 0.002, proxy: 'afro01' },
 };
 
+// original shirt prints (no real brands): drawn on a transparent canvas
+const _prints = {};
+function printTexture(kind) {
+  if (_prints[kind]) return _prints[kind];
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.clearRect(0, 0, 256, 256);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  if (kind === 'logo') {
+    x.fillStyle = '#e63946'; x.font = 'bold 54px sans-serif'; x.fillText('LUNCH', 128, 92);
+    x.fillStyle = '#1d1d1d'; x.font = 'bold 54px sans-serif'; x.fillText('BREAK', 128, 148);
+    x.fillRect(48, 182, 160, 8);
+  } else if (kind === 'wheel') {
+    x.strokeStyle = '#1d1d1d'; x.lineWidth = 16; x.beginPath(); x.arc(128, 128, 80, 0, Math.PI * 2); x.stroke();
+    x.fillStyle = '#f2c14e'; x.beginPath(); x.arc(128, 128, 40, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#1d1d1d'; x.font = 'bold 26px sans-serif'; x.fillText('SKATE CLUB', 128, 236);
+  } else if (kind === 'tlv') {
+    x.strokeStyle = '#0038b8'; x.lineWidth = 12;
+    for (const rot of [0, Math.PI]) { x.beginPath(); for (let k = 0; k < 3; k++) { const a = rot + k * 2 * Math.PI / 3; x[k ? 'lineTo' : 'moveTo'](128 + Math.sin(a) * 70, 110 - Math.cos(a) * 70); } x.closePath(); x.stroke(); }
+    x.fillStyle = '#0038b8'; x.font = 'bold 40px sans-serif'; x.fillText('TEL AVIV', 128, 218);
+  } else if (kind === 'stripe') {
+    ['#e63946', '#f2c14e', '#2a9d8f'].forEach((col, i) => { x.fillStyle = col; x.fillRect(20, 70 + i * 42, 216, 30); });
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return (_prints[kind] = t);
+}
+
 // Re-shape the skeleton to the human's proportions and set the bind pose.
 // Returns the leg measurements the animation needs.
 export function fitSkeleton(sk, joints = HUMAN.joints) {
@@ -681,6 +707,33 @@ export function buildHuman(sk) {
       const stub = o.facialHair === 'stubble';
       addLayer(layer((i) => beardField(i, o.facialHair), (i, f) => (stub ? 0.0009 : 0.0045 * sstep(0, 0.01, -f) + 0.001), { hem: !stub }),
         stub ? M.stubble : M.hair, { shadow: !stub });
+    }
+    // ---- SOCKS: knitted tube from inside the shoe up the shin (shows under shorts)
+    const SOCK = { ankle: 0.035, crew: 0.15, high: 0.26 }[o.socks];
+    if (SOCK) {
+      const sock = (i) => {
+        const r = reg[i]; if (r !== R.shin && r !== R.foot) return 1;
+        return base[i * 3 + 1] - (ankleY + SOCK);
+      };
+      addLayer(layer(sock, (i, fv) => 0.0035 + 0.0025 * sstep(0, 0.02, -fv), { smooth: 2 }), M.sock);
+    }
+    // ---- CHEST PRINT on tees, hoodies & long sleeves (original designs)
+    if (o.print && o.print !== 'none' && topGeo && T && T.neck !== 'scoop') {
+      const py0 = shY - 0.27, py1 = shY - 0.07, pw = 0.085;
+      const print = (i) => {
+        const r = reg[i]; if (r !== R.torso && r !== R.collar) return 1;
+        const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+        return Math.max(-z + 0.02, Math.abs(x) - pw, py0 - y, y - py1);
+      };
+      const pg = layer(print, (i) => Math.max(topGeo.userData.offset[i], 0) + 0.0015, { hem: false });
+      if (pg) {
+        const pp = pg.attributes.position, uv2 = pg.attributes.uv;
+        for (let k = 0; k < pp.count; k++) uv2.setXY(k, (pp.getX(k) + pw) / (2 * pw), (pp.getY(k) - py0) / (py1 - py0));
+        uv2.needsUpdate = true;
+        const Mat = M.top.isMeshStandardMaterial ? THREE.MeshStandardMaterial : THREE.MeshLambertMaterial;
+        const m2 = addLayer(pg, new Mat({ map: printTexture(o.print), transparent: true, alphaTest: 0.05, ...(Mat === THREE.MeshStandardMaterial ? { roughness: 0.85 } : {}) }), { shadow: false });
+        m2.userData.ownMat = true;
+      }
     }
     // ---- HATS: cut from the head like the clothes, so they fit any head
     const cz = eyeZ - 0.09;                                  // head centre (front ↔ back)

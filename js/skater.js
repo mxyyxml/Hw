@@ -5,6 +5,7 @@
 //  manual, bail, walk...) and this file turns it into joint rotations.
 // =============================================================================
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DEFAULT_OUTFIT, PUSH } from './config.js';
 import { buildBody } from './body.js';
 import { fitSkeleton, buildHuman, hairTextures, humanTex } from './human.js';
@@ -46,6 +47,51 @@ function knitTexture() {
   return t;
 }
 
+// skateboard textures: grip tape (fine black grit) and original deck graphics
+let _grip = null;
+function gripTexture() {
+  if (_grip) return _grip;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d'); x.fillStyle = '#2a2a2a'; x.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 2600; i++) { const g = 20 + Math.random() * 70; x.fillStyle = `rgb(${g},${g},${g})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1, 1); }
+  _grip = new THREE.CanvasTexture(c); _grip.wrapS = _grip.wrapT = THREE.RepeatWrapping; _grip.colorSpace = THREE.SRGBColorSpace;
+  return _grip;
+}
+let _ply = null;
+function plyTexture() {
+  if (_ply) return _ply;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 16;
+  const x = c.getContext('2d');
+  const cols = ['#e7d3a8', '#c9a46c', '#e7d3a8', '#3d6fa8', '#e7d3a8', '#b0393e', '#e7d3a8'];
+  cols.forEach((col, i) => { x.fillStyle = col; x.fillRect(0, i * 16 / 7, 64, 16 / 7 + 0.5); });
+  _ply = new THREE.CanvasTexture(c); _ply.wrapS = THREE.RepeatWrapping; _ply.colorSpace = THREE.SRGBColorSpace;
+  return _ply;
+}
+const _decks = {};
+export function deckTexture(design, colorHex) {
+  const key = design + colorHex;
+  if (_decks[key]) return _decks[key];
+  const c = document.createElement('canvas'); c.width = 256; c.height = 1024;
+  const x = c.getContext('2d'), col = '#' + colorHex.toString(16).padStart(6, '0'), W = 256, H = 1024;
+  x.fillStyle = '#e8dcc0'; x.fillRect(0, 0, W, H);                     // bare maple
+  if (design === 'stripes') { x.fillStyle = col; for (let i = 0; i < 9; i++) x.fillRect(0, i * 120 + 20, W, 55); }
+  else if (design === 'sunset') {
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1d1d3d'); g.addColorStop(0.5, col); g.addColorStop(1, '#f2c14e'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#ffe9a8'; x.beginPath(); x.arc(W / 2, H * 0.55, 80, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#1d1d1d'; for (let i = 0; i < 6; i++) x.fillRect(0, H * 0.55 + i * 18, W, 6 + i);
+  } else if (design === 'checker') { for (let j = 0; j < 16; j++) for (let i = 0; i < 4; i++) { x.fillStyle = (i + j) % 2 ? col : '#111'; x.fillRect(i * 64, j * 64, 64, 64); } }
+  else if (design === 'bolt') { x.fillStyle = col; x.fillRect(0, 0, W, H); x.fillStyle = '#111'; x.beginPath(); x.moveTo(150, 120); x.lineTo(60, 540); x.lineTo(130, 540); x.lineTo(90, 900); x.lineTo(200, 430); x.lineTo(130, 430); x.closePath(); x.fill(); }
+  else if (design === 'star') {
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H); x.fillStyle = '#0038b8'; x.fillRect(0, 90, W, 70); x.fillRect(0, H - 160, W, 70);
+    x.strokeStyle = '#0038b8'; x.lineWidth = 14;
+    for (const rot of [0, Math.PI]) { x.beginPath(); for (let k = 0; k < 3; k++) { const a = rot + k * 2 * Math.PI / 3; x[k ? 'lineTo' : 'moveTo'](W / 2 + Math.sin(a) * 95, H / 2 - Math.cos(a) * 95); } x.closePath(); x.stroke(); }
+  } else if (design === 'plain') { x.fillStyle = col; x.fillRect(0, 0, W, H); }
+  // a little wear on the nose & tail (scraped graphics show the wood)
+  for (let i = 0; i < 260; i++) { const yy = Math.random() < 0.5 ? Math.random() * 90 : H - Math.random() * 90; x.fillStyle = 'rgba(232,220,192,0.7)'; x.fillRect(Math.random() * W, yy, 3 + Math.random() * 14, 2); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return (_decks[key] = t);
+}
+
 // flannel: woven plaid (greyscale, tinted by the top colour)
 let _plaid = null;
 function plaidTexture() {
@@ -76,6 +122,7 @@ export class Skater {
       pack: M(0x264653), packDark: M(0x1b343d),
       grip: M(0x1d1d1d), deck: M(0xe9c46a), deckSide: M(0xc9a24a),
       truck: M(0xb8bcc2), wheel: M(0xf8f4e3), eye: M(0x1d1d1d),
+      sock: M(0xf2f2f2), bolt: M(0x6f747b), bushing: M(0xe9c46a), wheelCore: M(0xdedede), bearing: M(0x2b2f36),
       eyeball: M(0xffffff), brow: M(0x2b1d14), hairCard: M(0x2b1d14), stubble: M(0x2b1d14), lens: M(0x111111), frame: M(0x1d1d1d),
     };
     // hair: strand textures; cards are alpha-cut ribbons, stubble is a faint shadow
@@ -116,7 +163,8 @@ export class Skater {
     m.top.map = this._cotton = getFabric('cotton');
     m.shoe.map = canvasWeave();
     m.eyeball.map = humanTex('eye.jpg');
-    m.pack.map = canvasWeave(); m.hat.map = knitTexture();
+    m.pack.map = canvasWeave(); m.hat.map = knitTexture(); m.sock.map = knitTexture();
+    m.grip.map = gripTexture(); m.deckSide.map = plyTexture(); m.grip.color.setHex(0xffffff); m.deckSide.color.setHex(0xffffff);
     m.pants.map = getFabric('denim');
     this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
@@ -365,31 +413,124 @@ export class Skater {
     }
   }
 
+  // A real skateboard (all procedural):
+  //  * deck: popsicle outline, 8.25" wide, concave across the width and kicked-up
+  //    nose & tail, 7-ply edge, grip tape on top, a printed graphic underneath
+  //  * trucks: baseplate with 4 bolts (heads on the grip), kingpin, bushings,
+  //    pivot, tapered hanger and axle
+  //  * wheels: lathe-turned urethane with a rounded lip, a core and a bearing
+  //    shield + axle nut. Size & colour come from the Closet.
   _makeBoard(parent) {
-    const m = this.mat, box = this._box, mesh = this._mesh;
-    // deck: a slightly concave rounded shape (capsule squashed flat)
-    mesh(parent, new THREE.CapsuleGeometry(0.108, 0.58, 4, 10).rotateX(Math.PI / 2).scale(1, 0.1, 1), m.deck, 0, -0.004, 0);
-    box(parent, 0.205, 0.006, 0.66, m.grip, 0, 0.008, 0);
-    for (const z of [-0.36, 0.36]) {           // kicktails
-      const tail = mesh(parent, new THREE.CylinderGeometry(0.105, 0.105, 0.022, 12, 1, false, z > 0 ? -Math.PI / 2 : Math.PI / 2, Math.PI), m.deck, 0, 0.02, z * 0.95);
-      tail.rotation.x = z > 0 ? -0.32 : 0.32;
-      tail.scale.set(1, 1, 0.9);
-    }
+    const m = this.mat;
+    const L = 0.81, W = 0.21, T = 0.012, KICK = 0.33, NOSE_Z = 0.265;
+    const hw = (z) => {                                   // half width along the deck
+      const c = L / 2 - W / 2, az = Math.abs(z);
+      return az <= c ? W / 2 : Math.sqrt(Math.max(0, (W / 2) ** 2 - (az - c) ** 2)) * 0.98 + 0.002;
+    };
+    const lift = (x, z) => {                              // concave + kicks
+      const az = Math.abs(z);
+      return 0.0055 * (x / (W / 2)) ** 2 + (az > NOSE_Z ? Math.pow(az - NOSE_Z, 1.15) * Math.tan(KICK) * 1.25 : 0);
+    };
+    const NX = 10, NZ = 48;
+    const deckGeo = (yOff, top, uvMode) => {
+      const P = [], U = [], I = [];
+      for (let j = 0; j <= NZ; j++) {
+        const z = -L / 2 + L * j / NZ, h = hw(z);
+        for (let i = 0; i <= NX; i++) {
+          const x = -h + 2 * h * i / NX;
+          P.push(x, lift(x, z) + yOff, z);
+          U.push(uvMode === 'grip' ? (x + W / 2) * 6 : (x / W + 0.5), uvMode === 'grip' ? (z + L / 2) * 6 : (z / L + 0.5));
+        }
+      }
+      for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+        const q = j * (NX + 1) + i, r = q + NX + 1;
+        if (top) I.push(q, r, q + 1, q + 1, r, r + 1); else I.push(q, q + 1, r, q + 1, r + 1, r);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+      g.setIndex(I); g.computeVertexNormals();
+      return g;
+    };
+    const edgeGeo = () => {                               // 7-ply side wall all the way round
+      const P = [], U = [], I = [];
+      const ring = [];
+      for (let j = 0; j <= NZ; j++) { const z = -L / 2 + L * j / NZ; ring.push([hw(z), z]); }
+      for (let j = NZ; j >= 0; j--) { const z = -L / 2 + L * j / NZ; ring.push([-hw(z), z]); }
+      ring.forEach(([x, z], k) => { const y = lift(x, z); P.push(x, y + T / 2, z, x, y - T / 2, z); U.push(k / ring.length * 8, 1, k / ring.length * 8, 0); });
+      for (let k = 0; k < ring.length - 1; k++) { const q = k * 2; I.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+      g.setIndex(I); g.computeVertexNormals();
+      return g;
+    };
+    // static parts are merged per material at the end (a handful of draw calls per board)
+    const buckets = new Map();
+    const add = (geo, mat, x = 0, y = 0, z = 0, shadow = true, rotX = 0) => {
+      if (rotX) geo.rotateX(rotX);
+      geo.translate(x, y, z);
+      if (!buckets.has(mat)) buckets.set(mat, []);
+      buckets.get(mat).push(geo.index ? geo.toNonIndexed() : geo);
+    };
+    const Y0 = 0.006;                                     // deck centre height (grip top ≈ board origin + 0.012)
+    add(deckGeo(Y0 + T / 2 + 0.0008, true, 'grip'), m.grip);
+    add(deckGeo(Y0 - T / 2, false, 'graphic'), m.deck);
+    add(edgeGeo().translate(0, Y0, 0), m.deckSide);
     const wheels = [];
-    for (const z of [-0.25, 0.25]) {
-      box(parent, 0.06, 0.03, 0.055, m.truck, 0, -0.025, z);      // baseplate
-      mesh(parent, new THREE.CylinderGeometry(0.014, 0.014, 0.2, 6).rotateZ(Math.PI / 2), m.truck, 0, -0.052, z); // axle
-      box(parent, 0.13, 0.03, 0.035, m.truck, 0, -0.045, z);      // hanger
-      for (const x of [-0.1, 0.1]) {
-        const spin = joint(parent, x, -0.064, z);
-        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.034, 10), m.wheel);
-        w.rotation.z = Math.PI / 2; w.castShadow = true;
-        spin.add(w);
+    const R = this.wheelRadius || 0.027;
+    for (const z of [-0.205, 0.205]) {
+      const by = Y0 - T / 2 + lift(0, z);
+      // baseplate + riser-less mount, 4 bolts through the deck (heads on the grip)
+      add(new THREE.BoxGeometry(0.058, 0.009, 0.074), m.truck, 0, by - 0.0045, z);
+      for (const [bx, bz] of [[-0.02, -0.027], [0.02, -0.027], [-0.02, 0.027], [0.02, 0.027]]) {
+        add(new THREE.CylinderGeometry(0.0045, 0.0045, 0.002, 6), m.bolt, bx, Y0 + T / 2 + lift(bx, z + bz) + 0.0015, z + bz, false);
+        add(new THREE.CylinderGeometry(0.0028, 0.0028, 0.006, 6), m.bolt, bx, by - 0.011, z + bz, false);   // nut
+      }
+      const toC = Math.sign(z);                           // kingpin leans toward the board centre
+      add(new THREE.CylinderGeometry(0.0045, 0.0045, 0.04, 8), m.bolt, 0, by - 0.022, z - toC * 0.012, false, toC * 0.6);
+      for (const [dy, r] of [[-0.016, 0.011], [-0.03, 0.0105]]) {                                   // bushings
+        add(new THREE.CylinderGeometry(r, r * 0.92, 0.011, 12), m.bushing, 0, by + dy, z - toC * (0.012 - dy * 0.35), false, toC * 0.6);
+      }
+      // hanger: tapered body + axle
+      const hg = new THREE.CylinderGeometry(0.016, 0.009, 0.15, 10, 1).rotateZ(Math.PI / 2);
+      const hp = hg.attributes.position;
+      for (let i = 0; i < hp.count; i++) { const x = hp.getX(i); hp.setY(i, hp.getY(i) * (1 - 0.35 * Math.abs(x) / 0.075)); }
+      hg.computeVertexNormals();
+      const ay = -0.094 + R;                              // wheels sit on the ground plane of the board
+      add(hg, m.truck, 0, ay + 0.008, z);
+      add(new THREE.CylinderGeometry(0.004, 0.004, 0.215, 8).rotateZ(Math.PI / 2), m.bolt, 0, ay, z, false);
+      add(new THREE.SphereGeometry(0.014, 10, 6).scale(1, 1.1, 1.3), m.truck, 0, ay + 0.02, z - toC * 0.02);   // pivot
+      // wheels: lathe profile with a rounded lip
+      const prof = [];
+      const wW = 0.033;
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10, a = t * Math.PI;
+        prof.push(new THREE.Vector2(R * 0.62 + (R * 0.38) * Math.sin(a) ** 0.35, -wW / 2 + wW * t));
+      }
+      const wheelGeo = new THREE.LatheGeometry(prof.reverse(), 24).rotateZ(Math.PI / 2);   // (order sets the outward normals)
+      for (const x of [-0.088, 0.088]) {
+        const spin = joint(parent, x, ay, z);
+        const w = new THREE.Mesh(wheelGeo, m.wheel); w.castShadow = true; spin.add(w);
+        const coreParts = [new THREE.CylinderGeometry(R * 0.62, R * 0.62, wW * 0.98, 16, 1, true).rotateZ(Math.PI / 2)], shieldParts = [];
+        for (const sx of [-1, 1]) {
+          coreParts.push(new THREE.CircleGeometry(R * 0.62, 16).rotateY(sx * Math.PI / 2).translate(sx * wW * 0.49, 0, 0));
+          shieldParts.push(new THREE.RingGeometry(0.0045, 0.011, 14).rotateY(sx * Math.PI / 2).translate(sx * wW * 0.495, 0, 0));
+        }
+        spin.add(new THREE.Mesh(mergeGeometries(coreParts.map((g2) => g2.toNonIndexed())), m.wheelCore));
+        spin.add(new THREE.Mesh(mergeGeometries(shieldParts.map((g2) => g2.toNonIndexed())), m.bearing));
+        add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.006, 6).rotateZ(Math.PI / 2), m.bolt, x + Math.sign(x) * 0.02, ay, z, false);   // axle nut
         wheels.push(spin);
       }
     }
+    for (const [mat, list] of buckets) {
+      const o = new THREE.Mesh(mergeGeometries(list), mat);
+      o.castShadow = mat !== m.bolt; o.receiveShadow = true;
+      parent.add(o);
+    }
     return wheels;
   }
+
 
   // ---------------------------------------------------------------- outfits
   applyOutfit(o) {
@@ -410,8 +551,19 @@ export class Skater {
     m.top.color.setHex(o.topColor); m.topDark.color.copy(dark(o.topColor, o.top === 'flannel' ? 0.55 : 0.78));
     m.pants.color.setHex(o.pantsColor); m.pantsDark.color.copy(dark(o.pantsColor));
     m.shoe.color.setHex(o.shoeColor);
+    m.sock.color.setHex(o.sockColor ?? 0xf2f2f2);
     m.hat.color.setHex(o.hatColor); m.hatDark.color.copy(dark(o.hatColor));
-    m.deck.color.setHex(o.deckColor); m.deckSide.color.copy(dark(o.deckColor, 0.85));
+    m.deck.map = deckTexture(o.deckGraphic || 'stripes', o.deckColor); m.deck.color.setHex(0xffffff); m.deck.needsUpdate = true;
+    m.deckSide.color.setHex(0xffffff);
+    m.wheel.color.setHex(o.wheelColor ?? 0xf8f4e3); m.wheelCore.color.copy(dark(o.wheelColor ?? 0xf8f4e3, 0.8));
+    const wr = { 52: 0.026, 54: 0.027, 56: 0.028, 60: 0.03 }[o.wheelSize || 54] || 0.027;
+    if (wr !== this.wheelRadius) {                       // bigger / smaller wheels: rebuild the boards
+      this.wheelRadius = wr;
+      for (const [holder, key] of [[this.board, 'wheels'], [this.looseBoard, 'looseWheels']]) {
+        for (const c of [...holder.children]) { holder.remove(c); c.traverse((o2) => o2.geometry && o2.geometry.dispose()); }
+        this[key] = this._makeBoard(holder);
+      }
+    }
     const P = this.parts, show = (x, v) => (Array.isArray(x) ? x : [x]).forEach((p) => { p.visible = v; });
     const simple = !this._hideExtras;
     show(P.hood, o.top === 'hoodie'); show(P.pocket, simple && o.top === 'hoodie'); show(P.strings, simple && o.top === 'hoodie');
@@ -441,7 +593,7 @@ export class Skater {
     if (!this._lambert) this._lambert = { ...this.mat };
     if (!this._pbr) {
       const R = { skin: 0.5, skinDark: 0.55, eye: 0.15, topTrim: 0.3, truck: 0.35, wheel: 0.5, grip: 0.95, deck: 0.6, deckSide: 0.6, sole: 0.8, shoe: 0.75, hair: 0.55, hairCard: 0.55, brow: 0.7, stubble: 0.9, lens: 0.05, frame: 0.35 };
-      const metal = { truck: 0.75, frame: 0.2 };
+      const metal = { truck: 0.75, frame: 0.2, bolt: 0.85, bearing: 0.6 };
       this._pbr = {};
       for (const [k, m] of Object.entries(this._lambert)) {
         const props = { color: m.color, map: m.map || null, roughness: R[k] ?? 0.92, metalness: metal[k] ?? 0,
@@ -520,8 +672,10 @@ export class Skater {
     a.walk = damp(a.walk, mode === 'walk' ? 1 : 0, 10, dt);
     a.bail = mode === 'bail' ? Math.min(1, a.bail + dt * 3) : damp(a.bail, 0, 20, dt);
     a.armsOut = damp(a.armsOut, (mode === 'grind' || mode === 'manual') ? 1 : 0.35, 6, dt);
+    // knee compression comes straight from the physics (spring-damper); walking landings still dip
     a.dip = damp(a.dip, 0, 6, dt);
     if (st.landDip) a.dip = Math.max(a.dip, st.landDip);
+    if (st.comp !== undefined && mode !== 'walk') a.dip = Math.max(st.comp, mode === 'air' ? 0 : a.dip * 0);
     const pushing = st.pushPhase >= 0 && mode === 'ride';
     a.push = damp(a.push, pushing ? 1 : 0, 12, dt);
 
@@ -533,7 +687,9 @@ export class Skater {
     this.board.rotation.y = st.shuvAngle || 0;
     // the deck tilts on its trucks when you lean into a turn, and shakes on a sketchy landing
     a.deckRoll = damp(a.deckRoll || 0, mode === 'ride' ? -st.lean * 0.13 : 0, 8, dt);
-    const shake = (st.sketch || 0) * Math.sin(performance.now() / 45) * 0.12;
+    // the deck tips toward the side the rider's weight is falling (balance physics)
+    a.bal = damp(a.bal || 0, st.balance || 0, 30, dt);
+    const shake = -a.bal * this.stance * 0.35;
     // wheel chatter (rough ground) and speed wobbles shake the deck on its trucks
     const now = performance.now() / 1000, ch = st.chatter || 0, wb = st.wobble || 0;
     const buzz = ch * 0.012 * Math.sin(now * 83) + ch * 0.008 * Math.sin(now * 131);
@@ -633,15 +789,17 @@ export class Skater {
     // upper body: lean (minus what the pelvis already tilts), shoulders opened toward the nose
     this.torso.rotation.x = 0.15 + a.crouch * 0.35 + a.grab * 0.5 + a.lean * 0.25 + a.dip * 0.3 + a.push * 0.1 - this._tilt * 0.8;
     this.torso.rotation.y = -s * 0.32 * (1 - a.push);
-    this.torso.rotation.z = (-a.manual * 0.9 + a.slide * 0.1) * s + (st.sketch || 0) * Math.sin(performance.now() / 70) * 0.35;
+    this.torso.rotation.z = (-a.manual * 0.9 + a.slide * 0.1) * s;
+    // balance: the upper body leans with the centre of mass (toe / heel side), head stays level
+    this.torso.rotation.x += a.bal * s * 1.1;
     this.head.rotation.y = s * (-0.95 + a.lean * 0.15) * (1 - a.push * 0.8);
-    this.head.rotation.x = -0.1 - a.crouch * 0.2;
+    this.head.rotation.x = -0.1 - a.crouch * 0.2 - (a.bal || 0) * s * 0.5;
     const t = performance.now() / 1000;
     for (const A of this.arms) {
       const wobble = (mode === 'manual' || mode === 'grind') ? Math.sin(t * 7 + A.sgn) * 0.15 : 0;
       const swing = a.push * Math.sin((st.pushPhase || 0) * Math.PI * 2 + A.sgn) * 0.5;
       // relaxed arms: hang near the body with soft elbows, spread for balance on rails / manuals
-      A.sh.rotation.set(0.12 + a.dip * 0.3 + swing + a.crouch * 0.25, 0, A.sgn * (0.1 + a.armsOut * 0.55 + wobble + a.dip * 0.35) * (1 - a.push * 0.6));
+      A.sh.rotation.set(0.12 + a.dip * 0.3 + swing + a.crouch * 0.25, 0, A.sgn * (0.1 + a.armsOut * 0.55 + wobble + a.dip * 0.35 + Math.min(0.9, Math.abs(a.bal) * 2.2)) * (1 - a.push * 0.6));
       A.el.rotation.set(-0.45 - a.push * 0.3 - a.crouch * 0.3, 0, 0);
     }
     if (a.grab > 0.01) {

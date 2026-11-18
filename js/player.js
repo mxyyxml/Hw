@@ -79,6 +79,7 @@ export class Player {
     this.lastSafe = { x: this.pos.x, y: this.pos.y, z: this.pos.z, heading: this.heading };
     this.timeScale = 1;
     this.skater.setTransform(this.pos, this.modelYaw(), this.normal, 0);
+    this.balance = 0; this.balanceVel = 0; this.comp = 0; this.compVel = 0;
     this.emit('respawn', {});
   }
   teleport(spot) { this.spawn = spot; this.customSpot = null; this.respawnAt(spot); }
@@ -161,6 +162,10 @@ export class Player {
   // ------------------------------------------------------------------ fixed-step update
   update(dt) {
     this.time += dt;
+    // KNEES: a spring-damper. Landings and bumps push it down; it springs back.
+    const K = P2.knees;
+    this.compVel = (this.compVel || 0) + (-K.stiff * (this.comp || 0) - K.damp * this.compVel) * dt;
+    this.comp = clamp((this.comp || 0) + this.compVel * dt, -0.15, 1.15);
     this.updatePushStroke(dt);
     if (this.wantPop) {
       const w = this.wantPop; this.wantPop = null;
@@ -208,8 +213,25 @@ export class Player {
 
   // ------------------------------------------------------------------ RIDE
   updateRide(dt) {
-    if (this.sketch) this.sketch = Math.max(0, this.sketch - dt * 1.4);   // wobble after a sketchy landing
     const inp = this.input, n = this.normal;
+    // RIDER BALANCE: the body's centre of mass over the board is an inverted
+    // pendulum (θ = lean to the left of travel). Gravity tips it further; the
+    // rider's reflexes pull it back (stronger crouched); leaning with A / D adds
+    // your own correction. Lean past the limit and you go down.
+    {
+      const B = P2.balance, want = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+      const th = this.balance || 0, w = this.balanceVel || 0;
+      const k = B.reflex + (this.crouching ? B.crouchStiff : 0);
+      // your lean only helps when it's against the fall (carving keeps you balanced: the turn's
+      // centripetal pull matches the bank you see in the animation)
+      const corr = want && Math.sign(want) !== Math.sign(th) && Math.abs(th) > 0.02 ? want * B.lean : 0;
+      let acc = B.gravity * Math.sin(th) - k * th - B.damp * w + corr;
+      if (this.wobble) acc += Math.sin(this.time * 11) * this.wobble * B.wobbleKick;   // speed wobbles rock you
+      this.balanceVel = w + acc * dt;
+      this.balance = th + this.balanceVel * dt;
+      this.sketch = Math.min(1, Math.abs(this.balance) / B.bailAngle);
+      if (Math.abs(this.balance) > B.bailAngle) { this.balance = 0; this.balanceVel = 0; this.bail('Lost your balance!'); return; }
+    }
     const f = this._f || (this._f = new THREE.Vector3());
 
     // --- steering
@@ -256,7 +278,9 @@ export class Player {
 
     // --- rolling resistance (never reverses you)
     // different surfaces roll differently (rough street vs. smooth ramps)
-    const grip = P2.surfaceFriction[this.groundTag] ?? 1;
+    const wsz = 0.027 / ((this.skater && this.skater.wheelRadius) || 0.027);
+    let grip = P2.surfaceFriction[this.groundTag] ?? 1;
+    if (grip > 1) grip = 1 + (grip - 1) * wsz;          // rough ground: big wheels lose less
     this.speed = Math.max(0, this.speed - (this.speed * P.rollFriction + P.rollDrag) * grip * dt);
     // grass & dirt: small wheels dig in and you stop within a couple of metres
     if (!this.groundTag && this.col.onLawn(this.pos.x, this.pos.z)) {
@@ -277,7 +301,9 @@ export class Player {
     this.speed = Math.min(this.speed, P.maxSpeed);
     // WHEEL CHATTER: rough ground buzzes through the board (stronger the faster you go)
     const rough = this.onGrass ? 1 : this.groundTag === 'street' ? 0.8 : (P2.surfaceFriction[this.groundTag] ?? 1) < 1 ? 0.12 : 0.4;
-    this.chatter = Math.min(1, this.speed / 12) * rough;
+    // bigger wheels roll over cracks and grit more easily (and buzz less)
+    const wf = 0.027 / ((this.skater && this.skater.wheelRadius) || 0.027);
+    this.chatter = Math.min(1, this.speed / 12) * rough * wf * wf;
     // SPEED WOBBLES: bombing fast standing tall makes the trucks wobble; crouch to calm them
     const wob = this.speed > P2.wobbleSpeed && !this.crouching && !this.manual;
     this.wobble = clamp((this.wobble || 0) + (wob ? dt * 0.5 : -dt * 2.5), 0, 1);
@@ -323,6 +349,11 @@ export class Player {
       this.launch(false);
       return;
     }
+    const rise = g.h - this.pos.y - this.vel.y * dt;
+    if (rise > 0.03 && this.state === 'ride') {
+      this.compVel = (this.compVel || 0) + rise * 9;
+      this.balanceVel = (this.balanceVel || 0) + (Math.random() - 0.5) * rise * 6;
+    }
     this.pos.set(nx, g.h, nz);
     this.normal.set(g.nx, g.ny, g.nz);
     this.groundTag = g.tag;
@@ -364,7 +395,8 @@ export class Player {
   // ------------------------------------------------------------------ POP / LAUNCH
   pop(popInfo) {
     const t = clamp(popInfo.hold / P.popChargeTime, 0, 1);
-    const pop = lerp(P.popMin, P.popMax, t);
+    // you can't pop as hard while your knees are still absorbing a landing
+    const pop = lerp(P.popMin, P.popMax, t) * (1 - P2.knees.popLoss * clamp(this.comp || 0, 0, 1));
     const n = this.normal;
     if (this.groundTrans && n.y < P.transPopNy) {
       // OLLIE ON A TRANSITION (halfpipe / quarter / bowl wall): a real pop off a
@@ -620,14 +652,22 @@ export class Player {
       const off = Math.abs(wrapAngle(facing - travel));
       this.heading = facing;
       keep = Math.cos(off);
-      if (off > P2.landClean * Math.PI / 180) { this.sketch = Math.min(1, 0.35 + off); this.emit('sketchy', { off }); }
+      if (off > P2.landClean * Math.PI / 180) this.emit('sketchy', { off });
+      // a crooked landing throws your weight sideways (the way the board was turned)
+      const rel = Math.min(1.2, off / this.landTolerance(vth));
+      const side = Math.sign(wrapAngle(facing - travel)) || 1;
+      this.balanceVel = (this.balanceVel || 0) + side * P2.balance.landKick * Math.pow(rel, 1.5);
     } else {
       this.heading = A.yaw; this.fakie = false;
     }
     this.speed = Math.hypot(vtx, vty, vtz) * P.landSpeedKeep * keep;
     // big impacts: knees absorb it and you lose some speed
     if (impact > P2.hardLandingImpact) this.speed *= Math.max(0.5, 1 - P2.hardLandingLoss * (impact - P2.hardLandingImpact));
-    this.landDip = clamp(impact / 9, 0.12, 1);
+    // knees soak up the impact (spring-damper) …
+    this.compVel = (this.compVel || 0) + impact * P2.knees.absorb;
+    // … and a hard landing jolts your balance a little
+    this.balanceVel = (this.balanceVel || 0) + (Math.random() - 0.5) * Math.max(0, impact - 3) * P2.balance.impactKick;
+    this.landDip = 0;
     this.state = 'ride';
     this._tangent(this.heading, n, this.vel).multiplyScalar(this.speed);
     const info = this.landInfo(g, impact);
@@ -1036,7 +1076,29 @@ export class Player {
     }
     this.bankSmooth = (this.bankSmooth || 0) + (bank - (this.bankSmooth || 0)) * (1 - Math.exp(-8 * dt));
     if (this.state === 'bail') { n = up; rate = 20; }
-    sk.setTransform(this.pos, yaw, n, dt, rate, this.bankSmooth);
+    let pos = this.pos;
+    if (this.state === 'ride' && !this.manual) {
+      // TWO-TRUCK CONTACT: the board rests on its front and back wheels, so where the
+      // ground bends (bottom of a ramp, a lip, a curb) it pitches between them
+      const fx = Math.sin(this.heading), fz = Math.cos(this.heading), L = P2.truckBase;
+      const col = this.col, top = this.pos.y + 0.3;
+      const hf = col.ground(this.pos.x + fx * L, this.pos.z + fz * L, top).h, hb = col.ground(this.pos.x - fx * L, this.pos.z - fz * L, top).h;
+      const pitchSlope = (hf - hb) / (2 * L);
+      const cn = this._cn || (this._cn = new THREE.Vector3()), side = this._cs || (this._cs = new THREE.Vector3());
+      side.set(fz, 0, -fx).cross(this.normal).normalize();                 // board's long axis on the ground plane
+      const along = side.x * fx + side.z * fz;
+      // replace the along-board slope with the truck-to-truck slope
+      const tan = this._ct || (this._ct = new THREE.Vector3());
+      tan.set(fx, pitchSlope, fz).normalize();
+      const lat = this._cl || (this._cl = new THREE.Vector3()).set(fz, 0, -fx);
+      lat.addScaledVector(this.normal, -lat.dot(this.normal)).normalize();
+      cn.crossVectors(tan, lat).normalize();
+      if (cn.y < 0) cn.negate();
+      if (Math.abs(along) > 0 && cn.y > 0.2) n = cn;
+      const hAvg = (hf + hb) / 2;
+      if (hAvg > this.pos.y && hAvg - this.pos.y < 0.15) { pos = this._cp || (this._cp = new THREE.Vector3()); pos.copy(this.pos); pos.y = hAvg; }
+    }
+    sk.setTransform(pos, yaw, n, dt, rate, this.bankSmooth);
     if (this.state === 'bail') sk.setLooseBoard(true, this.bailInfo.boardPos, this.bailInfo.boardQuat);
     else if (this.state === 'walk' && this.groundBoard) sk.setLooseBoard(true, this.groundBoard.pos, this.groundBoard.quat);
     else sk.setLooseBoard(false);
@@ -1056,6 +1118,8 @@ export class Player {
       crouch: this.crouching ? 1 : (this.powersliding ? 0.5 : 0),
       lean: this.state === 'ride' ? this.lean : 0,
       sketch: this.sketch || 0,
+      balance: this.state === 'ride' ? (this.balance || 0) * (this.fakie ? -1 : 1) : 0,
+      comp: clamp(this.comp || 0, 0, 1),
       walkAir: this.state === 'walk' && this.walkVy !== 0,
       pushPhase: this.pushPhase,
       flipAngle: A ? A.flipAngle : 0,

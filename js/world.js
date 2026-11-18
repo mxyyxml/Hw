@@ -18,6 +18,7 @@ import { getTexture, getNormal, TEX_SCALE } from './textures.js';
 import { GAPS, PHYSICS } from './config.js';
 import { Foliage } from './foliage.js';
 import { Props } from './props.js';
+import { Decals } from './decals.js';
 
 // ---- colour palette (natural, slightly muted tones) --------------------------
 const C = {
@@ -407,6 +408,7 @@ export class World {
 
     // ---------------------------------------------------------------- meshes
     this.mesh = g.build();
+    this._decals();
     this.scene.add(this.mesh);
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.Float32BufferAttribute(g.shadowPos, 3));
@@ -1159,6 +1161,38 @@ export class World {
     }
   }
 
+  // graffiti on walls + cracks, oil, gum, scuffs and grime on the ground (one draw call)
+  _decals() {
+    const D = new Decals(this.scene), b = this.col.bounds, r = (() => { let sd = 91; return () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; }; })();
+    let k = 0;
+    // inner faces of the buildings around the city (every other one gets a piece)
+    for (let x = b.minX; x < b.maxX; x += 22) {
+      if (k++ % 2 === 0) D.graffiti([x + 11 + (r() - 0.5) * 6, 5.2, b.minZ - 1], [0, 0, 1], 6 + r() * 2, k % 4);
+      if (k % 3 === 0) D.graffiti([x + 11 + (r() - 0.5) * 6, 5.2, b.maxZ + 1], [0, 0, -1], 6 + r() * 2, (k + 1) % 4);
+    }
+    for (let z = b.minZ; z < b.maxZ; z += 22) {
+      if (k++ % 2 === 0 && z < 150) D.graffiti([b.minX, 5.2, z + 11 + (r() - 0.5) * 6], [1, 0, 0], 6 + r() * 2, k % 4);
+      if (k % 3 === 0) D.graffiti([b.maxX, 5.2, z + 11 + (r() - 0.5) * 6], [-1, 0, 0], 6 + r() * 2, (k + 2) % 4);
+    }
+    // the beach sea wall
+    for (const z of [180, 230, 300, 368]) D.graffiti([-86.02, 0.62, z], [-1, 0, 0], 2.2, (z / 10 | 0) % 4);
+    // ground marks on flat paving and roads
+    const okTag = (t) => t === null || t === 'street' || t === 'street_top' || t === 'promenade';
+    let placed = 0;
+    for (let i = 0; i < 40000 && placed < 2400; i++) {
+      const x = b.minX + 2 + r() * (b.maxX - b.minX - 4), z = b.minZ + 2 + r() * (b.maxZ - b.minZ - 4);
+      const g = this.col.ground(x, z, 2);
+      if (g.ny < 0.995 || !okTag(g.tag) || (g.h > 0.05 && g.tag !== 'promenade') || this.col.onLawn(x, z)) continue;
+      const q = r();
+      const kind = q < 0.42 ? (q * 7 | 0) % 3 : q < 0.52 ? 3 : q < 0.68 ? 4 : q < 0.84 ? 5 : q < 0.96 ? 6 : 7;
+      const size = kind === 7 ? 0.8 : kind <= 2 ? 1.6 + r() * 2.2 : 0.9 + r() * 1.6;
+      D.ground(x, g.h + 0.02, z, size, kind, r() * Math.PI * 2);
+      placed++;
+    }
+    D.build();
+    this.decals = D;
+  }
+
   // Star of David: two interlaced triangle outlines (extruded), centred, in the XY plane
   _starOfDavid(size, bar, depth = 0.05) {
     const tri = (rot) => {
@@ -1205,10 +1239,13 @@ export class World {
         x.closePath(); x.stroke();
       }
     };
+    // every Israeli flag shares one texture and is GPU-instanced per size (few draw calls)
+    const flags = {};
+    const flag = (w, h, pos, rotY, wave) => (flags[w + 'x' + h] || (flags[w + 'x' + h] = { w, h, wave, list: [] })).list.push([pos, rotY]);
     const flagPole = (px, py, pz, hgt = 6, rotY = 0) => {
       this.col.addBox({ x: px, z: pz, w: 0.2, d: 0.2, h: py + hgt, tag: 'pole' });
       this.geo.beam([px, py, pz], [px, py + hgt, pz], 0.08, 0xdddddd);
-      this._canvasPlane(1.8, 1.3, israelFlag, [px + Math.cos(rotY) * 0.92, py + hgt - 0.7, pz - Math.sin(rotY) * 0.92], rotY, 0.12);
+      flag(1.8, 1.3, [px + Math.cos(rotY) * 0.92, py + hgt - 0.7, pz - Math.sin(rotY) * 0.92], rotY, 0.12);
     };
     // flags along the promenade (sea side) and on every apartment roof
     for (let z = 166; z < 392; z += 28) flagPole(-84.5, PH, z, 6);
@@ -1253,10 +1290,26 @@ export class World {
     for (let z = 186; z < 380; z += 40) {
       for (let k = 0; k < 9; k++) {
         const xx = -52 + k * 1.1, sag = Math.sin(Math.PI * k / 8) * 0.8;
-        this._canvasPlane(0.6, 0.45, israelFlag, [xx, 7 - sag, z], 0);
+        flag(0.6, 0.45, [xx, 7 - sag, z], 0, 0.04);
       }
       this.geo.beam([-52.6, 0, z], [-52.6, 7.2, z], 0.1, C.metal); this.geo.beam([-42.6, 0, z], [-42.6, 7.2, z], 0.1, C.metal);
       this.col.addBox({ x: -52.6, z, w: 0.2, d: 0.2, h: 7.2, tag: 'pole' }); this.col.addBox({ x: -42.6, z, w: 0.2, d: 0.2, h: 7.2, tag: 'pole' });
+    }
+    {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 370;
+      israelFlag(c.getContext('2d'), c.width, c.height);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      const mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
+      const M4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0), v = new THREE.Vector3();
+      for (const F of Object.values(flags)) {
+        const g = new THREE.PlaneGeometry(F.w, F.h, 12, 1), p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) { const x = p.getX(i) + F.w / 2; p.setZ(i, Math.sin(x * 2.2) * F.wave * (x / F.w)); }
+        g.computeVertexNormals();
+        const im = new THREE.InstancedMesh(g, mat, F.list.length);
+        F.list.forEach(([pos, rotY], i) => im.setMatrixAt(i, M4.compose(v.set(...pos), q.setFromAxisAngle(up, rotY), one)));
+        im.castShadow = true; im.computeBoundingSphere();
+        this.scene.add(im);
+      }
     }
     for (const [z, text] of [[200, 'חוף הים'], [270, 'שלום'], [340, 'ברוכים הבאים']]) {
       this._canvasPlane(2.4, 0.6, (c, w, h) => { c.fillStyle = '#0038b8'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffffff'; c.font = `bold ${h * 0.58}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, w / 2, h / 2); }, [-85.8, PH + 2.6, z + 4], -Math.PI / 2);

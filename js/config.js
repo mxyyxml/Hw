@@ -246,6 +246,7 @@ export const KEYS = {
   popshuv: ['KeyB'],
   pause:  ['KeyP', 'Escape'],
   help:   ['KeyH'],
+  replay: ['KeyY'],         // cinematic replay of the last 12 seconds
 };
 
 // -----------------------------------------------------------------------------
@@ -264,6 +265,11 @@ export const DEFAULT_SETTINGS = {
 // -----------------------------------------------------------------------------
 export const PHYSICS2 = {
   carveScrub: 0.035,         // speed lost per second while turning hard (tyres scrub)
+  // rider balance after landings / bumps: an inverted pendulum (θ in radians)
+  balance: { gravity: 9.8, reflex: 15, crouchStiff: 9, damp: 4.2, lean: 9, bailAngle: 0.6, landKick: 2.2, impactKick: 0.35, wobbleKick: 7 },
+  // knees: spring-damper that absorbs landings (comp 1 = deep squat)
+  knees: { stiff: 55, damp: 11, absorb: 0.32, popLoss: 0.45 },
+  truckBase: 0.26,          // half the distance between the trucks (m) — board pitch comes from both wheel sets
   wobbleSpeed: 13,          // m/s: above this, standing tall gives speed wobbles (crouch = Space to stop them)
   steerResponse: 9,         // how fast you shift your weight into / out of a carve (1/s)
   minCarveRadius: 1.0,      // tightest turn the trucks allow (m)
@@ -309,8 +315,12 @@ export const OUTFIT_OPTIONS = {
   hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat'], ['kippah', 'Kippah']],
   glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],
   top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['hoodie', 'Hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
+  print:  [['none', 'Plain'], ['logo', 'Lunch Break logo'], ['wheel', 'Skate club wheel'], ['tlv', 'Tel Aviv star'], ['stripe', 'Stripes']],
+  socks:  [['crew', 'Crew'], ['high', 'High'], ['ankle', 'Ankle'], ['none', 'No-show']],
   pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts'], ['boardshorts', 'Board shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
+  deckGraphic: [['stripes', 'Stripes'], ['sunset', 'Sunset'], ['checker', 'Checker'], ['bolt', 'Bolt'], ['star', 'Blue & white star'], ['plain', 'Solid']],
+  wheelSize: [[52, '52 mm (street)'], [54, '54 mm'], [56, '56 mm (park)'], [60, '60 mm (cruiser)']],
   stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
   pushStyle: [['normal', 'Normal push'], ['mongo', 'Mongo (front foot)']],
 };
@@ -320,14 +330,16 @@ export const OUTFIT_COLORS = {
   hatColor:   [0xf4743b, 0x1d1d1d, 0xe63946, 0x2a9d8f, 0xf2c14e, 0xffffff, 0x457b9d, 0x6a4c93],
   topColor:   [0xf2f2f2, 0x1d1d1d, 0x7a7d80, 0xe63946, 0x8b1e2d, 0x2a9d8f, 0x457b9d, 0x1f3a5f, 0xf4a261, 0x6a994e, 0x556b2f, 0x9b5de5, 0x8d6e63, 0xffafcc],
   pantsColor: [0x2b3a55, 0x3d5a80, 0x6d8fb3, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
+  sockColor:  [0xf2f2f2, 0x1d1d1d, 0x8a8a8a, 0xe63946, 0x2a9d8f, 0xf2c14e],
   shoeColor:  [0xf1f1f1, 0x9a9a9a, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63, 0x2a9d8f],
+  wheelColor: [0xf8f4e3, 0xf2c14e, 0xe63946, 0x2a9d8f, 0x1d1d1d, 0x9b5de5],
   packColor:  [0x264653, 0x1d1d1d, 0x8b1e2d, 0x3d5a80, 0x6b705c, 0xf4a261, 0x9b5de5],
   deckColor:  [0xe9c46a, 0xe63946, 0x2a9d8f, 0x6a4c93, 0xf4a261, 0x1d1d1d, 0xffffff, 0x90be6d],
 };
 export const DEFAULT_OUTFIT = {
   hat: 'none', hatColor: 0xf4743b, top: 'tee', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
   shoeColor: 0x9a9a9a, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0x1d1d1d, backpack: false,
-  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none', packColor: 0x264653,
+  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none', packColor: 0x264653, deckGraphic: 'stripes', wheelSize: 54, print: 'logo', socks: 'crew', sockColor: 0xf2f2f2, wheelColor: 0xf8f4e3,
 };
 
 // -----------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 //  Modes: 'title' (menu backdrop), 'free' (free skate), 'lunch' (2-min session)
 // =============================================================================
 import * as THREE from 'three';
-import { PHYSICS, GRAPHICS, SCORING, DEFAULT_SETTINGS } from './config.js';
+import { PHYSICS, PHYSICS2, GRAPHICS, SCORING, DEFAULT_SETTINGS } from './config.js';
 import { World, SUN } from './world.js';
 import { assetURL } from './textures.js';
 import { Ragdoll } from './ragdoll.js';
@@ -20,6 +20,7 @@ import { CameraRig } from './camera.js';
 import { ComboSystem } from './tricks.js';
 import { Challenges } from './challenges.js';
 import { Audio } from './audio.js';
+import { Replay } from './replay.js';
 import { UI } from './ui.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { FlickGesture } from './gesture.js';
@@ -436,9 +437,9 @@ class Game {
   // ================================================================ loop
   frame(t) {
     requestAnimationFrame((tt) => this.frame(tt));
-    const realDt = Math.min(0.1, (t - this.last) / 1000);
+    const rawDt = (t - this.last) / 1000, realDt = Math.min(0.1, rawDt);
     this.last = t;
-    this._fpsAcc += realDt; this._fpsN++;
+    this._fpsAcc += Math.min(2, rawDt); this._fpsN++;           // honest FPS (not the capped step)
     if (this._fpsAcc > 0.5) { this.fps = this._fpsN / this._fpsAcc; this._fpsAcc = 0; this._fpsN = 0; }
 
     const inp = this.input;
@@ -455,7 +456,14 @@ class Game {
         }
       }
       if (inp.pressed.help) this.ui.toggleHelp();
-      if (!this.paused) this.step(realDt);
+      // cinematic replay (Y): the game is frozen while it plays
+      if (!this.replay) this.replay = new Replay(this.skater, this.camera);
+      if (inp.pressed.replay && !this.paused) {
+        if (this.replay.playing) this.replay.stop();
+        else if (this.replay.start()) { this.audio.silence(); this.ui.toast('Replay — press Y to go back', '', 2500); }
+      }
+      if (this.replay.playing) { if (inp.pressed.pause) this.replay.stop(); else this.replay.update(realDt); }
+      else if (!this.paused) { this.step(realDt); this.replay.record(realDt); }
       else if (this.ui.topMenu === 'closet') this.closetCam(realDt);
     }
     if (this.touch) this.touch.setVisible(this.mode !== 'title' && !this.paused);
@@ -489,7 +497,12 @@ class Game {
     if (p.state === 'ride') this.rig.addShake(((p.chatter || 0) * 0.0025 + (p.wobble || 0) * 0.004) * realDt * 60);
     this.rig.update(realDt, p, this.world.col);
     this._windT = (this._windT || 0) + realDt; this.world.foliage.update(this._windT);
-    this.audio.update(p.state, p.displaySpeed());
+    {
+      const fr = PHYSICS2.surfaceFriction[p.groundTag] ?? 1;
+      const surface = p.onGrass ? 'sand' : p.groundTag === 'street' ? 'rough' : fr < 1 ? 'smooth' : 'concrete';
+      const beach = Math.max(0, Math.min(1, (-40 - p.pos.x) / 50)) * (p.pos.z > 140 ? 1 : 0);
+      this.audio.update(p.state, p.displaySpeed(), { surface, chatter: p.chatter || 0, grindName: p.grind && p.grind.def ? p.grind.def.name : '', walkSpeed: p.walkSpeed || 0, dt: realDt, beach });
+    }
     this.ui.updateHUD(realDt);
 
     if (this.mode === 'lunch' && !this.lunch.over) {

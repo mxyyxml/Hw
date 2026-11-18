@@ -33,6 +33,12 @@ export class Audio {
     const osc = c.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 95;
     const og = c.createGain(); og.gain.value = 0.08; osc.connect(og); og.connect(this.grind.gain);
     osc.start();
+    // rough-ground grit layer (wheel chatter), city hum and sea waves
+    this.grit = this._loop(1400, 'bandpass', 1.5);
+    this.hum = this._loop(140, 'lowpass', 0.5);
+    this.hum.gain.gain.value = 0.035;
+    this.sea = this._loop(500, 'lowpass', 0.6);
+    this.jointDist = 0; this.stepDist = 0;
   }
 
   _loop(freq, type, q) {
@@ -97,20 +103,44 @@ export class Audio {
   ui()    { this._tone(900, 1100, 0.06, 0.1, 'triangle'); }
   challenge() { [784, 988, 1175, 1568].forEach((f, i) => this._tone(f, f, 0.22, 0.16, 'triangle', i * 0.09)); }
 
-  // called every frame with the player's state
-  update(state, speed) {
+  // called every frame with the player's state.
+  // o: { surface: 'smooth'|'concrete'|'rough'|'sand', chatter, grindName, walkSpeed, dt, beach (0..1) }
+  update(state, speed, o = {}) {
     if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    const rolling = state === 'ride' ? Math.min(1, speed / 10) : 0;
-    this.roll.gain.gain.setTargetAtTime(rolling * 0.35, t, 0.05);
-    this.roll.filter.frequency.setTargetAtTime(250 + speed * 90, t, 0.1);
-    const g = state === 'grind' ? 0.22 : 0;
-    this.grind.gain.gain.setTargetAtTime(g, t, 0.03);
+    const t = this.ctx.currentTime, dt = o.dt || 0.016, surf = o.surface || 'concrete';
+    const riding = state === 'ride';
+    const rolling = riding ? Math.min(1, speed / 10) : 0;
+    // urethane on different ground: smooth ramps whir, concrete hisses, street rumbles, sand muffles
+    const S = { smooth: [700, 55, 0.3], concrete: [300, 80, 0.35], rough: [220, 60, 0.42], sand: [120, 20, 0.18] }[surf] || [300, 80, 0.35];
+    this.roll.gain.gain.setTargetAtTime(rolling * S[2], t, 0.05);
+    this.roll.filter.frequency.setTargetAtTime(S[0] + speed * S[1], t, 0.1);
+    this.grit.gain.gain.setTargetAtTime(riding ? (o.chatter || 0) * 0.22 : 0, t, 0.05);
+    // the "clack… clack" of rolling over paving joints (every ~2.5 m of slabs / tiles)
+    if (riding && (surf === 'concrete' || surf === 'rough') && speed > 1) {
+      this.jointDist += speed * dt;
+      if (this.jointDist > 2.5) { this.jointDist = 0; this._burst(0.035, 1500, 'bandpass', 0.06 + Math.min(0.14, speed * 0.012), 2); }
+    }
+    // grinds: metal (50-50, 5-0, smith, nosegrind) screech vs. waxed wood/concrete slides
+    const grinding = state === 'grind';
+    const slide = grinding && /slide/i.test(o.grindName || '');
+    this.grind.gain.gain.setTargetAtTime(grinding ? (slide ? 0.16 : 0.24) : 0, t, 0.03);
+    this.grind.filter.frequency.setTargetAtTime(slide ? 900 : 2600, t, 0.05);
+    // footsteps off the board: a soft heel thud + a little scuff each stride
+    if (state === 'walk' && (o.walkSpeed || 0) > 0.3) {
+      this.stepDist += o.walkSpeed * dt;
+      const stride = o.walkSpeed > 3.5 ? 1.15 : 0.74;
+      if (this.stepDist > stride) { this.stepDist = 0; this._burst(0.07, 260, 'lowpass', 0.3); this._burst(0.05, 2400, 'bandpass', 0.05, 1.5); }
+    }
+    // ambience: a soft city hum everywhere, waves rolling in near the beach
+    const swell = 0.5 + 0.5 * Math.sin(t * 0.7) * Math.sin(t * 0.23 + 1);
+    this.sea.gain.gain.setTargetAtTime((o.beach || 0) * (0.05 + 0.12 * swell), t, 0.3);
+    this.hum.gain.gain.setTargetAtTime(0.035 * (1 - 0.6 * (o.beach || 0)), t, 0.5);
   }
   silence() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.roll.gain.gain.setTargetAtTime(0, t, 0.05);
     this.grind.gain.gain.setTargetAtTime(0, t, 0.05);
+    this.grit.gain.gain.setTargetAtTime(0, t, 0.05);
   }
 }

@@ -51,6 +51,7 @@ const CONTROLS = [
   ['Right mouse + drag (skating)', 'Look around — the camera swings back behind you when you let go'],
   ['<kbd>R</kbd> / <kbd>T</kbd>', 'Respawn at your spot / set a custom drop spot'],
   ['<kbd>C</kbd>', 'Switch camera (follow / filmer / fisheye)'],
+  ['<kbd>Y</kbd>', 'Cinematic replay of the last 12 seconds (Y again to go back)'],
   ['<kbd>H</kbd>', 'Show / hide this help'],
   ['<kbd>P</kbd> / <kbd>Esc</kbd>', 'Pause menu'],
 ];
@@ -141,7 +142,7 @@ export class UI {
         const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
           hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
           skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing', body: 'Body',
-          hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Glasses', packColor: 'Backpack colour' };
+          hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Glasses', packColor: 'Backpack colour', deckGraphic: 'Deck graphic', wheelSize: 'Wheels', wheelColor: 'Wheel colour', print: 'Shirt print', socks: 'Socks', sockColor: 'Sock colour' };
         h = `<h2>Closet</h2><div class="closet">`;
         for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
           h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +
@@ -233,7 +234,7 @@ export class UI {
     if (b.dataset.outfit) {
       const k = b.dataset.outfit;
       let v = b.dataset.color !== undefined ? parseInt(b.dataset.color, 10) : b.dataset.val;
-      if (v === 'true') v = true; else if (v === 'false') v = false;
+      if (v === 'true') v = true; else if (v === 'false') v = false; else if (/^\d+$/.test(v)) v = Number(v);
       g.setOutfit(k, v);
       const scroll = $('menu-card').scrollTop;
       this._renderMenu();
