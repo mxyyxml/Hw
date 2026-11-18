@@ -66,7 +66,8 @@ Hold your phone sideways.
 
 ### 👕 Closet
 Title screen or Pause → **Closet**: body type, 9 hairstyles (real modelled short, crop, skater flow, long,
-ponytail and afro hair, plus buzz, mohawk, bald), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
+ponytail and afro hair, plus buzz, mohawk, bald), hats fitted to the head (beanie, cap, backwards cap,
+bucket hat, helmet, kippah), a padded backpack with fitted straps (8 colours), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
 9 tops (tee, oversized tee, tank, long sleeve, hoodie, flannel, jacket, jersey, shirtless),
 6 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts), colours for everything, skin tone,
 hair colour, backpack, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
@@ -74,6 +75,12 @@ Saved in your browser.
 
 Clothes and hair are real layers cut from the body surface along smooth lines (necklines, sleeves,
 hems, hairlines), loosened where fabric hangs and skinned to the same bones, so they move with the body.
+
+### 🏖️ Tel Aviv Beach (teleport: "Tel Aviv Beach Promenade")
+A Mediterranean beachfront on the west side of the city: open sea, a sand beach (sand slows you down)
+with umbrellas, loungers and a lifeguard tower, a raised tiled promenade with a grindable sea-wall edge,
+three stair sets with handrails down to the sand, banks up from the street, palm trees, granite benches
+and white Bauhaus-style apartment blocks on pilotis across the beach road.
 
 ### 🛹 How the physics feels
 - **Drop in** by rolling off any deck or coping into a ramp — you stay on the ramp and pick up speed.

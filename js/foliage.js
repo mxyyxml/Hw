@@ -156,6 +156,55 @@ function bushVariant(seed, cards) {
   return geo(leaf);
 }
 
+// palm frond texture (procedural): a midrib with long leaflets, alpha cut-out
+let _frond = null;
+function frondTexture() {
+  if (_frond) return _frond;
+  const c = document.createElement('canvas'); c.width = 128; c.height = 512;
+  const x = c.getContext('2d'), r = rngOf(5);
+  x.clearRect(0, 0, 128, 512);
+  for (let y = 10; y < 500; y += 6) {
+    const L = 58 * Math.sin(Math.PI * (y / 512)) + 6;
+    for (const s of [-1, 1]) {
+      const g = 90 + r() * 60;
+      x.strokeStyle = `rgb(${g * 0.55 | 0},${g | 0},${g * 0.35 | 0})`; x.lineWidth = 3;
+      x.beginPath(); x.moveTo(64, y); x.quadraticCurveTo(64 + s * L * 0.5, y + 8, 64 + s * L, y + 22 + r() * 6); x.stroke();
+    }
+  }
+  x.strokeStyle = '#7a8a3a'; x.lineWidth = 4; x.beginPath(); x.moveTo(64, 0); x.lineTo(64, 512); x.stroke();
+  _frond = new THREE.CanvasTexture(c); _frond.colorSpace = THREE.SRGBColorSpace;
+  return _frond;
+}
+
+// palm: a leaning, slightly curved ringed trunk + a crown of drooping fronds (unit ≈ 8 m)
+function palmVariant(seed) {
+  const r = rngOf(seed);
+  const bark = { P: [], N: [], U: [], I: [] }, fr = { P: [], N: [], U: [], I: [] };
+  const lean = 0.5 + r() * 0.6, la = r() * Math.PI * 2, trunk = [];
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10, off = lean * t * t;
+    trunk.push({ x: Math.cos(la) * off, y: t * 7.5, z: Math.sin(la) * off, r: 0.2 - t * 0.06 + (i % 2) * 0.012 });
+  }
+  tube(trunk, 7, bark);
+  const top = trunk[10];
+  for (let f = 0; f < 13; f++) {
+    const a = f / 13 * Math.PI * 2 + r() * 0.3, len = 2.6 + r() * 0.8, up = 0.6 - r() * 0.5;
+    const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), side = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));
+    const b0 = fr.P.length / 3, segs = 6;
+    for (let s = 0; s <= segs; s++) {
+      const t = s / segs, w = 0.55 * Math.sin(Math.PI * Math.min(1, t * 1.1 + 0.05));
+      const px = top.x + dir.x * len * t, pz = top.z + dir.z * len * t, py = top.y + up * len * t - 1.6 * t * t;
+      for (const sg of [-1, 1]) {
+        fr.P.push(px + side.x * w * sg, py, pz + side.z * w * sg);
+        const n = new THREE.Vector3(dir.x * 0.3, 1, dir.z * 0.3).normalize();
+        fr.N.push(n.x, n.y, n.z); fr.U.push(sg < 0 ? 0 : 1, 1 - t);
+      }
+    }
+    for (let s = 0; s < segs; s++) { const q = b0 + s * 2; fr.I.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+  }
+  return { bark: geo(bark), leaf: geo(fr) };
+}
+
 // grass tuft: two crossed cards, 0.35 m tall
 function tuftGeo() {
   const o = { P: [], N: [], U: [], I: [] };
@@ -172,12 +221,13 @@ function tuftGeo() {
 export class Foliage {
   constructor(scene) {
     this.scene = scene;
-    this.trees = []; this.bushes = []; this.lawns = [];
+    this.trees = []; this.bushes = []; this.lawns = []; this.palms = [];
     this.group = new THREE.Group();
     scene.add(this.group);
   }
   addTree(x, z, s = 1, y = 0) { this.trees.push({ x, y, z, s }); }
   addBush(x, z, r = 0.7, y = 0) { this.bushes.push({ x, y, z, r }); }
+  addPalm(x, z, s = 1, y = 0) { this.palms.push({ x, y, z, s }); }
   addLawn(x0, z0, x1, z1, y = 0) { this.lawns.push({ x0, z0, x1, z1, y }); }
 
   // (re)build every instanced mesh for a graphics level
@@ -214,6 +264,20 @@ export class Foliage {
       const mk = (t, p, e, sc, i) => { p.set(t.x, t.y, t.z); e.set(0, (t.x * 7.3 + t.z * 3.1) % (Math.PI * 2), 0); sc.setScalar(t.s); };
       inst(V[v].bark, barkMat, L, mk, true);
       inst(V[v].leaf, leafMat, L, mk, true);
+    }
+    // palms
+    if (this.palms.length) {
+      const frondMat = new Mat({ map: frondTexture(), alphaTest: 0.4, side: THREE.DoubleSide, ...(hi ? { roughness: 0.7 } : {}) });
+      addWind(frondMat, 0.01);
+      const palmBark = new Mat({ map: T.bark, color: 0xb59a7a, ...(hi ? { normalMap: T.barkN, roughness: 0.95 } : {}) });
+      this.mats.push(frondMat, palmBark);
+      const PV = [3, 8].map((sd) => palmVariant(sd));
+      for (let v = 0; v < 2; v++) {
+        const L = this.palms.filter((_, i) => i % 2 === v);
+        const mk = (t, p, e, sc) => { p.set(t.x, t.y, t.z); e.set(0, (t.x * 3.3 + t.z * 1.7) % (Math.PI * 2), 0); sc.setScalar(t.s); };
+        inst(PV[v].bark, palmBark, L, mk, true);
+        inst(PV[v].leaf, frondMat, L, mk, true);
+      }
     }
     // bushes
     const B = [5, 9].map((s) => bushVariant(s, hi ? 18 : 11));

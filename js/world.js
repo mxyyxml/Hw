@@ -34,6 +34,7 @@ const C = {
   bowl:     0xb7c2c6, bowlDeck: 0xc2b9a6,
   trunk:    0x6b4a2e, leaf: 0x3f6f32, leaf2: 0x587f3f,
   bench:    0x8a6a4a,
+  sand: 0xe2cc9c, sandWet: 0xc9b083, promenade: 0xd9c7a8, stucco: 0xf0ede4, stuccoShade: 0xd9d4c8,
 };
 const BUILDING_COLORS = [0xc9b79c, 0xb5654f, 0xd8d2c4, 0x8c9a9e, 0xa86b4f, 0xcfc0a5, 0x9e8f7e, 0xbfae95];
 
@@ -46,6 +47,9 @@ setCat('asphalt', [C.street]);
 setCat('wood', [C.wood, C.woodSide, C.rampSide, C.kickerSide, C.megaSide, C.trunk, C.bench]);
 setCat('ramp', [C.ramp, C.kicker, C.mega, 0x8d9aa3]);
 setCat('grass', [C.grass]);
+setCat('sand', [C.sand, C.sandWet]);
+setCat('stucco', [C.stucco, C.stuccoShade]);
+setCat('tiles', [C.promenade]);
 setCat('foliage', [C.leaf, C.leaf2]); // tree leaves: their own green, no photo
 setCat('building', BUILDING_COLORS);
 // the colour in each category that shows the photo texture untinted
@@ -247,6 +251,7 @@ export class World {
       { name: 'Titan Park – Rail Line', x: 85, y: 12, z: 169.6, heading: 0 },
       { name: 'Titan Park – Drop Line', x: 130, y: 10, z: 166, heading: 0 },
       { name: 'Titan Park – Giant Bowl & Wall', x: 190, y: 0, z: 200, heading: 0 },
+      { name: 'Tel Aviv Beach Promenade', x: -73, y: 1.2, z: 168, heading: 0 },
     ];
     this._build();
     this.props.load(() => this.props.setQuality(this._foliageLevel || 'low'));
@@ -381,6 +386,7 @@ export class World {
     this._megaPark();
     this._titanPark();
     this._cityDetail();
+    this._telAviv();
     this._terrain();
     this._decor();
     this.col.linkRails();
@@ -1053,6 +1059,92 @@ export class World {
     this.scene.add(this.hills);
   }
 
+  // ---------------------------------------------------------------- Tel Aviv beach (west)
+  // Inspired by a Mediterranean beachfront: open sea, a sand beach with umbrellas
+  // and a lifeguard tower, a raised tiled promenade with a grindable sea-wall
+  // edge, stair sets with handrails down to the sand, banks up from the street,
+  // palm trees, and white Bauhaus-style apartment blocks across the road.
+  _telAviv() {
+    const z0 = 158, z1 = 394, PH = 1.2;                       // promenade height
+    // the sea (visual), beach sand (slows you down like grass), wet sand at the waterline
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(260, 330).rotateX(-Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0x2f6f8f, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.94 }));
+    sea.position.set(-110 - 130, 0.02, (z0 + z1) / 2 + 20);
+    sea.receiveShadow = true;
+    this.scene.add(sea); this.sea = sea;
+    this.patch(-112, z0 - 4, -86, z1 + 2, C.sand, 0.02);
+    this.patch(-112, z0 - 4, -106, z1 + 2, C.sandWet, 0.03);
+    this.col.addLawn(-112, z0 - 4, -86.05, z1 + 2);
+    // raised promenade with a grindable sea-wall edge
+    this.box({ x: -73, z: (z0 + z1) / 2, w: 26, d: z1 - z0, h: PH, tag: 'promenade' }, C.promenade, C.concreteSide);
+    this.col.addRail([-85.96, PH, z0 + 0.5], [-85.96, PH, z1 - 0.5], 'seawall');
+    // stair sets down to the beach with a handrail
+    for (const zc of [205, 275, 345]) {
+      const n = 7, stepH = PH / n, stepD = 0.38, W = 6;
+      for (let i = 1; i < n; i++) {
+        const x = -86 - (i - 0.5) * stepD;
+        this.box({ x, z: zc, w: stepD, d: W, h: PH - i * stepH, tag: 'tlv_steps', noShadow: true }, i % 2 ? 0xd6d0c4 : 0xc9c2b4, C.concreteSide);
+      }
+      const run = (n - 1) * stepD, slope = stepH / stepD;
+      this.rail([-86 + 0.6, PH + 0.6, zc], [-86, PH + 0.6, zc], 'handrail_flat');
+      this.rail([-86, PH + 0.6, zc], [-86 - run - 0.3, PH + 0.6 - (run + 0.3) * slope, zc], 'handrail');
+    }
+    // a bank from the promenade down to the sand
+    this.wedge({ x: -90, z: 240, w: 8, d: 8, h0: 0, h1: PH, yaw: Math.PI / 2, tag: 'tlv_bank' }, C.concrete, C.concreteSide);
+    // banks up from the street, plus the north / south ends
+    for (const zc of [178, 250, 322, 384]) this.wedge({ x: -57, z: zc, w: 8, d: 6, h0: 0, h1: PH, yaw: -Math.PI / 2, tag: 'tlv_bank' }, C.concrete, C.concreteSide);
+    this.wedge({ x: -73, z: z0 - 4, w: 26, d: 8, h0: 0, h1: PH, tag: 'tlv_ramp' }, C.concrete, C.concreteSide);
+    // promenade furniture: granite benches (ledges), palm planters (ledges), lamps
+    for (let z = 172; z < z1 - 8; z += 28) {
+      this.ledge({ x: -79, z, w: 0.6, d: 3.2, h: PH + 0.45, base: PH, tag: 'tlv_bench' }, C.ledge, C.ledgeSide);
+      this.ledge({ x: -67, z: z + 14, w: 2.2, d: 2.2, h: PH + 0.5, base: PH, tag: 'tlv_planter' }, C.concrete, C.concreteSide);
+      this.foliage.addPalm(-67, z + 14, 0.9 + ((z * 7) % 5) * 0.06, PH + 0.5);
+      this.col.addBox({ x: -62, z: z + 6, w: 0.25, d: 0.25, h: PH + 5, tag: 'lamp' });
+      this.geo.beam([-62, PH, z + 6], [-62, PH + 5, z + 6], 0.12, C.metal);
+      this.geo.prism({ x: -62.6, z: z + 6, w: 1.2, d: 0.35 }, [PH + 5.15, PH + 5.15, PH + 5.15, PH + 5.15], PH + 4.95, 0xfff3b0, 0xfff3b0);
+    }
+    // beach: umbrellas, loungers, palms and a lifeguard tower on stilts
+    const STRIPES = [0xe63946, 0x2a9d8f, 0xf4a261, 0x457b9d];
+    for (let i = 0, z = 186; z < z1 - 6; z += 19, i++) {
+      if (Math.abs(z - 205) < 6 || Math.abs(z - 275) < 6 || Math.abs(z - 345) < 6 || Math.abs(z - 240) < 7) continue;
+      const x = -98 + (i % 2) * 4;
+      this.geo.beam([x, 0, z], [x, 2.3, z], 0.05, 0xdddddd);
+      this.geo.addGeometry(new THREE.ConeGeometry(1.4, 0.55, 12, 1, true), new THREE.Matrix4().makeTranslation(x, 2.25, z), STRIPES[i % 4]);
+      this.geo.castShadow([[x - 1.4, 2.0, z - 1.4], [x + 1.4, 2.0, z - 1.4], [x - 1.4, 2.0, z + 1.4], [x + 1.4, 2.0, z + 1.4]], 0);
+      for (const dz of [-1.2, 1.2]) this.geo.prism({ x: x + 1.2, z: z + dz, w: 1.9, d: 0.65 }, [0.32, 0.32, 0.32, 0.32], 0.05, 0xf2efe6, 0xc9c2b4);
+    }
+    for (let z = 196; z < z1; z += 37) { this.foliage.addPalm(-90.5, z + 9, 1.05, 0); this.col.addBox({ x: -90.5, z: z + 9, w: 0.4, d: 0.4, h: 3, tag: 'tree' }); }
+    { const x = -99, z = 300;
+      for (const [ox, oz] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) this.geo.beam([x + ox, 0, z + oz], [x + ox, 2.6, z + oz], 0.14, 0xe9e4d8);
+      this.geo.prism({ x, z, w: 3.4, d: 3.4 }, [5, 5, 5, 5], 2.6, 0xf0ede4, 0x3d7ea6);
+      this.geo.prism({ x, z, w: 4.2, d: 4.2 }, [5.4, 5.4, 5.4, 5.4], 5, 0xe63946, 0xe63946);
+      this.geo.castShadow(GeoBuilder.prismPoints({ x, z, w: 3.4, d: 3.4 }, [5.4, 5.4, 5.4, 5.4], 2.6), 0);
+      this.col.addBox({ x, z, w: 3, d: 3, h: 5.4, base: 2.6, tag: 'lifeguard' });
+    }
+    // the beach road between the promenade and the buildings
+    this.patch(-53, z0 - 4, -43, z1, C.street, 0.018);
+    for (let z = z0; z < z1 - 4; z += 6) this.patch(-48.1, z, -47.9, z + 3, C.line, 0.022);
+    // white Bauhaus-style apartment blocks: ribbon windows, rounded corner balconies, pilotis
+    let k = 0;
+    for (let z = 172; z < z1 - 10; z += 30, k++) {
+      const x = -30 + (k % 2) * 6, w = 16, d = 18, h = 12 + (k % 3) * 3.2;
+      this.col.addBox({ x, z, w, d, h, base: 2.8, tag: 'building' });
+      for (const [ox, oz] of [[-7, -8], [7, -8], [-7, 8], [7, 8], [0, -8], [0, 8]]) {
+        this.col.addBox({ x: x + ox, z: z + oz, w: 0.5, d: 0.5, h: 2.8, tag: 'pilotis' });
+        this.geo.prism({ x: x + ox, z: z + oz, w: 0.45, d: 0.45 }, [2.8, 2.8, 2.8, 2.8], 0, C.stucco, C.stuccoShade);
+      }
+      this.geo.prism({ x, z, w, d }, [h, h, h, h], 2.8, C.stucco, C.stucco);
+      this.geo.castShadow(GeoBuilder.prismPoints({ x, z, w, d }, [h, h, h, h], 2.8), 0);
+      for (let y = 4.2; y < h - 0.8; y += 3.2) {
+        this.geo.prism({ x, z, w: w + 0.06, d: d + 0.06 }, [y + 0.9, y + 0.9, y + 0.9, y + 0.9], y, 0x2f3b47, 0x2f3b47);   // ribbon windows
+        // rounded corner balcony (west side, facing the sea)
+        this.geo.addGeometry(new THREE.CylinderGeometry(2.4, 2.4, 0.95, 20, 1, false, Math.PI, Math.PI), new THREE.Matrix4().makeTranslation(x - w / 2, y - 0.1, z + d / 2 - 2.4), C.stucco);
+        this.geo.prism({ x: x - w / 2 - 0.9, z, w: 1.8, d: d - 5 }, [y + 0.35, y + 0.35, y + 0.35, y + 0.35], y - 0.55, C.stucco, C.stuccoShade);
+      }
+      this.geo.prism({ x, z, w: w + 0.4, d: d + 0.4 }, [h + 0.3, h + 0.3, h + 0.3, h + 0.3], h, C.stuccoShade, C.stuccoShade);   // roof parapet
+    }
+  }
+
   // ---------------------------------------------------------------- Southside Skatepark (south-east)
   // An original fenced concrete park: quarter-pipe lines, a spine, a pyramid with
   // hip corners and a top rail, a 3-step-3 with a kinked rail, a funbox with an
@@ -1205,6 +1297,7 @@ export class World {
     for (let x = b.minX; x < b.maxX; x += 22) { ring.push([x + 11, b.minZ - 9]); ring.push([x + 11, b.maxZ + 9]); }
     for (let z = b.minZ; z < b.maxZ; z += 22) { ring.push([b.minX - 9, z + 11]); ring.push([b.maxX + 9, z + 11]); }
     for (const [x, z] of ring) {
+      if (x < b.minX && z > 150) continue;            // the Tel Aviv beach: open sea to the west
       const h = 8 + 4 * ((k * 7919) % 5); // whole floors (texture = 4 m per floor)
       const col = BUILDING_COLORS[k % BUILDING_COLORS.length];
       this.geo.prism({ x, z, w: 18, d: 16, yaw: 0 }, [h, h, h, h], 0, col, col);

@@ -17,25 +17,25 @@ import sys, base64, json, math, struct
 src, dst = sys.argv[1], sys.argv[2]
 # optional 3rd argument: folder holding MakeHuman .target files (all CC0)
 tdir = sys.argv[3] if len(sys.argv) > 3 else None
-MALE = [('universal-male-young-maxmuscle-averageweight.target', 0.42),
+MALE = [('universal-male-young-maxmuscle-averageweight.target', 0.85),   # muscular
         ('male-young-averagemuscle-averageweight-idealproportions.target', 0.7),
-        ('female-young-averagemuscle-averageweight-mincup-averagefirmness.target', 1.0),   # flat chest
+        ('female-young-averagemuscle-averageweight-mincup-averagefirmness.target', 0.5),   # no breast tissue
         # athletic skater build: V-shaped back, broader chest & shoulders, slimmer
         # hips and a flatter seat (all MakeHuman modelling targets, CC0)
         ('torso-vshape-incr.target', 0.55),
         ('torso-scale-horiz-incr.target', 0.25),
         ('hip-scale-horiz-decr.target', 0.5),
         ('buttocks-volume-decr.target', 0.7),
-        ('torso-muscle-pectoral-decr.target', 0.45),
         ('neck-scale-horiz-incr.target', 0.3),
-        ('l-upperarm-shoulder-muscle-incr.target', 0.4),
-        ('r-upperarm-shoulder-muscle-incr.target', 0.4),
-        ('caucasian-male-young.target', 0.5)]               # male face & frame
-# a real young woman: female face and figure (chest, waist, hips), fit and sporty
+        ('l-upperarm-shoulder-muscle-incr.target', 0.7),
+        ('r-upperarm-shoulder-muscle-incr.target', 0.7),
+        ('l-upperarm-muscle-incr.target', 0.6),
+        ('r-upperarm-muscle-incr.target', 0.6),
+        ('caucasian-male-young.target', 0.8)]               # male face & frame
+# a real young woman: female face and figure (chest, waist, hips), typical build
 FEMALE = [('caucasian-female-young.target', 1.0),
           ('female-young-averagemuscle-averageweight-idealproportions.target', 0.6),
-          ('female-young-averagemuscle-averageweight-maxcup-averagefirmness.target', 0.45),
-          ('universal-female-young-maxmuscle-averageweight.target', 0.25)]
+          ('female-young-averagemuscle-averageweight-maxcup-averagefirmness.target', 0.45)]   # typical build
 
 def read_target(path):
     t = {}

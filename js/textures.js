@@ -120,12 +120,14 @@ const MAKERS = {
     ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0, SIZE - 6, SIZE, 6);                     // floor line
   },
   foliage(ctx, r) { MAKERS.grass(ctx, r); },
+  sand(ctx, r) { grain(ctx, r, 232, 26, 10, 0.12); },
+  stucco(ctx, r) { grain(ctx, r, 244, 10, 5, 0.04); },
   plain(ctx) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, SIZE, SIZE); },
 };
 
 // world units (metres) covered by one texture repeat, per category
 export const TEX_SCALE = {
-  concrete: 2.6, tiles: 2.2, asphalt: 3.2, wood: 2.4, ramp: 2.6, grass: 3.5, building: 4, plain: 10, foliage: 1.5,
+  concrete: 2.6, tiles: 2.2, asphalt: 3.2, wood: 2.4, ramp: 2.6, grass: 3.5, building: 4, plain: 10, foliage: 1.5, sand: 1.8, stucco: 3,
 };
 
 // -----------------------------------------------------------------------------

@@ -448,6 +448,13 @@ export function buildHuman(sk) {
         if (sinkBy > allow) { const d = sinkBy - allow; P[k * 3] += ox * d; P[k * 3 + 1] += oy * d; P[k * 3 + 2] += oz * d; }
       }
     }
+    // remember how far out the finished layer sits over each body vertex (so a
+    // layer on top — backpack straps — can sit exactly on it)
+    const offset = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const k = vmap[i]; if (k < 0) continue;
+      offset[i] = (P[k * 3] - base[i * 3]) * OUT[k * 3] + (P[k * 3 + 1] - base[i * 3 + 1]) * OUT[k * 3 + 1] + (P[k * 3 + 2] - base[i * 3 + 2]) * OUT[k * 3 + 2];
+    }
     // folded hem: every open edge gets a strip back down to the skin, so the
     // fabric has a visible thickness (duplicated verts → crisp edge shading)
     if (opts.hem !== false) {
@@ -478,7 +485,7 @@ export function buildHuman(sk) {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
     geo.setIndex(tris);
     geo.computeVertexNormals();
-    geo.userData.covered = F;
+    geo.userData.covered = F; geo.userData.offset = offset;
     return geo;
   };
 
@@ -521,8 +528,30 @@ export function buildHuman(sk) {
     for (const m of layers) { m.parent.remove(m); if (!m.userData.cached) m.geometry.dispose(); if (m.userData.ownMat) m.material.dispose(); }
     layers.length = 0;
     if (cards) { cards.parent.remove(cards); cards.geometry.dispose(); cards = null; }
+    for (const m of rigids) { m.parent.remove(m); m.geometry.dispose(); }
+    rigids.length = 0;
   };
   let cards = null;
+  const rigids = [];
+  // a rigid accessory built in body space (bind pose), carried by one bone
+  const attach = (geo, bone, mat, shadow = true) => {
+    geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(skel.boneInverses[sk.bones.indexOf(bone)], bindMatrix));
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; m.receiveShadow = true;
+    bone.add(m); rigids.push(m); return m;
+  };
+  // rounded box (backpack parts): a subdivided box with its corners pulled round
+  const roundedBox = (w, h, d, r, taper = 0) => {
+    const g = new THREE.BoxGeometry(w, h, d, 8, 10, 6), p = g.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      c.set(Math.max(-w / 2 + r, Math.min(w / 2 - r, v.x)), Math.max(-h / 2 + r, Math.min(h / 2 - r, v.y)), Math.max(-d / 2 + r, Math.min(d / 2 - r, v.z)));
+      const dir = v.clone().sub(c); if (dir.lengthSq() > 1e-12) v.copy(c).add(dir.normalize().multiplyScalar(r));
+      v.x *= 1 + taper * (0.5 - (v.y / h + 0.5));                         // a little wider at the bottom
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    return g;
+  };
 
   // Strand cards for longer hair: little curved ribbons rooted on the scalp that
   // hang down (sides, back, or a fringe over the forehead). Rigid on the head bone.
@@ -603,7 +632,8 @@ export function buildHuman(sk) {
     const T = TOPS[o.top] === undefined ? TOPS.tee : TOPS[o.top];
     const PN = PANTS[o.pants] || PANTS.jeans;
     const H = HAIR[o.hairStyle] === undefined ? HAIR.short : HAIR[o.hairStyle];
-    const hat = o.hat && o.hat !== 'none';
+    const kippah = o.hat === 'kippah';
+    const hat = o.hat && o.hat !== 'none' && !kippah;     // hats that cover the hair
     // clothes
     let topGeo = null;
     if (T) topGeo = layer((i) => topField(i, T), (i) => topThick(i, T), { smooth: 10 });
@@ -650,6 +680,107 @@ export function buildHuman(sk) {
       const stub = o.facialHair === 'stubble';
       addLayer(layer((i) => beardField(i, o.facialHair), (i, f) => (stub ? 0.0009 : 0.0045 * sstep(0, 0.01, -f) + 0.001), { hem: !stub }),
         stub ? M.stubble : M.hair, { shadow: !stub });
+    }
+    // ---- HATS: cut from the head like the clothes, so they fit any head
+    const cz = eyeZ - 0.09;                                  // head centre (front ↔ back)
+    const backW = (z) => sstep(eyeZ - 0.04, eyeZ - 0.13, z);  // 0 forehead → 1 back of the head
+    const HATS = {
+      beanie: { e0: 0.03, e1: -0.045, th: 0.013, cuff: 0.03, smooth: 4 },
+      cap:    { e0: 0.042, e1: -0.028, th: 0.008, brim: 'front', smooth: 3 },
+      capBack: { e0: 0.042, e1: -0.028, th: 0.008, brim: 'back', smooth: 3 },
+      bucket: { e0: 0.022, e1: -0.018, th: 0.009, brim: 'all', smooth: 3 },
+      helmet: { e0: 0.035, e1: -0.055, th: 0.028, smooth: 8 },
+    };
+    const HT = HATS[o.hat];
+    if (HT) {
+      const edge = (z) => eyeY + HT.e0 + HT.e1 * backW(z);
+      const f = (i) => HEAD(reg[i]) ? edge(base[i * 3 + 2]) - base[i * 3 + 1] : 1;
+      const th = (i, fv) => HT.th + (HT.cuff && -fv < HT.cuff ? 0.009 : 0);
+      addLayer(layer(f, th, { smooth: HT.smooth }), M.hat);
+      if (HT.brim) {
+        // head outline at the hat's edge: real head radius per direction
+        const bins = new Float32Array(72);
+        for (let i = 0; i < n; i++) {
+          if (!HEAD(reg[i])) continue;
+          const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+          if (Math.abs(y - edge(z)) > 0.012) continue;
+          const k = ((Math.round(Math.atan2(x, z - cz) / (Math.PI * 2) * 72) % 72) + 72) % 72;
+          bins[k] = Math.max(bins[k], Math.hypot(x, z - cz));
+        }
+        for (let pass = 0; pass < 3; pass++) for (let k = 0; k < 72; k++) if (!bins[k]) bins[k] = bins[(k + 71) % 72] || bins[(k + 1) % 72];
+        const R = (a) => bins[((Math.round(a / (Math.PI * 2) * 72) % 72) + 72) % 72] || 0.09;
+        const all = HT.brim === 'all', span = all ? Math.PI : 1.25, off = HT.brim === 'back' ? Math.PI : 0;
+        const P = [], I = [], seg = all ? 48 : 20;
+        for (let k = 0; k <= seg; k++) {
+          const a = -span + 2 * span * k / seg, A = a + off;
+          const L = all ? 0.055 : 0.078 * Math.sqrt(Math.max(0, 1 - (a / span) ** 2)) + 0.004;
+          const r0 = R(A) + HT.th, dx = Math.sin(A), dz = Math.cos(A);
+          const y0 = edge(cz + dz * r0) + 0.002;
+          const drop = all ? 0.028 : 0.012 + 0.012 * (a / span) ** 2;      // brim bends down
+          for (const [rr, yy] of [[r0 - 0.004, y0], [r0 + L, y0 - drop]]) P.push(dx * rr, yy, cz + dz * rr);
+        }
+        for (let k = 0; k < seg; k++) { const b = k * 2; I.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setIndex(I);
+        attach(geo, sk.head, M.hatBrim || M.hat);
+      }
+    }
+    // KIPPAH: a small round cap on the crown, sitting on top of the hair
+    if (kippah) {
+      const hc = new THREE.Vector3(0, headC[1], headC[2]);
+      const d = new THREE.Vector3(0, 1, -0.5).normalize(), tmpv = new THREE.Vector3();
+      let r = 0;
+      const scan = (arr, cosMin) => {
+        for (let i = 0; i < arr.length; i += 3) {
+          tmpv.set(arr[i], arr[i + 1], arr[i + 2]).sub(hc);
+          const l = tmpv.length(); if (l > 0 && tmpv.dot(d) / l > cosMin) r = Math.max(r, l);
+        }
+      };
+      scan(base, Math.cos(0.15));
+      r += (H ? H.top : 0) + 0.002;
+      if (H && H.proxy && !hat) { const pg = proxy(H.proxy, shape === 'female'); if (pg) scan(pg.attributes.position.array, Math.cos(0.45)); r += 0.004; }
+      const ang = 0.068 / r;
+      const geo = new THREE.SphereGeometry(r + 0.002, 28, 6, 0, Math.PI * 2, 0, ang);
+      geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d));
+      geo.translate(hc.x, hc.y, hc.z);
+      attach(geo, sk.head, M.hat, false);
+    }
+    // ---- HOOD (hoodie): the hood lies bunched on the upper back, cut from the body
+    if (o.top === 'hoodie') {
+      const hood = (i) => {
+        const r = reg[i];
+        if (r !== R.collar && r !== R.torso && r !== R.neck) return 1;
+        const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+        return Math.max(z + 0.005, Math.abs(x) - 0.14, (shY - 0.16) - y, y - (neckY + 0.04));
+      };
+      addLayer(layer(hood, (i, fv) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.05 * sstep(0, 0.045, -fv) + 0.006, { smooth: 6 }), M.topDark);
+    }
+    // ---- BACKPACK: padded straps cut over the shoulders + a real pack on the back
+    if (o.backpack) {
+      const sx = shX * 0.5;
+      const strap = (i) => {
+        const r = reg[i];
+        // (on a muscular chest, skin by the armpit belongs to the upper arm)
+        if (r !== R.collar && r !== R.torso && !(r === R.upperArm && armT[i] < 0.15)) return 1;
+        const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+        const yMin = z > 0 ? waistY + 0.17 : shY - 0.22;            // chest: down to the ribs; back: into the pack
+        return Math.max(Math.abs(Math.abs(x) - sx) - 0.021, yMin - y);
+      };
+      addLayer(layer(strap, (i) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.012, { smooth: 2 }), M.packDark);
+      let backZ = 0;
+      for (let i = 0; i < n; i++) {
+        const r = reg[i]; if (r !== R.torso && r !== R.collar) continue;
+        const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+        if (Math.abs(x) < 0.09 && y > shY - 0.32 && y < shY - 0.08) backZ = Math.min(backZ, z);
+      }
+      const w = 0.3 * Math.min(1.05, shX / 0.2), h = 0.42, dp = 0.13;
+      const c = new THREE.Vector3(0, shY - 0.22, backZ - (T ? T.base + T.drape * 0.6 : 0) - 0.012 - dp / 2);
+      attach(roundedBox(w, h, dp, 0.045, 0.08).translate(c.x, c.y, c.z), sk.torso, M.pack);
+      attach(roundedBox(w * 0.76, h * 0.4, 0.05, 0.02, 0.05).translate(c.x, c.y - h * 0.2, c.z - dp / 2 - 0.012), sk.torso, M.pack);
+      // top grab handle & zips
+      attach(new THREE.TorusGeometry(0.03, 0.006, 6, 12, Math.PI).translate(c.x, c.y + h / 2 - 0.004, c.z + 0.01), sk.torso, M.packDark);
+      attach(new THREE.TorusGeometry(dp / 2 + 0.002, 0.0035, 4, 18, Math.PI).rotateY(Math.PI / 2).scale(1, 0.55, 1).translate(c.x, c.y + h / 2 - 0.045, c.z), sk.torso, M.sole, false);
+      attach(new THREE.BoxGeometry(w * 0.66, 0.006, 0.006).translate(c.x, c.y - h * 0.2 + h * 0.2 - 0.012, c.z - dp / 2 - 0.038), sk.torso, M.sole, false);
     }
     // skin: drop what is well covered (so it can't poke through when bending),
     // paint the scalp under hair with the hair colour, hide the feet (sneakers)

@@ -141,7 +141,7 @@ export class UI {
         const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
           hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
           skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing', body: 'Body',
-          hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Glasses' };
+          hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Glasses', packColor: 'Backpack colour' };
         h = `<h2>Closet</h2><div class="closet">`;
         for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
           h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +

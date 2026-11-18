@@ -305,7 +305,7 @@ export const OUTFIT_OPTIONS = {
   body:   [['male', 'Male'], ['female', 'Female']],
   hairStyle: [['short', 'Short'], ['crop', 'Textured crop'], ['flow', 'Skater flow'], ['long', 'Long'], ['ponytail', 'Ponytail'], ['curly', 'Afro'], ['buzz', 'Buzz cut'], ['mohawk', 'Mohawk'], ['bald', 'Bald']],
   facialHair: [['none', 'None'], ['stubble', 'Stubble'], ['mustache', 'Mustache'], ['goatee', 'Goatee'], ['beard', 'Beard']],
-  hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat']],
+  hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat'], ['kippah', 'Kippah']],
   glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],
   top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['hoodie', 'Hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
   pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts']],
@@ -320,12 +320,13 @@ export const OUTFIT_COLORS = {
   topColor:   [0xf2f2f2, 0x1d1d1d, 0x7a7d80, 0xe63946, 0x8b1e2d, 0x2a9d8f, 0x457b9d, 0x1f3a5f, 0xf4a261, 0x6a994e, 0x556b2f, 0x9b5de5, 0x8d6e63, 0xffafcc],
   pantsColor: [0x2b3a55, 0x3d5a80, 0x6d8fb3, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
   shoeColor:  [0xf1f1f1, 0x9a9a9a, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63, 0x2a9d8f],
+  packColor:  [0x264653, 0x1d1d1d, 0x8b1e2d, 0x3d5a80, 0x6b705c, 0xf4a261, 0x9b5de5],
   deckColor:  [0xe9c46a, 0xe63946, 0x2a9d8f, 0x6a4c93, 0xf4a261, 0x1d1d1d, 0xffffff, 0x90be6d],
 };
 export const DEFAULT_OUTFIT = {
   hat: 'none', hatColor: 0xf4743b, top: 'tee', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
   shoeColor: 0x9a9a9a, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0x1d1d1d, backpack: false,
-  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none',
+  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none', packColor: 0x264653,
 };
 
 // -----------------------------------------------------------------------------

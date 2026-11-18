@@ -35,6 +35,17 @@ function canvasWeave() {
   return t;
 }
 
+// knitted cap texture (beanie, kippah): fine rib stitches
+function knitTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e6e6e6'; x.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 64; i += 4) { x.fillStyle = 'rgba(0,0,0,0.12)'; x.fillRect(i, 0, 1, 64); x.fillStyle = 'rgba(255,255,255,0.25)'; x.fillRect(i + 2, 0, 1, 64); }
+  for (let j = 0; j < 64; j += 3) { x.fillStyle = 'rgba(0,0,0,0.05)'; x.fillRect(0, j, 64, 1); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 4); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 // flannel: woven plaid (greyscale, tinted by the top colour)
 let _plaid = null;
 function plaidTexture() {
@@ -105,6 +116,7 @@ export class Skater {
     m.top.map = this._cotton = getFabric('cotton');
     m.shoe.map = canvasWeave();
     m.eyeball.map = humanTex('eye.jpg');
+    m.pack.map = canvasWeave(); m.hat.map = knitTexture();
     m.pants.map = getFabric('denim');
     this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
@@ -405,14 +417,16 @@ export class Skater {
     show(P.hood, o.top === 'hoodie'); show(P.pocket, simple && o.top === 'hoodie'); show(P.strings, simple && o.top === 'hoodie');
     show(P.jacketOpen, simple && o.top === 'jacket'); show(P.collar, simple && (o.top === 'jacket' || o.top === 'flannel'));
     show(P.flannel, simple && o.top === 'flannel');
-    show(P.pack, !!o.backpack); show(P.packStraps, !!o.backpack);
+    show(P.pack, simple && !!o.backpack); show(P.packStraps, simple && !!o.backpack);
+    show(P.hood, simple && o.top === 'hoodie');
+    m.pack.color.setHex(o.packColor ?? 0x264653); m.packDark.color.copy(dark(o.packColor ?? 0x264653, 0.6));
     show(P.cargo, simple && o.pants === 'cargo');
     m.top.map = o.top === 'flannel' ? plaidTexture() : this._cotton || m.top.map;
     for (const A of this.arms) A.cuff.visible = !this.human && o.top !== 'tee' && o.top !== 'tank';
     for (const L of this.legs) L.sock.visible = !this.human && o.pants === 'shorts';
     if (this.seams) for (const r of this.seams) if (r && r.userData.hem) r.visible = o.pants !== 'shorts';
     if (this.bodyMesh) this.bodyMesh.setOutfit(o);   // tee = bare forearms, shorts = bare shins
-    for (const [k, g] of Object.entries(this.hats)) g.visible = o.hat === k;
+    for (const [k, g] of Object.entries(this.hats)) g.visible = !this.human && o.hat === k;   // the real body gets fitted hats
     this.hair[0].visible = !this._hairless && o.hat === 'none';
     if (this._hairless) this.hair[1].visible = false;
     this.stance = o.stance === 'goofy' ? -1 : 1;
