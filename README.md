@@ -1,4 +1,4 @@
-# Lunch Break Skate 🛹🔔
+-Lunch Break Skate 🛹🔔
 
 A chill, physics-based, free-roam 3D skateboarding game that runs in the browser.
 Flick-style trick input, momentum riding, grinds, manuals, combos, 10 challenges and a
