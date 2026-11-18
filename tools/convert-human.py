@@ -43,17 +43,20 @@ def read_target(path):
         t[int(a[0])] = (float(a[1]), float(a[2]), float(a[3]))
     return t
 
-V, groups, body_faces = [], {}, []
+V, VT, groups, body_faces, body_fvt = [], [], {}, [], []
 cur = None
 for line in open(src):
     if line.startswith('v '):
         V.append([float(x) for x in line.split()[1:4]])
+    elif line.startswith('vt '):
+        VT.append([float(x) for x in line.split()[1:3]])
     elif line.startswith('g '):
         cur = line.split()[1]
     elif line.startswith('f '):
         idx = [int(p.split('/')[0]) - 1 for p in line.split()[1:]]
         if cur == 'body':
             body_faces.append(idx)
+            body_fvt.append([int(p.split('/')[1]) - 1 for p in line.split()[1:]])
         else:
             groups.setdefault(cur, set()).update(idx)
 
@@ -193,11 +196,82 @@ for p in P:
         else: r = 9
     region.append(r)
 
-tris = []
-for f in body_faces:
+tris, corner_vt = [], []
+for f, ft in zip(body_faces, body_fvt):
     f = [remap[i] for i in f]
     for k in range(1, len(f) - 1):
         tris += [f[0], f[k], f[k + 1]]
+        corner_vt += [ft[0], ft[k], ft[k + 1]]
+vt_used = sorted(set(corner_vt)); vt_map = {o: n for n, o in enumerate(vt_used)}
+
+# ---- proxies (CC0 MakeHuman assets: hair, eyebrows, eyelashes) -----------------
+# A proxy vertex sits on a triangle of the base mesh: w0*V[r0] + w1*V[r1] + w2*V[r2]
+# plus an offset scaled by the body's size, so it fits any body shape.
+pdir = sys.argv[4] if len(sys.argv) > 4 else None
+PROXIES = ['short02', 'short04', 'bob02', 'long01', 'ponytail01', 'afro01', 'eyebrow001', 'eyelashes01']
+def fit_proxy(name):
+    refs, scl = [], {}
+    lines = open(os.path.join(pdir, name, name + '.mhclo')).read().split('\n')
+    i = 0
+    while i < len(lines):
+        a = lines[i].split()
+        if a and a[0] in ('x_scale', 'y_scale', 'z_scale'):
+            scl[a[0][0]] = (int(a[1]), int(a[2]), float(a[3]))
+        if a and a[0] == 'verts':
+            i += 1
+            def num(b):
+                try: [float(c) for c in b]; return len(b) in (1, 9)
+                except ValueError: return False
+            while i < len(lines) and not num(lines[i].split()): i += 1   # (a 'material' line may sit in between)
+            while i < len(lines):
+                b = lines[i].split()
+                if not num(b): break
+                refs.append(([int(b[0])], [1.0], [0, 0, 0]) if len(b) == 1 else ([int(x) for x in b[:3]], [float(x) for x in b[3:6]], [float(x) for x in b[6:9]]))
+                i += 1
+            continue
+        i += 1
+    pv, pvt, faces = [], [], []
+    for line in open(os.path.join(pdir, name, name + '.obj')):
+        if line.startswith('v '): pv.append(1)
+        elif line.startswith('vt '): pvt.append([float(x) for x in line.split()[1:3]])
+        elif line.startswith('f '):
+            faces.append([(int(q.split('/')[0]) - 1, int(q.split('/')[1]) - 1) for q in line.split()[1:]])
+    assert len(refs) == len(pv), (name, len(refs), len(pv))
+    def place(VV):
+        sc = [abs(VV[scl[ax][0]][k] - VV[scl[ax][1]][k]) / scl[ax][2] for k, ax in enumerate('xyz')]
+        out = []
+        for r, w, d in refs:
+            q = [sum(VV[r[j]][k] * w[j] for j in range(len(r))) + d[k] * sc[k] for k in range(3)]
+            out.append(to_body(q))
+        return out
+    PM, PFm = place(V), place(VF)
+    # split vertices on UV seams
+    key, verts, idx = {}, [], []
+    for f in faces:
+        ids = []
+        for c in f:
+            if c not in key: key[c] = len(verts); verts.append(c)
+            ids.append(key[c])
+        for k in range(1, len(ids) - 1): idx += [ids[0], ids[k], ids[k + 1]]
+    pos, fdel, uvs, si, sw = [], [], [], [], []
+    for v, t in verts:
+        pos += PM[v]; fdel += [max(-32767, min(32767, int(round((PFm[v][k] - PM[v][k]) * 1000)))) for k in range(3)]
+        uvs += pvt[t]
+        # skin weights: blend those of the base vertices it sits on (head bone if they're helpers)
+        acc = {}
+        r, w, _ = refs[v]
+        for j in range(len(r)):
+            if r[j] in remap:
+                b = remap[r[j]]
+                for c in range(4): acc[skin_i[b][c]] = acc.get(skin_i[b][c], 0) + skin_w[b][c] * abs(w[j])
+        if not acc: acc = {2: 1.0}
+        top = sorted(acc.items(), key=lambda x: -x[1])[:4]
+        while len(top) < 4: top.append((0, 0))
+        tot = sum(x for _, x in top) or 1
+        q = [int(round(255 * x / tot)) for _, x in top]; q[0] += 255 - sum(q)
+        si += [i for i, _ in top]; sw += q
+    return {'positions': b64('f', pos), 'femaleDelta': b64('h', fdel), 'uv': b64('f', uvs), 'indices': b64('H', idx),
+            'skinIndex': b64('B', si), 'skinWeight': b64('B', sw), 'count': len(verts)}
 
 b64 = lambda fmt, arr: base64.b64encode(struct.pack('<%d%s' % (len(arr), fmt), *arr)).decode()
 out = {
@@ -210,6 +284,10 @@ out = {
     'skinIndex': b64('B', [c for s in skin_i for c in s]),
     'skinWeight': b64('B', [c for s in skin_w for c in s]),
     'regions': b64('B', region),
+    # photo-skin UVs: per-triangle-corner index into 'uv' (the body mesh is welded; the skin splits on seams)
+    'uv': b64('f', [c for o in vt_used for c in VT[o]]),
+    'cornerUV': b64('H', [vt_map[o] for o in corner_vt]),
+    'proxies': {n: fit_proxy(n) for n in PROXIES} if pdir else {},
     'joints': {k: [round(x, 5) for x in v] for k, v in JB.items()},
 }
 with open(dst, 'w') as fh:

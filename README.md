@@ -65,8 +65,8 @@ Hold your phone sideways.
 | **? · CAM · WALK · ↺ · ❚❚** | Help, camera, walk, respawn, pause |
 
 ### 👕 Closet
-Title screen or Pause → **Closet**: body type, 8 hairstyles (buzz, short, fringe, skater flow, long,
-curly, mohawk, bald), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
+Title screen or Pause → **Closet**: body type, 9 hairstyles (real modelled short, crop, skater flow, long,
+ponytail and afro hair, plus buzz, mohawk, bald), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
 9 tops (tee, oversized tee, tank, long sleeve, hoodie, flannel, jacket, jersey, shirtless),
 6 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts), colours for everything, skin tone,
 hair colour, backpack, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
@@ -185,6 +185,7 @@ combo window, gaps, the 10 challenges, camera distances and key bindings.
 | 3D engine | [three.js](https://github.com/mrdoob/three.js) 0.160.0 | MIT |
 | Ragdoll / board physics | [Rapier](https://github.com/dimforge/rapier) (`@dimforge/rapier3d-compat` 0.12.0) | Apache-2.0 |
 | Skater body: base human mesh + body-shape targets (male athletic, flat chest, ideal proportions; female athletic) | [MakeHuman](http://www.makehumancommunity.org) (`base.obj`, macrodetails / breast / proportions targets) | CC0 |
+| Photo skin (young light-skinned male), eye texture, hair meshes (short02, short04, bob02, long01, ponytail01, afro01), eyebrow001, eyelashes01 — fitted to the body by `tools/convert-human.py` | [MakeHuman 1.1 assets](http://download.tuxfamily.org/makehuman/assets/1.1/base/) | CC0 |
 | Photo textures: concrete floor 02, concrete tiles, asphalt 02, brushed concrete 2, plywood, brick wall 001, denim fabric, cotton jersey, bark brown 02 | [Poly Haven](https://polyhaven.com) | CC0 |
 | Street props: metal trash can, utility box 01, barrel 03, old tyre, trash bag, wooden crate 02 (glTF, textures reduced to 256 px) | [Poly Haven](https://polyhaven.com) | CC0 |
 | Leaves (LeafSet024), grass blades (Foliage001) and lawn (Grass004) — made into tree / bush / grass-tuft textures by `tools/make-foliage.py` | [ambientCG](https://ambientcg.com) | CC0 |

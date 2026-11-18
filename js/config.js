@@ -303,7 +303,7 @@ export const PHYSICS2 = {
 // -----------------------------------------------------------------------------
 export const OUTFIT_OPTIONS = {
   body:   [['male', 'Male'], ['female', 'Female']],
-  hairStyle: [['buzz', 'Buzz cut'], ['short', 'Short'], ['fringe', 'Fringe'], ['flow', 'Skater flow'], ['long', 'Long'], ['curly', 'Curly'], ['mohawk', 'Mohawk'], ['bald', 'Bald']],
+  hairStyle: [['short', 'Short'], ['crop', 'Textured crop'], ['flow', 'Skater flow'], ['long', 'Long'], ['ponytail', 'Ponytail'], ['curly', 'Afro'], ['buzz', 'Buzz cut'], ['mohawk', 'Mohawk'], ['bald', 'Bald']],
   facialHair: [['none', 'None'], ['stubble', 'Stubble'], ['mustache', 'Mustache'], ['goatee', 'Goatee'], ['beard', 'Beard']],
   hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat']],
   glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],

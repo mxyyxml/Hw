@@ -13,6 +13,16 @@
 // =============================================================================
 import * as THREE from 'three';
 import { HUMAN } from './humanData.js';
+import { assetURL } from './textures.js';
+
+// textures for the MakeHuman assets (photo skin, hair / brow / lash cut-outs, eyes)
+const _tex = {};
+export function humanTex(name, srgb = true) {
+  if (_tex[name]) return _tex[name];
+  const t = new THREE.Texture(); if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image(); img.onload = () => { t.image = img; t.needsUpdate = true; }; img.src = assetURL('assets/human/' + name);
+  return (_tex[name] = t);
+}
 
 const dec = (b64, Type) => {
   const bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -55,14 +65,16 @@ export const PANTS = {
 };
 // hair: shell thickness on top / at the sides, plus hanging strand cards
 export const HAIR = {
-  bald:    null,
-  buzz:    { top: 0.0018, side: 0.0014 },
-  short:   { top: 0.014, side: 0.006, clump: 0.004 },
-  flow:    { top: 0.017, side: 0.011, clump: 0.006, cards: 'flow' },
-  long:    { top: 0.016, side: 0.012, clump: 0.005, cards: 'long' },
-  curly:   { top: 0.042, side: 0.03, clump: 0.012, curls: true },
-  mohawk:  { top: 0.05, side: 0.0015, clump: 0.008, strip: 0.03 },
-  fringe:  { top: 0.017, side: 0.009, clump: 0.005, cards: 'fringe' },
+  bald:     null,
+  buzz:     { top: 0.0018, side: 0.0014 },
+  mohawk:   { top: 0.05, side: 0.0015, clump: 0.008, strip: 0.03 },
+  // real modelled hair (MakeHuman CC0 proxies) over a thin hair-coloured scalp
+  short:    { top: 0.002, side: 0.0016, proxy: 'short02' },
+  crop:     { top: 0.002, side: 0.0016, proxy: 'short04' },
+  flow:     { top: 0.002, side: 0.0016, proxy: 'bob02' },
+  long:     { top: 0.002, side: 0.0016, proxy: 'long01' },
+  ponytail: { top: 0.002, side: 0.0016, proxy: 'ponytail01' },
+  curly:    { top: 0.004, side: 0.002, proxy: 'afro01' },
 };
 
 // Re-shape the skeleton to the human's proportions and set the bind pose.
@@ -188,7 +200,51 @@ export function buildHuman(sk) {
     }
     g.attributes.uv.needsUpdate = true;
   };
-  useShape('male');
+  // the visible skin: split on UV seams so the photo skin texture maps cleanly
+  // (g stays welded: it gives seam-free normals and drives the clothing cuts)
+  const cuv = dec(HUMAN.cornerUV, Uint16Array), uvs = dec(HUMAN.uv, Float32Array);
+  const skey = new Map(), sv = [], suv = [], cornerS = new Uint32Array(index.length);
+  for (let k = 0; k < index.length; k++) {
+    const key = index[k] * 65536 + cuv[k];
+    let id = skey.get(key);
+    if (id === undefined) { id = sv.length; skey.set(key, id); sv.push(index[k]); suv.push(uvs[cuv[k] * 2], uvs[cuv[k] * 2 + 1]); }
+    cornerS[k] = id;
+  }
+  const ns = sv.length, gs = new THREE.BufferGeometry();
+  const spos = new Float32Array(ns * 3), snrm = new Float32Array(ns * 3), ssi = new Uint16Array(ns * 4), ssw = new Float32Array(ns * 4);
+  for (let j = 0; j < ns; j++) for (let c = 0; c < 4; c++) { ssi[j * 4 + c] = si[sv[j] * 4 + c]; ssw[j * 4 + c] = swf[sv[j] * 4 + c]; }
+  gs.setAttribute('position', new THREE.BufferAttribute(spos, 3));
+  gs.setAttribute('normal', new THREE.BufferAttribute(snrm, 3));
+  gs.setAttribute('skinIndex', new THREE.BufferAttribute(ssi, 4));
+  gs.setAttribute('skinWeight', new THREE.BufferAttribute(ssw, 4));
+  gs.setAttribute('uv', new THREE.Float32BufferAttribute(suv, 2));
+  const syncSkin = () => {
+    for (let j = 0; j < ns; j++) for (let c = 0; c < 3; c++) { spos[j * 3 + c] = base[sv[j] * 3 + c]; snrm[j * 3 + c] = normals[sv[j] * 3 + c]; }
+    gs.attributes.position.needsUpdate = true; gs.attributes.normal.needsUpdate = true;
+    gs.computeBoundingSphere();
+  };
+  useShape('male'); syncSkin();
+
+  // MakeHuman proxies (hair styles, eyebrows, eyelashes), fitted to the body by the converter
+  const proxyGeo = {};
+  const proxy = (name, female) => {
+    const P = HUMAN.proxies && HUMAN.proxies[name];
+    if (!P) return null;
+    const k = name + (female ? 'F' : 'M');
+    if (proxyGeo[k]) return proxyGeo[k];
+    const p = dec(P.positions, Float32Array).slice();
+    if (female) { const d = dec(P.femaleDelta, Int16Array); for (let i = 0; i < p.length; i++) p[i] += d[i] / 1000; }
+    const w = dec(P.skinWeight, Uint8Array), wf = new Float32Array(w.length);
+    for (let i = 0; i < w.length; i++) wf[i] = w[i] / 255;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(dec(P.uv, Float32Array), 2));
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(Array.from(dec(P.skinIndex, Uint8Array)), 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(wf, 4));
+    geo.setIndex(new THREE.BufferAttribute(dec(P.indices, Uint16Array), 1));
+    geo.computeVertexNormals();
+    return (proxyGeo[k] = geo);
+  };
 
   // ---------------------------------------------------------------- fields
   // f < 0 = covered by the layer. All are smooth functions of position so the
@@ -422,7 +478,7 @@ export function buildHuman(sk) {
   sk.root.updateMatrixWorld(true);                       // bones are in the fitted bind pose now
   const skel = new THREE.Skeleton(sk.bones);
   const hidden = new THREE.MeshBasicMaterial({ visible: false });
-  const mesh = new THREE.SkinnedMesh(g, [sk.mat.skin, sk.mat.hair, hidden]);
+  const mesh = new THREE.SkinnedMesh(gs, [sk.mat.skin, sk.mat.hair, hidden]);
   mesh.castShadow = true; mesh.receiveShadow = true;
   mesh.frustumCulled = false;
   sk.body.add(mesh);
@@ -444,7 +500,7 @@ export function buildHuman(sk) {
     return m;
   };
   const clearLayers = () => {
-    for (const m of layers) { m.parent.remove(m); m.geometry.dispose(); }
+    for (const m of layers) { m.parent.remove(m); if (!m.userData.cached) m.geometry.dispose(); if (m.userData.ownMat) m.material.dispose(); }
     layers.length = 0;
     if (cards) { cards.parent.remove(cards); cards.geometry.dispose(); cards = null; }
   };
@@ -508,8 +564,22 @@ export function buildHuman(sk) {
     return m;
   };
 
+  // textured cut-out material for a proxy (hair / brows / lashes), tinted
+  const cutout = (tex, color, alphaTest = 0.5) => {
+    const Mat = sk.mat.hair.isMeshStandardMaterial ? THREE.MeshStandardMaterial : THREE.MeshLambertMaterial;
+    return new Mat({ map: humanTex(tex), color, alphaTest, side: THREE.DoubleSide, ...(Mat === THREE.MeshStandardMaterial ? { roughness: 0.55 } : {}) });
+  };
+  const addProxy = (name, mat, shadow = true) => {
+    const geo = proxy(name, shape === 'female');
+    if (!geo) return;
+    const m = addLayer(geo, mat, { shadow });
+    m.userData.cached = true; m.userData.ownMat = true;
+  };
+
   const setOutfit = (o) => {
+    const prevShape = shape;
     useShape(o.body === 'female' ? 'female' : 'male');
+    if (shape !== prevShape) syncSkin();
     clearLayers();
     const M = sk.mat;
     const T = TOPS[o.top] === undefined ? TOPS.tee : TOPS[o.top];
@@ -550,9 +620,13 @@ export function buildHuman(sk) {
       hairF = geo && geo.userData.covered;
       addLayer(geo, M.hair);
       if (H.cards && hairF) cards = makeCards(H, hairF, H.cards, hat);
+      if (H.proxy && !hat) addProxy(H.proxy, cutout(H.proxy + '.webp', M.hair.color, 0.45));
     }
-    // eyebrows
-    addLayer(layer(browField, () => 0.0018, { hem: false }), M.brow, { shadow: false });
+    // eyebrows & eyelashes (real MakeHuman meshes)
+    if (HUMAN.proxies && HUMAN.proxies.eyebrow001) {
+      addProxy('eyebrow001', cutout('eyebrow001.webp', M.brow.color, 0.3), false);
+      addProxy('eyelashes01', cutout('eyelashes01.webp', new THREE.Color(0x1a1410), 0.3), false);
+    } else addLayer(layer(browField, () => 0.0018, { hem: false }), M.brow, { shadow: false });
     // facial hair
     if (o.facialHair && o.facialHair !== 'none') {
       const stub = o.facialHair === 'stubble';
@@ -566,17 +640,18 @@ export function buildHuman(sk) {
     for (let t = 0; t < index.length; t += 3) {
       const a = index[t], b = index[t + 1], c = index[t + 2];
       const ra = reg[a];
-      if (ra === R.foot && reg[b] === R.foot && reg[c] === R.foot) { lists[2].push(a, b, c); continue; }
+      const A = cornerS[t], B = cornerS[t + 1], Cc = cornerS[t + 2];
+      if (ra === R.foot && reg[b] === R.foot && reg[c] === R.foot) { lists[2].push(A, B, Cc); continue; }
       const allIn = (geo, m) => covered(geo, a, m) && covered(geo, b, m) && covered(geo, c, m);
       if (allIn(topGeo, 0.03) || allIn(pantsGeo, 0.03)) continue;
-      if (H && hairF && hairF[a] < -0.006 && hairF[b] < -0.006 && hairF[c] < -0.006) { lists[1].push(a, b, c); continue; }
-      lists[0].push(a, b, c);
+      if (H && hairF && hairF[a] < -0.006 && hairF[b] < -0.006 && hairF[c] < -0.006) { lists[1].push(A, B, Cc); continue; }
+      lists[0].push(A, B, Cc);
     }
     const all = new Uint16Array(lists[0].length + lists[1].length + lists[2].length);
     let off = 0;
-    g.clearGroups();
-    lists.forEach((L, m) => { all.set(L, off); g.addGroup(off, L.length, m); off += L.length; });
-    g.setIndex(new THREE.BufferAttribute(all, 1));
+    gs.clearGroups();
+    lists.forEach((L, m) => { all.set(L, off); gs.addGroup(off, L.length, m); off += L.length; });
+    gs.setIndex(new THREE.BufferAttribute(all, 1));
     mesh.material = [M.skin, M.hair, hidden];
     // pre-existing extras that layer on top (hood, belt) read these
     return { topHem: T ? waistY - T.hem : null };

@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { DEFAULT_OUTFIT, PUSH } from './config.js';
 import { buildBody } from './body.js';
-import { fitSkeleton, buildHuman, hairTextures } from './human.js';
+import { fitSkeleton, buildHuman, hairTextures, humanTex } from './human.js';
 import { getFabric } from './textures.js';
 
 const THIGH = 0.42, SHIN = 0.42;          // leg bone lengths
@@ -65,12 +65,12 @@ export class Skater {
       pack: M(0x264653), packDark: M(0x1b343d),
       grip: M(0x1d1d1d), deck: M(0xe9c46a), deckSide: M(0xc9a24a),
       truck: M(0xb8bcc2), wheel: M(0xf8f4e3), eye: M(0x1d1d1d),
-      brow: M(0x2b1d14), hairCard: M(0x2b1d14), stubble: M(0x2b1d14), lens: M(0x111111), frame: M(0x1d1d1d),
+      eyeball: M(0xffffff), brow: M(0x2b1d14), hairCard: M(0x2b1d14), stubble: M(0x2b1d14), lens: M(0x111111), frame: M(0x1d1d1d),
     };
     // hair: strand textures; cards are alpha-cut ribbons, stubble is a faint shadow
     { const ht = hairTextures(); this.mat.hair.map = ht.shell; this.mat.hairCard.map = ht.card; }
     Object.assign(this.mat.hairCard, { alphaTest: 0.35, side: THREE.DoubleSide });
-    Object.assign(this.mat.stubble, { transparent: true, opacity: 0.38, depthWrite: false });
+    Object.assign(this.mat.stubble, { transparent: true, opacity: 0.2, depthWrite: false });
     Object.assign(this.mat.lens, { transparent: true, opacity: 0.75 });
     for (const k of ['top', 'pants', 'hair']) this.mat[k].side = THREE.DoubleSide;
     this.root = new THREE.Group();
@@ -104,6 +104,7 @@ export class Skater {
     const m = this.mat;
     m.top.map = this._cotton = getFabric('cotton');
     m.shoe.map = canvasWeave();
+    m.eyeball.map = humanTex('eye.jpg');
     m.pants.map = getFabric('denim');
     this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
@@ -234,10 +235,11 @@ export class Skater {
     const neck = J.neck;
     for (const side of ['l', 'r']) {
       const e = J[side + '-eye'].clone().sub(neck);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0118, 12, 10), m.topTrim);
+      // eyeball with a photo iris (MakeHuman CC0 eye texture, projected from the front)
+      const eg = new THREE.SphereGeometry(0.0118, 20, 14), ep = eg.attributes.position, euv = eg.attributes.uv;
+      for (let k = 0; k < ep.count; k++) euv.setXY(k, ep.getX(k) / 0.0118 * 0.5 + 0.5, ep.getY(k) / 0.0118 * 0.5 + 0.5);
+      const eye = new THREE.Mesh(eg, m.eyeball);
       eye.position.copy(e); this.head.add(eye);
-      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.0066, 10, 8).scale(1, 1, 0.5), m.eye);
-      iris.position.set(e.x, e.y, e.z + 0.0105); this.head.add(iris);
     }
     // fit hats & hair (designed for the old head) onto the real head
     const top = J['head-2'].y, eyeY = J['l-eye'].y;
@@ -263,6 +265,7 @@ export class Skater {
     for (const h of this.hair) h.visible = false;      // hair is painted on the real scalp instead
     this._hairless = true;
     // the bare feet are hidden inside the sneakers
+    m.skin.map = humanTex('skin.jpg');                 // photo skin (MakeHuman CC0), tinted by skin tone
     this.bodyMesh = buildHuman(this);
     if (this.belt) this.belt.visible = false;
     this._makeGlasses(J);
@@ -525,16 +528,21 @@ export class Skater {
     const stand = 0.84 * legL + this.footH, low = 0.47 * legL + this.footH;
     const bend = Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95) + a.dip * 0.6);
     let hipH = lerp(stand, low, bend);
-    hipH -= a.push * 0.17;                    // bend the standing knee so the push foot reaches the floor
+    hipH -= a.push * 0.08;                    // bend the standing knee (a little) so the push foot reaches the floor
     this.hips.position.set(0, hipH, 0);
     // real crouches hinge at the hips too: the pelvis tips forward as you go down
     // (the legs' IK and the torso compensate, so feet and shoulders stay put)
-    this._tilt = 0.1 + bend * 0.5 + a.push * 0.12 - Math.abs(a.manual) * 0.25;
+    this._tilt = 0.1 + bend * 0.5 + a.push * 0.05 - Math.abs(a.manual) * 0.25;
     this.hips.rotation.set(this._tilt, 0, 0);
     this.bodyBase.position.set(0, DECK_Y + (st.boardLift || 0), 0);
     this.bodyBase.rotation.set(0, 0, 0);
     // open the shoulders toward the nose while pushing
-    this.body.rotation.set(0, s * Math.PI / 2 * (1 - a.push * 0.35), 0);
+    // pushing: hips & shoulders turn to face the nose (like a real push), upright torso
+    const pushTurn = -s * Math.PI / 2 * a.push * 0.7;
+    this.body.rotation.set(0, s * Math.PI / 2 + pushTurn, 0);
+    // foot targets are worked out in the sideways (riding) frame; this maps them into the turned body
+    const cT = Math.cos(-pushTurn), sT = Math.sin(-pushTurn);
+    const rx = (x, z) => x * cT + z * sT, rz = (x, z) => -x * sT + z * cT;
     this.boardHolder.position.set(0, 0, 0);
     this.boardHolder.rotation.set(0, 0, 0);
 
@@ -562,9 +570,9 @@ export class Skater {
       const x = footPos(i) + (front ? nose * 0.07 * a.slideUp * (1 - a.clear) : 0);
       const lift = a.clear * (front ? 0.2 : 0.15);
       const zOff = -0.045 + (front ? a.clear * 0.09 : a.clear * 0.02);
-      this._legIK(L, x - L.sgn * this.hipX, -hipH + this.footH + lift, zOff);
+      this._legIK(L, rx(x, zOff) - L.sgn * this.hipX, -hipH + this.footH + lift, rz(x, zOff));
       // real footplant: front foot angled toward the nose, back foot across the tail
-      L.foot.rotation.y = front ? -s * 0.42 : s * 0.12;
+      L.foot.rotation.y = (front ? -s * 0.42 : s * 0.12) - pushTurn * 0.6;
       // ankle follows the deck's roll (toe / heel edge pressure in a carve)
       L.foot.rotation.x += s * (a.deckRoll || 0) * 0.9;
       // pointed toes while flicking
@@ -580,9 +588,10 @@ export class Skater {
       const L = this.legs[idx];
       const dirTail = tailX;
       const ground = -hipH - DECK_Y + this.footH;
-      const onDeck = [footPos(idx) - L.sgn * this.hipX, -hipH + this.footH, 0];
-      const start = [dirTail * -0.12 - L.sgn * this.hipX, ground, 0.22];
-      const end = [dirTail * 0.42 - L.sgn * this.hipX, ground, 0.18];
+      const P3 = (x, y, z) => [rx(x, z) - L.sgn * this.hipX, y, rz(x, z)];
+      const onDeck = P3(footPos(idx), -hipH + this.footH, -0.045);
+      const start = P3(dirTail * -0.12, ground, 0.22);
+      const end = P3(dirTail * 0.42, ground, 0.18);
       let t;
       if (ph < c0) { const u = smooth(ph / c0); t = onDeck.map((v, j) => lerp(v, start[j], u)); t[1] += Math.sin(u * Math.PI) * 0.1; }
       else if (ph < c1) { const u = (ph - c0) / (c1 - c0); t = start.map((v, j) => lerp(v, end[j], u)); }
@@ -598,10 +607,10 @@ export class Skater {
 
     // torso, head, arms
     // upper body: lean (minus what the pelvis already tilts), shoulders opened toward the nose
-    this.torso.rotation.x = 0.15 + a.crouch * 0.35 + a.grab * 0.5 + a.lean * 0.25 + a.dip * 0.3 + a.push * 0.25 - this._tilt * 0.8;
+    this.torso.rotation.x = 0.15 + a.crouch * 0.35 + a.grab * 0.5 + a.lean * 0.25 + a.dip * 0.3 + a.push * 0.1 - this._tilt * 0.8;
     this.torso.rotation.y = -s * 0.32 * (1 - a.push);
     this.torso.rotation.z = (-a.manual * 0.9 + a.slide * 0.1) * s + (st.sketch || 0) * Math.sin(performance.now() / 70) * 0.35;
-    this.head.rotation.y = s * (-0.95 + a.lean * 0.15) * (1 - a.push * 0.3);
+    this.head.rotation.y = s * (-0.95 + a.lean * 0.15) * (1 - a.push * 0.8);
     this.head.rotation.x = -0.1 - a.crouch * 0.2;
     const t = performance.now() / 1000;
     for (const A of this.arms) {
