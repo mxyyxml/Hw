@@ -288,6 +288,8 @@ export const PHYSICS2 = {
   // knees: spring-damper that absorbs landings (comp 1 = deep squat)
   knees: { stiff: 55, damp: 11, absorb: 0.32, popLoss: 0.45 },
   truckBase: 0.26,          // half the distance between the trucks (m) — board pitch comes from both wheel sets
+  // wallrides (hold K in the air along a tall wall)
+  wallride: { minSpeed: 3.5, maxAngle: 35, gravityStart: 0.25, gripTime: 0.9, friction: 1.2, maxTime: 1.6, wallieUp: 4.2, wallieOut: 1.8, points: 600 },
   wobbleSpeed: 13,          // m/s: above this, standing tall gives speed wobbles (crouch = Space to stop them)
   steerResponse: 9,         // how fast you shift your weight into / out of a carve (1/s)
   minCarveRadius: 1.0,      // tightest turn the trucks allow (m)

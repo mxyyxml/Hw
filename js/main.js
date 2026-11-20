@@ -502,7 +502,7 @@ class Game {
       const fr = PHYSICS2.surfaceFriction[p.groundTag] ?? 1;
       const surface = p.onGrass ? 'sand' : p.groundTag === 'street' ? 'rough' : fr < 1 ? 'smooth' : 'concrete';
       const beach = Math.max(0, Math.min(1, (-40 - p.pos.x) / 50)) * (p.pos.z > 140 ? 1 : 0);
-      this.audio.update(p.state, p.displaySpeed(), { surface, chatter: p.chatter || 0, grindName: p.grind && p.grind.def ? p.grind.def.name : '', walkSpeed: p.walkSpeed || 0, dt: realDt, beach });
+      this.audio.update(p.state === 'wallride' ? 'ride' : p.state, p.displaySpeed(), { surface, chatter: p.chatter || 0, grindName: p.grind && p.grind.def ? p.grind.def.name : '', walkSpeed: p.walkSpeed || 0, dt: realDt, beach });
     }
     this.ui.updateHUD(realDt);
 

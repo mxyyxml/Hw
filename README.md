@@ -83,9 +83,18 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
 - **Q = Revert** (the board spins 180° on its wheels; hold Q as you land to revert straight out of it).
 - **F in the air = Backflip**, hold **W** for a **Frontflip**. The rider tucks tighter to rotate faster,
   but needs real air (big kickers, mega ramp, Titan Park); land short of a full rotation and you slam.
+- **Wallrides:** hold **K** in the air while travelling along a tall wall (buildings, the Tel Aviv
+  apartment lobbies, big walls): wall friction holds you up at first, then gravity takes over. **Space**
+  wallies off. One wallride per jump.
+- **Camera:** pulls in in front of walls and buildings instead of clipping into them, and pulls back /
+  up on big airs to keep the landing in frame.
 - **C** now cycles follow → filmer → fisheye → **first person** (you see through the rider's eyes, with
   every push, crouch and landing).
 - Rolling back down a ramp (fakie) no longer whips the camera round — it glides round smoothly.
+
+### ⚙️ Performance
+Collision queries use a 10 m spatial grid (≈13× faster ground checks, verified identical to the old
+linear scan on 40,000 random points); rails are bucketed the same way.
 
 ### 🎬 Replay & sound
 Press **Y** for a cinematic replay of the last 12 seconds (tracking, orbit and tripod shots). Wheels

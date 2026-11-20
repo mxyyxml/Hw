@@ -30,16 +30,16 @@ export class CollisionWorld {
     const yaw = o.yaw || 0;
     return { x: o.x, z: o.z, hx: o.w / 2, hz: o.d / 2, yaw, c: Math.cos(yaw), s: Math.sin(yaw), tag: o.tag || null };
   }
-  addBox(o)   { const r = this._rect(o); r.type = 'box';   r.h = o.h; this.surfaces.push(r); return r; }
-  addWedge(o) { const r = this._rect(o); r.type = 'wedge'; r.h0 = o.h0; r.h1 = o.h1; this.surfaces.push(r); return r; }
+  addBox(o)   { const r = this._rect(o); r.type = 'box';   r.h = o.h; this.surfaces.push(r); this._grid = null; return r; }
+  addWedge(o) { const r = this._rect(o); r.type = 'wedge'; r.h0 = o.h0; r.h1 = o.h1; this.surfaces.push(r); this._grid = null; return r; }
   // quarter pipe: footprint depth d must be <= R*sin(85°). base = floor height.
   addQuarter(o) {
     const r = this._rect(o); r.type = 'quarter'; r.R = o.R; r.base = o.base || 0;
-    this.surfaces.push(r); return r;
+    this.surfaces.push(r); this._grid = null; return r;
   }
   // hip corner: square footprint, height = h * min(u, v) — two banks meeting at a
   // diagonal ridge. Low at local (-x,-z), high at local (+x,+z).
-  addCorner(o) { const r = this._rect(o); r.type = 'corner'; r.h = o.h; this.surfaces.push(r); return r; }
+  addCorner(o) { const r = this._rect(o); r.type = 'corner'; r.h = o.h; this.surfaces.push(r); this._grid = null; return r; }
   addBowl(o) { const b = { x: o.x, z: o.z, R: o.R, D: o.D, tag: o.tag || 'bowl' }; this.bowls.push(b); return b; }
   addZone(o) { const r = this._rect(o); this.zones.push(r); return r; }
 
@@ -53,6 +53,7 @@ export class CollisionWorld {
       lastLeft: -10,
     };
     this.rails.push(rail);
+    this._railGrid = null;
     return rail;
   }
 
@@ -66,6 +67,35 @@ export class CollisionWorld {
         if (o !== r && near(bx, by, bz, o.ax, o.ay, o.az)) { r.next = o; o.prev = r; }
       }
     }
+  }
+
+  // ---- uniform spatial grid (10 m cells): queries only look at nearby shapes ------
+  _cellsOf(x0, z0, x1, z1, fn) {
+    const C = 10, i0 = Math.floor(x0 / C), i1 = Math.floor(x1 / C), j0 = Math.floor(z0 / C), j1 = Math.floor(z1 / C);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) fn(i * 4096 + j);
+  }
+  _buildGrid() {
+    const g = new Map();
+    for (const r of this.surfaces) {
+      const ex = Math.abs(r.hx * r.c) + Math.abs(r.hz * r.s), ez = Math.abs(r.hx * r.s) + Math.abs(r.hz * r.c);   // rotated rect AABB
+      this._cellsOf(r.x - ex, r.z - ez, r.x + ex, r.z + ez, (k) => { (g.get(k) || g.set(k, []).get(k)).push(r); });
+    }
+    this._grid = g;
+  }
+  _near(x, z) {
+    if (!this._grid) this._buildGrid();
+    return this._grid.get(Math.floor(x / 10) * 4096 + Math.floor(z / 10)) || EMPTY;
+  }
+  _railsNear(x, z) {
+    if (!this._railGrid) {
+      const g = new Map();
+      for (const r of this.rails) {
+        const bx = r.ax + r.dx * r.len, bz = r.az + r.dz * r.len, m = 1.5;   // + snap reach
+        this._cellsOf(Math.min(r.ax, bx) - m, Math.min(r.az, bz) - m, Math.max(r.ax, bx) + m, Math.max(r.az, bz) + m, (k) => { (g.get(k) || g.set(k, []).get(k)).push(r); });
+      }
+      this._railGrid = g;
+    }
+    return this._railGrid.get(Math.floor(x / 10) * 4096 + Math.floor(z / 10)) || EMPTY;
   }
 
   // ---- local coordinates of a world point inside a footprint -------------------
@@ -137,8 +167,9 @@ export class CollisionWorld {
       const slope = Math.hypot(gx, gz);
       if (slope > 1e-6) { vx = gx / slope; vz = gz / slope; }
     }
-    for (let i = 0; i < this.surfaces.length; i++) {
-      const r = this.surfaces[i];
+    const near = this._near(x, z);
+    for (let i = 0; i < near.length; i++) {
+      const r = near[i];
       if (!this._evalSurface(r, x, z, s)) continue;
       if (s.h <= maxY && s.h > h) {
         h = s.h; gx = s.gx; gz = s.gz; surf = r; tag = r.tag;
@@ -158,9 +189,9 @@ export class CollisionWorld {
   blocker(x, z, maxY) {
     const b = this.bounds;
     if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) return BOUNDS_WALL;
-    const s = this._s;
-    for (let i = 0; i < this.surfaces.length; i++) {
-      const r = this.surfaces[i];
+    const s = this._s, near = this._near(x, z);
+    for (let i = 0; i < near.length; i++) {
+      const r = near[i];
       if (!this._evalSurface(r, x, z, s)) continue;
       if (s.h > maxY) return r;
     }
@@ -205,7 +236,7 @@ export class CollisionWorld {
     let best = null, bestD = Infinity;
     const vh = Math.hypot(v.x, v.z);
     const cosAlign = Math.cos(cfg.alignDegrees * Math.PI / 180);
-    for (const r of this.rails) {
+    for (const r of this._railsNear(p.x, p.z)) {
       if (now - r.lastLeft < cfg.reSnapDelay) continue;
       const px = p.x - r.ax, py = p.y - r.ay, pz = p.z - r.az;
       let t = px * r.dx + py * r.dy + pz * r.dz;
@@ -231,4 +262,5 @@ export class CollisionWorld {
 }
 
 // sentinel wall used for the invisible world bounds
+const EMPTY = [];
 export const BOUNDS_WALL = { type: 'bounds', tag: 'bounds' };

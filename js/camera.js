@@ -44,8 +44,8 @@ export class CameraRig {
 
     // which way should the camera face?
     let want = this.yaw;
-    if (player.state === 'ride' || player.state === 'walk' || player.state === 'grind') {
-      want = player.state === 'grind' ? Math.atan2(player.vel.x, player.vel.z) : player.heading;
+    if (player.state === 'ride' || player.state === 'walk' || player.state === 'grind' || player.state === 'wallride') {
+      want = player.state === 'grind' || player.state === 'wallride' ? Math.atan2(player.vel.x, player.vel.z) : player.heading;
       if (player.state === 'ride' && player.speed < 0.3) want = this.yaw; // don't swing when stopped
     } else if (player.state === 'air') {
       const h = Math.hypot(player.vel.x, player.vel.z);
@@ -64,14 +64,39 @@ export class CameraRig {
     if (!this.dragging) this.orbit *= Math.exp(-2.5 * dt);
 
     const fx = Math.sin(this.yaw + this.orbit), fz = Math.cos(this.yaw + this.orbit);
-    this.desired.set(p.x - fx * cfg.distance, p.y + cfg.height, p.z - fz * cfg.distance);
+    // big airs: pull back and up a little so the whole jump and the landing stay in frame
+    let air = 0;
+    if (player.state === 'air') air = Math.min(1, Math.max(0, (p.y - col.ground(p.x, p.z, p.y).h - 1.2) / 4));
+    this._air = (this._air || 0) + (air - (this._air || 0)) * (1 - Math.exp(-2.5 * dt));
+    const dist = cfg.distance * (1 + 0.35 * this._air), hgt = cfg.height + 0.9 * this._air;
+    this.desired.set(p.x - fx * dist, p.y + hgt, p.z - fz * dist);
     if (cfg.side) { this.desired.x += -fz * cfg.side; this.desired.z += fx * cfg.side; }
     // keep above the ground / ramps
     const g = col.ground(this.desired.x, this.desired.z, this.desired.y + 50);
     this.desired.y = Math.max(this.desired.y, g.h + CAMERA.minAboveGround);
+    // OCCLUSION: walk the line from the skater's head to the camera; if a wall, building
+    // or ramp is in the way, pull the camera in to just in front of it
+    {
+      const hx = p.x, hy = p.y + 1.3, hz = p.z;
+      const dx = this.desired.x - hx, dy = this.desired.y - hy, dz = this.desired.z - hz;
+      for (let k = 1; k <= 14; k++) {
+        const t = k / 14, x = hx + dx * t, y = hy + dy * t, z = hz + dz * t;
+        const b = col.blocker(x, z, y);
+        if (b && b.type === 'box') {          // walls & buildings (ramps are terrain: the ground clamp handles them)
+          const tb = Math.max(0.15, (k - 1.3) / 14);
+          this.desired.set(hx + dx * tb, hy + dy * tb + 0.25 * (1 - tb), hz + dz * tb);
+          this._occluded = 0.25;
+          break;
+        }
+      }
+      // never end up inside something: lift onto its top
+      const inside = col.blocker(this.desired.x, this.desired.z, this.desired.y);
+      if (inside && inside.type !== 'bounds') this.desired.y = col.ground(this.desired.x, this.desired.z, 1e4).h + CAMERA.minAboveGround;
+    }
 
     if (this.first) this.camera.position.copy(this.desired);
-    else this.camera.position.lerp(this.desired, 1 - Math.exp(-9 * dt));
+    else this.camera.position.lerp(this.desired, 1 - Math.exp(-(this._occluded > 0 ? 22 : 9) * dt));
+    if (this._occluded > 0) this._occluded -= dt;
     // small camera shake that dies away quickly
     if (this.shake > 0.001) {
       this._shakeOff.set((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).multiplyScalar(this.shake);

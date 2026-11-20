@@ -52,6 +52,7 @@ const CONTROLS = [
   ['<kbd>R</kbd> / <kbd>T</kbd>', 'Respawn at your spot / set a custom drop spot'],
   ['<kbd>C</kbd>', 'Switch camera (follow / filmer / fisheye / first person)'],
   ['<kbd>Q</kbd>', 'Revert: spin the board 180° on its wheels and roll away (hold Q when landing to revert out of it)'],
+  ['<kbd>K</kbd> (air, along a wall)', 'Wallride — the board sticks to a tall wall; Space to wallie off'],
   ['<kbd>F</kbd> (air)', 'Backflip — hold W for a frontflip. Needs big air (mega ramp / big kickers)'],
   ['<kbd>Y</kbd>', 'Cinematic replay of the last 12 seconds (Y again to go back)'],
   ['<kbd>H</kbd>', 'Show / hide this help'],

@@ -1135,7 +1135,7 @@ export class World {
       this.geo.prism({ x, z, w: 3.4, d: 3.4 }, [5, 5, 5, 5], 2.6, 0xf0ede4, 0x3d7ea6);
       this.geo.prism({ x, z, w: 4.2, d: 4.2 }, [5.4, 5.4, 5.4, 5.4], 5, 0xe63946, 0xe63946);
       this.geo.castShadow(GeoBuilder.prismPoints({ x, z, w: 3.4, d: 3.4 }, [5.4, 5.4, 5.4, 5.4], 2.6), 0);
-      this.col.addBox({ x, z, w: 3, d: 3, h: 5.4, base: 2.6, tag: 'lifeguard' });
+      for (const [ox, oz] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) this.col.addBox({ x: x + ox, z: z + oz, w: 0.3, d: 0.3, h: 2.6, tag: 'lifeguard' });   // you can ride under it
     }
     // the beach road between the promenade and the buildings
     this.patch(-53, z0 - 4, -43, z1, C.street, 0.018);
@@ -1144,7 +1144,11 @@ export class World {
     let k = 0;
     for (let z = 172; z < z1 - 10; z += 30, k++) {
       const x = -30 + (k % 2) * 6, w = 16, d = 18, h = 12 + (k % 3) * 3.2;
-      this.col.addBox({ x, z, w, d, h, base: 2.8, tag: 'building' });
+      // the ground floor is a recessed glass lobby behind the pilotis (that's what you collide with)
+      this.col.addBox({ x, z, w: w - 2, d: d - 2, h, tag: 'building' });
+      this.geo.prism({ x, z, w: w - 2, d: d - 2 }, [2.8, 2.8, 2.8, 2.8], 0, 0x3b4a58, 0x3b4a58);
+      for (const [ox, oz, ww, dd] of [[0, -(d - 2) / 2, w - 2, 0.12], [0, (d - 2) / 2, w - 2, 0.12], [-(w - 2) / 2, 0, 0.12, d - 2], [(w - 2) / 2, 0, 0.12, d - 2]])
+        this.geo.prism({ x: x + ox, z: z + oz, w: ww + 0.02, d: dd + 0.02 }, [0.25, 0.25, 0.25, 0.25], 0, C.stuccoShade, C.stuccoShade);   // stucco plinth
       for (const [ox, oz] of [[-7, -8], [7, -8], [-7, 8], [7, 8], [0, -8], [0, 8]]) {
         this.col.addBox({ x: x + ox, z: z + oz, w: 0.5, d: 0.5, h: 2.8, tag: 'pilotis' });
         this.geo.prism({ x: x + ox, z: z + oz, w: 0.45, d: 0.45 }, [2.8, 2.8, 2.8, 2.8], 0, C.stucco, C.stuccoShade);

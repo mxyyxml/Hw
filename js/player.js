@@ -93,6 +93,7 @@ export class Player {
 
   modelYaw() {
     if (this.state === 'air' && this.air) return this.air.yaw;
+    if (this.state === 'wallride' && this.wall) return Math.atan2(this.wall.tx, this.wall.tz) + (this.fakie ? Math.PI : 0);
     // (grind: heading follows the rail; sideways slides are drawn by the skater)
     let y = this.heading + (this.fakie ? Math.PI : 0);
     if (this.revert) y += this.revert.dir * Math.PI * smoothstep01(this.revert.t / REVERT.time);
@@ -179,6 +180,7 @@ export class Player {
       case 'ride': this.updateRide(dt); break;
       case 'air': this.updateAir(dt); break;
       case 'grind': this.updateGrind(dt); break;
+      case 'wallride': this.updateWallride(dt); break;
       case 'bail': this.updateBail(dt); break;
       case 'walk': this.updateWalk(dt); break;
     }
@@ -486,6 +488,72 @@ export class Player {
     };
   }
 
+  // ------------------------------------------------------------------ WALLRIDE
+  // Hold K in the air next to a tall wall while travelling along it: the wheels
+  // grip the wall. Friction holds you up at first, then gravity wins (it scales up
+  // as the wheels lose bite); speed bleeds off from rolling resistance. Space =
+  // wallie off the wall; it also ends at the end of the wall or when you're too slow.
+  tryWallride() {
+    const v = this.vel, hs = Math.hypot(v.x, v.z);
+    if (hs < P2.wallride.minSpeed || v.y < -5) return false;
+    const fx = v.x / hs, fz = v.z / hs;
+    for (const side of [1, -1]) {
+      const sx = fz * side, sz = -fx * side;                    // perpendicular to travel
+      const b = this.col.blocker(this.pos.x + sx * 0.9, this.pos.z + sz * 0.9, this.pos.y + 1.0);
+      if (!b || b.type !== 'box') continue;
+      const n = this.col.wallNormal(b, this.pos.x, this.pos.z, this._wrn || (this._wrn = {}));
+      if (Math.abs(n.x * fx + n.z * fz) > Math.sin(P2.wallride.maxAngle * Math.PI / 180)) continue;   // must run along it
+      // snap against the wall, travel exactly along it
+      const along = fx * -n.z + fz * n.x >= 0 ? 1 : -1;
+      const tx = -n.z * along, tz = n.x * along;
+      this.wall = { nx: n.x, nz: n.z, tx, tz, t: 0, speed: hs, vy: Math.max(v.y, 1.5), box: b };
+      // lean onto the wall: wheels ~0.35 m from the face (board at the rider's lean angle)
+      let d = 0; for (; d < 1.2 && !this.col.blocker(this.pos.x - n.x * (d + 0.05), this.pos.z - n.z * (d + 0.05), this.pos.y + 1.0); d += 0.05);
+      this.pos.x -= n.x * Math.max(0, d - 0.35); this.pos.z -= n.z * Math.max(0, d - 0.35);
+      this.state = 'wallride';
+      this.air.tricks.push({ name: 'Wallride', base: 'Wallride', points: P2.wallride.points });
+      this.emit('trick', { name: 'Wallride' });
+      return true;
+    }
+    return false;
+  }
+
+  updateWallride(dt) {
+    const W = this.wall, C = P2.wallride;
+    W.t += dt;
+    // friction from the wall: strong at first, fades as the wheels lose bite
+    const g = P.gravity * (C.gravityStart + (1 - C.gravityStart) * Math.min(1, W.t / C.gripTime));
+    W.vy -= g * dt;
+    W.speed = Math.max(0, W.speed - C.friction * dt);
+    let nx = this.pos.x + W.tx * W.speed * dt, nz = this.pos.z + W.tz * W.speed * dt, ny = this.pos.y + W.vy * dt;
+    this.vel.set(W.tx * W.speed, W.vy, W.tz * W.speed);
+    // still a wall beside us? (it ends at corners)
+    const wallThere = this.col.blocker(nx - W.nx * 0.6, nz - W.nz * 0.6, ny + 0.6);
+    const ahead = this.col.blocker(nx + W.tx * 0.4, nz + W.tz * 0.4, ny + 0.3);
+    const ground = this.col.ground(nx, nz, ny + 0.3);
+    if (this.input.pressed.pop) {                                     // wallie off
+      this.input.pressed.pop = false;                                 // (one press = one wallie, even across physics sub-steps)
+      this.vel.set(W.tx * W.speed + W.nx * C.wallieOut, C.wallieUp, W.tz * W.speed + W.nz * C.wallieOut);
+      this.air.tricks.push({ name: 'Wallie', base: 'Wallie', points: 300 });
+      this.emit('trick', { name: 'Wallie' });
+      return this._leaveWall();
+    }
+    if (!wallThere || ahead || W.speed < 1.5 || W.t > C.maxTime || ny <= ground.h + 0.05) {
+      this.vel.set(W.tx * W.speed + W.nx * 1.2, Math.min(W.vy, 0), W.tz * W.speed + W.nz * 1.2);
+      if (ny <= ground.h + 0.05) ny = ground.h + 0.06;
+      this.pos.set(nx, ny, nz);
+      return this._leaveWall();
+    }
+    this.pos.set(nx, ny, nz);
+    this.air.time += dt;
+  }
+  _leaveWall() {
+    this.air.yaw = Math.atan2(this.wall.tx, this.wall.tz) + (this.fakie ? Math.PI : 0);
+    this.air.wallDone = true;                                         // one wallride per jump
+    this.wall = null;
+    this.state = 'air';
+  }
+
   // ------------------------------------------------------------------ AIR
   updateAir(dt) {
     const inp = this.input, A = this.air;
@@ -513,6 +581,7 @@ export class Player {
       A.yaw += A.spinVel * dt; A.spin += A.spinVel * dt;
     }
     this.updateAirTricks(dt);
+    if (inp.held.grind && !A.trick && !A.bodyFlip && !A.wallDone && this.tryWallride()) return;
     this._predictLanding();
     if (this.assist) this._landingAssist(dt, inp);
 
@@ -909,7 +978,7 @@ export class Player {
   }
 
   // true while a combo should stay "open" (in the air, grinding, manualling)
-  isHoldingCombo() { return this.state === 'air' || this.state === 'grind' || !!this.manual; }
+  isHoldingCombo() { return this.state === 'air' || this.state === 'grind' || this.state === 'wallride' || !!this.manual; }
 
   // ------------------------------------------------------------------ BAIL
   bail(reason) {
@@ -1102,6 +1171,10 @@ export class Player {
     const up = this._up || (this._up = new THREE.Vector3(0, 1, 0));
     let n = this.normal, rate = 14;
     if (this.state === 'air' || this.state === 'grind') { n = up; rate = this.state === 'grind' ? 10 : 3; }
+    if (this.state === 'wallride') {
+      // the board's wheels are on the wall; the rider leans in at ~50°
+      n = this._wn2 || (this._wn2 = new THREE.Vector3()); n.set(this.wall.nx, 0.85, this.wall.nz).normalize(); rate = 12;
+    }
     // mid-air: as you come down onto a ramp the board tilts to match it, so you
     // can actually land drop-ins and transitions
     if (this.state === 'air' && this.air.landN && this.air.tLand < 0.45 && this.air.landN.y < 0.995) { n = this.air.landN; rate = 9; }
@@ -1164,7 +1237,7 @@ export class Player {
   animState() {
     const A = this.air;
     return {
-      mode: this.manual ? 'manual' : this.state,
+      mode: this.manual ? 'manual' : this.state === 'wallride' ? 'grind' : this.state,
       crouch: this.crouching ? 1 : (this.powersliding ? 0.5 : 0),
       lean: this.state === 'ride' ? this.lean : 0,
       sketch: this.sketch || 0,
