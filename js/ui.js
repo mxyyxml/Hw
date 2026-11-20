@@ -306,9 +306,6 @@ export class UI {
 
   updateHUD(dt) {
     const g = this.game, p = g.player;
-    const v = p.displaySpeed();
-    $('speed-num').textContent = Math.round(v * 3.6);
-    $('speed-fill').style.width = Math.min(100, (v / 14) * 100) + '%';
     $('score').textContent = fmt(g.mode === 'lunch' ? g.lunch.score : g.score);
     $('best-combo').textContent = fmt(g.best.combo);
     const c = g.combo;
