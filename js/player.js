@@ -688,14 +688,14 @@ export class Player {
     if (inp.pressed.bodyflip && !A.bodyFlip && !A.grab) {
       const def = inp.held.up || inp.pressed.up ? BODY_FLIPS.front : BODY_FLIPS.back;
       // tucking tighter spins you faster (smaller moment of inertia): the flip takes
-      // as long as the air you have left, but a body can't turn it faster than ~0.62 s
+      // as long as the air you have left, but a body can't turn it faster than ~0.72 s
       // air left: follow the ballistic path until it meets the ground under it
       let left = 2;
       for (let t = 0.02; t < 2; t += 0.02) {
         const x = this.pos.x + this.vel.x * t, z = this.pos.z + this.vel.z * t, y = this.pos.y + this.vel.y * t - 0.5 * P.gravity * t * t;
         if (y <= this.col.ground(x, z, y + 0.3).h) { left = t; break; }
       }
-      A.bodyFlip = { def, t: 0, dur: clamp(left * 0.93, 0.62, 1.15) };
+      A.bodyFlip = { def, t: 0, dur: clamp(left * 0.93, 0.72, 1.15) };
       const entry = { name: def.name, base: def.name, points: def.points };
       A.tricks.push(entry);
       this.emit('trick', { name: def.name });
