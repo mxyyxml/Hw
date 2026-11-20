@@ -475,6 +475,13 @@ export function buildHuman(sk) {
         if (sinkBy > allow) { const d = sinkBy - allow; P[k * 3] += ox * d; P[k * 3 + 1] += oy * d; P[k * 3 + 2] += oz * d; }
       }
     }
+    // FOLDS: real geometric wrinkles, added after relaxing so they keep their shape
+    if (opts.folds) {
+      for (let k = 0; k < cnt0; k++) {
+        const d = opts.folds(P[k * 3], P[k * 3 + 1], P[k * 3 + 2], k);
+        if (d) { P[k * 3] += OUT[k * 3] * d; P[k * 3 + 1] += OUT[k * 3 + 1] * d; P[k * 3 + 2] += OUT[k * 3 + 2] * d; }
+      }
+    }
     // remember how far out the finished layer sits over each body vertex (so a
     // layer on top — backpack straps — can sit exactly on it)
     const offset = new Float32Array(n);
@@ -663,8 +670,28 @@ export function buildHuman(sk) {
     const hat = o.hat && o.hat !== 'none' && !kippah;     // hats that cover the hair
     // clothes
     let topGeo = null;
-    if (T) topGeo = layer((i) => topField(i, T), (i) => topThick(i, T), { smooth: 10 });
-    const pantsGeo = layer((i) => pantsField(i, PN), (i) => pantsThick(i, PN), { smooth: 4 });
+    // fabric folds — jeans: stacking ripples over the shoes, creases behind the knee and
+    // whiskers at the hip; tops: vertical drape folds toward the hem and sleeve bunching
+    const legHem = PN.hem === 'knee' ? kneeY + 0.03 - (PN.kneeDrop || 0) : PN.hem === 'calf' ? ankleY + 0.1 : ankleY + 0.035;
+    const pantsFolds = (x, y, z) => {
+      let d = 0;
+      const stack = sstep(legHem + 0.2, legHem + 0.02, y) * (PN.hem === 'ankle' ? 1 : 0.4);
+      if (stack) d += stack * (0.0025 + PN.bag * 0.12) * Math.pow(Math.abs(Math.sin(y * 95 + Math.abs(x) * 30 + z * 18)), 2.2);
+      const kneeBack = Math.exp(-(((y - kneeY) / 0.045) ** 2)) * sstep(0.0, -0.04, z - J['l-knee'][2]);
+      if (kneeBack) d += kneeBack * 0.004 * Math.abs(Math.sin(y * 160 + x * 40));
+      const hip = Math.exp(-(((y - (hipY - 0.07)) / 0.05) ** 2)) * sstep(0.02, 0.06, z);
+      if (hip) d -= hip * 0.002 * Math.pow(Math.abs(Math.sin((y - Math.abs(x) * 0.6) * 120)), 3);
+      return d;
+    };
+    const topFolds = (x, y, z, k) => {
+      if (!T) return 0;
+      const drape = sstep(shY - 0.2, waistY - T.hem + 0.03, y) * (T.drape * 0.35 + 0.0015);
+      let d = drape * Math.sin(Math.atan2(x, z) * 9 + Math.sin(y * 20) * 0.6);
+      if (Math.abs(x) > shX * 0.9 && T.sleeve) d += 0.0025 * Math.pow(Math.abs(Math.sin(Math.hypot(x, y) * 110)), 2);   // sleeve rings
+      return d;
+    };
+    if (T) topGeo = layer((i) => topField(i, T), (i) => topThick(i, T), { smooth: 10, folds: topFolds });
+    const pantsGeo = layer((i) => pantsField(i, PN), (i) => pantsThick(i, PN), { smooth: 4, folds: pantsFolds });
     addLayer(pantsGeo, M.pants);
     if (o.pants === 'cargo') {
       // big side pockets on the thighs

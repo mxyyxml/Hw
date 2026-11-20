@@ -81,6 +81,55 @@ def centre(name, VV=None):
     idx = groups['joint-' + name]
     return [sum(VV[i][k] for i in idx) / len(idx) for k in range(3)]
 
+# ---- relaxed hands: curl the fingers (MakeHuman's rest pose has them dead straight)
+# Forward kinematics per finger: the phalanx past each knuckle is rotated about the
+# line across the knuckles, distal joints first, so the finger curls into the palm.
+body_set = {i for f in body_faces for i in f}
+def vsub(a, b): return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+def vdot(a, b): return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+def vcross(a, b): return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+def vnorm(a): l = math.sqrt(vdot(a, a)) or 1; return [a[0] / l, a[1] / l, a[2] / l]
+def rot(p, c, ax, ang):          # Rodrigues: rotate p about axis ax through c
+    v = vsub(p, c); co, si = math.cos(ang), math.sin(ang)
+    cr = vcross(ax, v); d = vdot(ax, v)
+    return [c[k] + v[k] * co + cr[k] * si + ax[k] * d * (1 - co) for k in range(3)]
+CURL = {1: (0.0, 0.0, 0.0), 2: (0.22, 0.42, 0.3), 3: (0.28, 0.5, 0.34), 4: (0.34, 0.55, 0.36), 5: (0.4, 0.6, 0.38)}
+def curl_hands(VV):
+    for side in 'lr':
+        JJ = {(f, k): centre('%s-finger-%d-%d' % (side, f, k), VV) for f in range(1, 6) for k in range(1, 5)}
+        across = vnorm(vsub(JJ[(5, 2)], JJ[(2, 2)]))          # line across the knuckles
+        thumb = JJ[(1, 2)]
+        # which way is "into the palm"? the side the thumb base is on
+        mid = JJ[(3, 2)]; fdir = vnorm(vsub(JJ[(3, 3)], mid))
+        palm = vnorm(vcross(across, fdir))
+        sgn = 1 if vdot(vsub(thumb, mid), palm) > 0 else -1
+        hand_c = centre('%s-hand-2' % side, VV)
+        reach = math.dist(hand_c, JJ[(3, 4)]) * 1.6
+        for i in body_set:
+            p = VV[i]
+            if math.dist(p, hand_c) > reach: continue
+            # nearest finger chain (by distance to its 3 segments)
+            best = None
+            for f in range(1, 6):
+                for k in range(1, 4):
+                    a, b = JJ[(f, k)], JJ[(f, k + 1)]
+                    ab = vsub(b, a); t = vdot(vsub(p, a), ab) / (vdot(ab, ab) or 1)
+                    q = [a[c] + ab[c] * max(0, min(1, t)) for c in range(3)]
+                    d = math.dist(p, q)
+                    if best is None or d < best[0]: best = (d, f, k, t)
+            d, f, k, t = best
+            if k == 1 and t < 0.85: continue                     # palm / metacarpals stay put
+            # how far along the chain this vertex is → which joints bend it (smoothly)
+            u = (k - 1) + max(0.0, min(1.6 if k == 3 else 1.0, t))
+            ax = across if f != 1 else vnorm(vsub(JJ[(1, 3)], JJ[(1, 2)]))
+            ax = vcross(ax, [0, 0, 0]) if False else ax
+            q = p
+            for j, ang in ((4, CURL[f][2]), (3, CURL[f][1]), (2, CURL[f][0])):    # distal first
+                w = max(0.0, min(1.0, (u - (j - 2) - 0.85) / 0.3))                    # blend over the crease
+                if w > 0 and ang: q = rot(q, JJ[(f, j)], ax if f != 1 else vnorm(vcross(ax, palm)), sgn * ang * w)
+            VV[i][:] = q
+curl_hands(V)
+curl_hands(VF)
 J = {n: centre(n) for n in [
     'pelvis', 'spine-4', 'spine-3', 'neck', 'head', 'head-2',
     'l-upper-leg', 'l-knee', 'l-ankle', 'l-foot-2', 'r-upper-leg', 'r-knee', 'r-ankle', 'r-foot-2',
@@ -201,6 +250,11 @@ for p in P:
         s_ = 'l' if name.endswith('L') else 'r'
         ta, _ = seg_t_d(p, JB[s_ + '-shoulder'], JB[s_ + '-hand'])
         r = 4 if ta < 0.47 else (6 if ta > 0.93 else 5)
+        # anything past the middle of the arm belongs to the forearm (a few wrist verts
+        # sat nearer the upper-arm segment and tore into spikes when the elbow bent)
+        if ta > 0.55 and name.startswith('sh'):
+            el = 4 if s_ == 'r' else 6
+            skin_i[-1] = [el, 0, 0, 0]; skin_w[-1] = [255, 0, 0, 0]
     else:
         s_ = 'l' if name.endswith('L') else 'r'
         if p[1] < JB[s_ + '-ankle'][1] + 0.035: r = 10

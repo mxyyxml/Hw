@@ -36,6 +36,28 @@ function canvasWeave() {
   return t;
 }
 
+// skate-shoe print (greyscale, tinted by the shoe colour). u = around the shoe
+// (0 outer side → 0.5 top → 1 inner side), v = heel → toe.
+function shoeTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#e8e8e8'; x.fillRect(0, 0, 256, 512);
+  for (let i = 0; i < 256; i += 3) { x.fillStyle = 'rgba(0,0,0,0.05)'; x.fillRect(i, 0, 1, 512); }          // canvas weave
+  for (let j = 0; j < 512; j += 3) { x.fillStyle = 'rgba(0,0,0,0.035)'; x.fillRect(0, j, 256, 1); }
+  // suede toe cap & heel counter (darker, fuzzy)
+  const suede = (y0, y1) => { x.fillStyle = 'rgba(60,60,60,0.28)'; x.fillRect(0, y0, 256, y1 - y0); for (let i = 0; i < 1500; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`; x.fillRect(Math.random() * 256, y0 + Math.random() * (y1 - y0), 2, 2); } };
+  suede(512 * 0.74, 512); suede(0, 512 * 0.16);
+  // stitching along the panel edges
+  x.strokeStyle = 'rgba(40,40,40,0.55)'; x.setLineDash([5, 4]); x.lineWidth = 1.5;
+  for (const y of [512 * 0.74 - 6, 512 * 0.16 + 6]) { x.beginPath(); x.moveTo(0, y); x.lineTo(256, y); x.stroke(); }
+  x.setLineDash([]);
+  // an original side stripe (a simple swoosh-free double line) on both sides
+  x.strokeStyle = 'rgba(255,255,255,0.95)'; x.lineWidth = 7;
+  for (const u0 of [0.12, 0.88]) { x.beginPath(); x.moveTo(u0 * 256 - 12, 512 * 0.22); x.quadraticCurveTo(u0 * 256, 512 * 0.45, u0 * 256 + 10, 512 * 0.66); x.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
 // knitted cap texture (beanie, kippah): fine rib stitches
 function knitTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -86,8 +108,19 @@ export function deckTexture(design, colorHex) {
     x.strokeStyle = '#0038b8'; x.lineWidth = 14;
     for (const rot of [0, Math.PI]) { x.beginPath(); for (let k = 0; k < 3; k++) { const a = rot + k * 2 * Math.PI / 3; x[k ? 'lineTo' : 'moveTo'](W / 2 + Math.sin(a) * 95, H / 2 - Math.cos(a) * 95); } x.closePath(); x.stroke(); }
   } else if (design === 'plain') { x.fillStyle = col; x.fillRect(0, 0, W, H); }
-  // a little wear on the nose & tail (scraped graphics show the wood)
-  for (let i = 0; i < 260; i++) { const yy = Math.random() < 0.5 ? Math.random() * 90 : H - Math.random() * 90; x.fillStyle = 'rgba(232,220,192,0.7)'; x.fillRect(Math.random() * W, yy, 3 + Math.random() * 14, 2); }
+  // real wear: tails & noses are scraped down to the maple (long scratches running
+  // lengthwise, densest at the very tips), rail-burn along both edges from slides,
+  // and a few board-slide scuffs in the middle
+  const scr = (y0, y1, n, alpha) => {
+    for (let i = 0; i < n; i++) {
+      const y = y0 + (y1 - y0) * Math.pow(Math.random(), 1.8), xx = Math.random() * W, len = 8 + Math.random() * 46;
+      x.strokeStyle = `rgba(226,210,178,${alpha * (0.5 + Math.random() * 0.5)})`; x.lineWidth = 0.8 + Math.random() * 2;
+      x.beginPath(); x.moveTo(xx, y); x.lineTo(xx + (Math.random() - 0.5) * 8, y + (y1 > y0 ? len : -len)); x.stroke();
+    }
+  };
+  scr(0, 150, 420, 0.85); scr(H, H - 150, 420, 0.85);
+  for (let i = 0; i < 160; i++) { const y = Math.random() * H; x.fillStyle = 'rgba(226,210,178,0.6)'; x.fillRect(Math.random() < 0.5 ? Math.random() * 10 : W - Math.random() * 10, y, 3 + Math.random() * 6, 6 + Math.random() * 30); }
+  for (let i = 0; i < 40; i++) { const y = H * 0.38 + Math.random() * H * 0.24; x.fillStyle = 'rgba(20,20,20,0.18)'; x.fillRect(Math.random() * W, y, 20 + Math.random() * 60, 1.5); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return (_decks[key] = t);
 }
@@ -161,7 +194,7 @@ export class Skater {
     this.hips = bone(this.body, 0, 0.8, 0);
     const m = this.mat;
     m.top.map = this._cotton = getFabric('cotton');
-    m.shoe.map = canvasWeave();
+    m.shoe.map = shoeTexture();
     m.eyeball.map = humanTex('eye.jpg');
     m.pack.map = canvasWeave(); m.hat.map = knitTexture(); m.sock.map = knitTexture();
     m.grip.map = gripTexture(); m.deckSide.map = plyTexture(); m.grip.color.setHex(0xffffff); m.deckSide.color.setHex(0xffffff);
@@ -362,56 +395,84 @@ export class Skater {
     this.glasses = g;
   }
 
-  // A low-poly sneaker built from a foot-shaped outline: contoured rubber sole,
-  // rounded upper that slopes down into the toe box, heel collar, tongue, laces.
+  // A skate shoe lofted through foot-shaped cross-sections (no boxes):
+  //  * upper: smooth surface whose width follows a real last (narrow heel, wide
+  //    ball, rounded toe) and whose height drops from the padded collar to a low
+  //    toe box; printed suede toe & heel panels, stitching and a side stripe
+  //  * vulcanised sole with a raised rubber foxing band and toe bumper
+  //  * padded collar, tongue, and real criss-cross laces through eyelets
   _makeSneaker(foot) {
     const m = this.mat;
     if (!m.soleW) m.soleW = new THREE.MeshLambertMaterial({ color: 0xf2efe8 });
-    const outline = (inset) => {
-      // half-widths along the foot (z: heel -0.075 → toe +0.215)
-      const pts = [[-0.075, 0.03], [-0.06, 0.04], [-0.02, 0.041], [0.05, 0.043], [0.12, 0.052], [0.17, 0.05], [0.2, 0.038], [0.215, 0.018]];
-      const sh = new THREE.Shape();
-      const R = pts.map(([z, w]) => [Math.max(0.004, w - inset), z + (z > 0 ? -inset : inset)]);
-      sh.moveTo(0, R[0][1] - 0.006 + inset);
-      for (const [w, z] of R) sh.lineTo(w, z);
-      sh.lineTo(0, 0.218 - inset);
-      for (let i = R.length - 1; i >= 0; i--) sh.lineTo(-R[i][0], R[i][1]);
-      sh.closePath();
-      return sh;
+    const fh = this.footH, Z0 = -0.078, Z1 = 0.218;
+    // half-width of the last along the foot
+    const W = (z) => {
+      const t = (z - Z0) / (Z1 - Z0);
+      const base = 0.03 + 0.016 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.55) + 0.006 * Math.sin(t * Math.PI);
+      const toe = t > 0.82 ? Math.sqrt(Math.max(0, 1 - ((t - 0.82) / 0.18) ** 2)) : 1;
+      const heel = t < 0.08 ? Math.sqrt(Math.max(0, 1 - ((0.08 - t) / 0.08) ** 2)) : 1;
+      return base * toe * heel + 0.0015;
     };
-    const fh = this.footH;
-    // sole: thick rubber, slightly flared
-    const sole = new THREE.ExtrudeGeometry(outline(0), { depth: 0.015, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 4 });
-    sole.rotateX(Math.PI / 2); sole.translate(0, -fh + 0.019, 0);           // thin vulcanised sole, bottom at -fh
-    const soleM = new THREE.Mesh(sole, m.soleW); soleM.castShadow = true; foot.add(soleM);
-    // upper: rounded, lower over the toes
-    const up = new THREE.ExtrudeGeometry(outline(0.007), { depth: 0.058, bevelEnabled: true, bevelThickness: 0.016, bevelSize: 0.012, bevelSegments: 3, curveSegments: 6 });
-    up.rotateX(Math.PI / 2); up.translate(0, -fh + 0.021 + 0.074, 0);
-    const pa = up.attributes.position, base = -fh + 0.019;
-    for (let i = 0; i < pa.count; i++) {
-      const z = pa.getZ(i), y = pa.getY(i);
-      const t = Math.min(1, Math.max(0, (z - 0.06) / 0.155));
-      pa.setY(i, base + (y - base) * (1 - 0.5 * t * t));
-    }
-    up.computeVertexNormals();
-    const upM = new THREE.Mesh(up, m.shoe); upM.castShadow = true; foot.add(upM);
-    // heel collar, tongue, laces
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.011, 6, 14).rotateX(Math.PI / 2).scale(0.95, 1, 1.15), m.shoe);
-    collar.position.set(0, -fh + 0.103, -0.022); foot.add(collar);
-    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.01, 0.075), m.shoe);
-    tongue.position.set(0, -fh + 0.109, 0.04); tongue.rotation.x = -0.45; foot.add(tongue);
-    for (let i = 0; i < 4; i++) {
-      const lace = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.006, 0.007), m.lace);
-      lace.position.set(0, -fh + 0.094 - i * 0.008, 0.045 + i * 0.022); foot.add(lace);
-    }
-    // rubber toe cap and a plain side stripe (classic skate-shoe look, no logos)
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.046, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 0.55, 0.9), m.soleW);
-    cap.position.set(0, -fh + 0.026, 0.172); foot.add(cap);
-    for (const sx of [-1, 1]) {
-      const st = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.011, 0.1), m.soleW);
-      st.position.set(sx * 0.05, -fh + 0.052, 0.035); st.rotation.x = 0.32; st.rotation.y = sx * 0.08; foot.add(st);
+    const SOLE = 0.024;                                    // sole thickness
+    // upper height above the sole along the foot: collar → instep → toe box
+    const Hgt = (z) => {
+      const t = (z - Z0) / (Z1 - Z0);
+      if (t < 0.32) return 0.088 - 0.006 * t;               // heel counter / collar
+      if (t < 0.68) return 0.086 - (t - 0.32) * 0.09;        // instep (laces)
+      return Math.max(0.012, 0.054 - (t - 0.68) * 0.135);   // toe box slopes down
+    };
+    const NZ = 40, NA = 18, y0 = -fh + SOLE;
+    const loft = (inflate, yBase, heightFn, uvMode) => {
+      const P = [], U = [], I = [];
+      for (let j = 0; j <= NZ; j++) {
+        const z = Z0 + (Z1 - Z0) * j / NZ, w = W(z) + inflate;
+        // round the height off with the width at the toe & heel tips (no thin fins)
+        const h = (heightFn(z) + inflate * 0.5) * Math.min(1, Math.sqrt(W(z) / 0.024));
+        for (let i = 0; i <= NA; i++) {
+          const a = Math.PI * i / NA;                       // 0 = outer side → π = inner side, over the top
+          const c = Math.cos(a), sn = Math.sin(a);
+          P.push(w * Math.sign(c) * Math.pow(Math.abs(c), 0.8), yBase + h * Math.pow(sn, 0.55), z);
+          U.push(i / NA, j / NZ);
+        }
+      }
+      for (let j = 0; j < NZ; j++) for (let i = 0; i < NA; i++) { const q = j * (NA + 1) + i, r = q + NA + 1; I.push(q, q + 1, r, q + 1, r + 1, r); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+      g.setIndex(I); g.computeVertexNormals();
+      return g;
+    };
+    const add = (geo, mat, shadow = true) => { const o = new THREE.Mesh(geo, mat); o.castShadow = shadow; o.receiveShadow = true; foot.add(o); return o; };
+    // upper (printed panels come from the shoe texture via u = around, v = along)
+    add(loft(0, y0 - 0.002, Hgt), m.shoe);
+    // sole: a low, wide loft (rounded sidewall) + flat bottom
+    const soleGeo = loft(0.005, -fh, () => SOLE + 0.002);
+    add(soleGeo, m.soleW);
+    const bottom = new THREE.Shape(), Nb = 30;
+    for (let k = 0; k <= Nb; k++) { const z = Z0 + (Z1 - Z0) * k / Nb; (k ? bottom.lineTo : bottom.moveTo).call(bottom, W(z) + 0.005, z); }
+    for (let k = Nb; k >= 0; k--) { const z = Z0 + (Z1 - Z0) * k / Nb; bottom.lineTo(-(W(z) + 0.005), z); }
+    add(new THREE.ShapeGeometry(bottom).rotateX(Math.PI / 2).translate(0, -fh + 0.0005, 0), m.sole);
+    // foxing band: thin dark stripe round the top of the sole
+    add(loft(0.0055, y0 - 0.006, () => 0.004), m.sole, false);
+    // padded collar round the ankle opening
+    const col = new THREE.TorusGeometry(0.036, 0.0105, 8, 22).rotateX(Math.PI / 2).scale(0.9, 1, 1.25);
+    add(col.translate(0, y0 + 0.084, -0.028), m.shoe);
+    // tongue
+    const tg = new THREE.BoxGeometry(0.046, 0.008, 0.08, 1, 1, 4), tp = tg.attributes.position;
+    for (let i = 0; i < tp.count; i++) tp.setY(i, tp.getY(i) + 0.02 * Math.sin((tp.getZ(i) / 0.08 + 0.5) * Math.PI) * 0.3);
+    tg.computeVertexNormals();
+    const tongue = add(tg, m.shoe); tongue.position.set(0, y0 + 0.094, 0.002); tongue.rotation.x = -0.32;
+    // laces: criss-cross between eyelets across the instep
+    for (let k = 0; k < 5; k++) {
+      const z = 0.012 + k * 0.021, y = y0 + Hgt(z) + 0.004;
+      for (const sx of [-1, 1]) {
+        const g = new THREE.CylinderGeometry(0.0028, 0.0028, 0.05, 5).rotateZ(Math.PI / 2).rotateY(sx * 0.42);
+        add(g.translate(0, y, z), m.lace, false);
+      }
+      for (const sx of [-1, 1]) add(new THREE.TorusGeometry(0.003, 0.0012, 4, 8).rotateX(Math.PI / 2).translate(sx * 0.019, y - 0.001, z), m.bolt, false);   // eyelets
     }
   }
+
 
   // A real skateboard (all procedural):
   //  * deck: popsicle outline, 8.25" wide, concave across the width and kicked-up
@@ -592,8 +653,8 @@ export class Skater {
     const pbr = level === 'high' || level === 'ultra';
     if (!this._lambert) this._lambert = { ...this.mat };
     if (!this._pbr) {
-      const R = { skin: 0.5, skinDark: 0.55, eye: 0.15, topTrim: 0.3, truck: 0.35, wheel: 0.5, grip: 0.95, deck: 0.6, deckSide: 0.6, sole: 0.8, shoe: 0.75, hair: 0.55, hairCard: 0.55, brow: 0.7, stubble: 0.9, lens: 0.05, frame: 0.35 };
-      const metal = { truck: 0.75, frame: 0.2, bolt: 0.85, bearing: 0.6 };
+      const R = { skin: 0.5, skinDark: 0.55, eye: 0.15, topTrim: 0.3, truck: 0.38, bolt: 0.35, bearing: 0.25, bushing: 0.55, wheel: 0.32, wheelCore: 0.4, grip: 0.98, deck: 0.38, deckSide: 0.6, sole: 0.8, shoe: 0.75, hair: 0.55, hairCard: 0.55, brow: 0.7, stubble: 0.9, lens: 0.05, frame: 0.35 };
+      const metal = { truck: 0.7, frame: 0.2, bolt: 0.85, bearing: 0.7 };
       this._pbr = {};
       for (const [k, m] of Object.entries(this._lambert)) {
         const props = { color: m.color, map: m.map || null, roughness: R[k] ?? 0.92, metalness: metal[k] ?? 0,
@@ -603,6 +664,12 @@ export class Skater {
           this._pbr[k] = new THREE.MeshPhysicalMaterial({ ...props, sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color(0xff8c6e), clearcoat: 0.06, clearcoatRoughness: 0.6 });
         } else if (k === 'hair' || k === 'hairCard') {
           this._pbr[k] = new THREE.MeshPhysicalMaterial({ ...props, sheen: 0.5, sheenRoughness: 0.35, sheenColor: new THREE.Color(0x8a7560) });
+        } else if (k === 'deck') {
+          // lacquered deck graphic: a clear coat over the print
+          this._pbr[k] = new THREE.MeshPhysicalMaterial({ ...props, clearcoat: 0.6, clearcoatRoughness: 0.25 });
+        } else if (k === 'wheel') {
+          // urethane: slightly translucent-looking soft sheen
+          this._pbr[k] = new THREE.MeshPhysicalMaterial({ ...props, sheen: 0.4, sheenRoughness: 0.4, sheenColor: new THREE.Color(0xffffff), clearcoat: 0.3, clearcoatRoughness: 0.4 });
         } else this._pbr[k] = new THREE.MeshStandardMaterial(props);
       }
     }

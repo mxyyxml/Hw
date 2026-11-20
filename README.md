@@ -92,6 +92,16 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
   every push, crouch and landing).
 - Rolling back down a ramp (fakie) no longer whips the camera round — it glides round smoothly.
 
+### 👟 Character & board detail
+- **Skate shoes** are lofted through foot-shaped cross-sections (narrow heel, wide ball, rounded toe box,
+  padded collar) with a vulcanised sole, foxing band, tongue, criss-cross laces through eyelets, suede
+  toe & heel panels with stitching and an original side stripe.
+- **Relaxed hands:** fingers curl naturally into the palm (MakeHuman's finger joints, forward kinematics).
+- **Fabric folds:** jeans stack in ripples over the shoes, crease behind the knees and whisker at the
+  hips; shirts and hoodies drape in folds toward the hem and bunch at the sleeves.
+- **Board wear:** nose & tail scraped to the maple, rail burn along the edges, slide scuffs; lacquered
+  deck graphic, urethane wheels with a soft sheen, metal trucks & bolts.
+
 ### ⚙️ Performance
 Collision queries use a 10 m spatial grid (≈13× faster ground checks, verified identical to the old
 linear scan on 40,000 random points); rails are bucketed the same way.
