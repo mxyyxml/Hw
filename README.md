@@ -1,4 +1,4 @@
--Lunch Break Skate 🛹🔔
+-Jew Board 🛹🔔
 
 A chill, physics-based, free-roam 3D skateboarding game that runs in the browser.
 Flick-style trick input, momentum riding, grinds, manuals, combos, 10 challenges and a
@@ -83,6 +83,12 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
 - **Q = Revert** (the board spins 180° on its wheels; hold Q as you land to revert straight out of it).
 - **F in the air = Backflip**, hold **W** for a **Frontflip**. The rider tucks tighter to rotate faster,
   but needs real air (big kickers, mega ramp, Titan Park); land short of a full rotation and you slam.
+- **Glitches (Skate-style):** hold **G** for the speed glitch (rapid tap-pushes past the normal push
+  speed, up to the board's max); **N** = pop glitch (the board clips and fires you 4–7 m into the sky
+  tumbling — sort the board out before you land).
+- **More grinds:** **Shift + K** + ↑ Crooked, ↓ Feeble, ← Bluntslide, → Noseblunt.
+- **Backflip / frontflip** now rotate nose-over-tail (a real backflip), not sideways.
+- **Off the board** you carry it by the truck in your hand; E drops it and you hop on.
 - **Wallrides:** hold **K** in the air while travelling along a tall wall (buildings, the Tel Aviv
   apartment lobbies, big walls): wall friction holds you up at first, then gravity takes over. **Space**
   wallies off. One wallride per jump.
@@ -251,6 +257,6 @@ they live in `assets/`. The skater, the park and the sounds are all made in code
 
 ## Originality
 
-Lunch Break Skate is an original game: its name, park layout, skater ("Pip") and every
+Jew Board is an original game: its name, park layout, skater ("Pip") and every
 asset are made from scratch in code. It doesn't use names, logos, maps, characters, music or
 assets from any existing game.

@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { QUICK_TRICKS, FLIP_TRICKS } from './config.js';
 import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR, GAPS, POWERSLIDE,
-  GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
+  GRINDS, SHIFT_GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
 import { PHYSICS2 as P2, PUSH, BODY_FLIPS, REVERT } from './config.js';
 
@@ -141,10 +141,11 @@ export class Player {
 
     // while grinding (and not winding up a pop): arrows / K switch the grind
     if (this.state === 'grind' && !this.crouching) {
-      if (inp.pressed.up) this.switchGrind(GRINDS.up);
-      else if (inp.pressed.down) this.switchGrind(GRINDS.down);
-      else if (inp.pressed.left) this.switchGrind(GRINDS.left);
-      else if (inp.pressed.right) this.switchGrind(GRINDS.right);
+      const SET = inp.held.shift ? SHIFT_GRINDS : GRINDS;
+      if (inp.pressed.up) this.switchGrind(SET.up);
+      else if (inp.pressed.down) this.switchGrind(SET.down);
+      else if (inp.pressed.left) this.switchGrind(SET.left);
+      else if (inp.pressed.right) this.switchGrind(SET.right);
       else if (inp.pressed.grind) this.switchGrind(inp.held.up || inp.held.down || inp.held.left || inp.held.right ? GRINDS[inp.heldDir()] : GRINDS.none);
     }
 
@@ -263,6 +264,26 @@ export class Player {
     const ln = lx * n.x + lz * n.z;
     if (n.y < 0.999) this.heading += clamp(P.gravity * ln * n.y / Math.max(this.speed, 1.5), -4, 4) * dt;
 
+    // --- SPEED GLITCH (hold G): rapid tap-pushes with the back foot that don't respect
+    // the normal push speed cap — you keep gaining speed up to the board's max
+    if (inp.held.speedGlitch && n.y > 0.95 && !this.manual && !this.crouching) {
+      const G = P2.glitch;
+      this.speed = Math.min(P.maxSpeed, this.speed + G.speedAccel * dt);
+      this.glitchTap = ((this.glitchTap || 0) + G.tapRate * dt) % 1;
+      if (!this._glitching) { this._glitching = true; this.emit('glitch', { name: 'Speed Glitch' }); }
+    } else this._glitching = false;
+    // --- POP GLITCH (N): the board clips into the ground and spits you into the sky
+    if (inp.pressed.popGlitch) {
+      const G = P2.glitch;
+      this.vel.y = G.popUp[0] + Math.random() * (G.popUp[1] - G.popUp[0]);
+      this.pos.y += 0.05;
+      this.launch(true);
+      this.air.spinVel = (Math.random() - 0.5) * 2 * G.popSpin;
+      this.air.glitchTumble = (Math.random() < 0.5 ? -1 : 1) * G.popFlip;
+      this.startAirTrick({ name: 'Pop Glitch', flips: 0, shuv: 0, time: 0, points: 2000 });
+      this.emit('glitch', { name: 'Pop Glitch' });
+      return;
+    }
     // --- REVERT (Q): the board spins 180° on its wheels; you keep rolling the same way, now fakie
     if (inp.pressed.revert && !this.revert && !this.manual && this.speed > 1.2) {
       this.revert = { t: 0, dir: (inp.held.right ? -1 : 1) * (this.fakie ? -1 : 1) };
@@ -700,6 +721,12 @@ export class Player {
       A.tricks.push(entry);
       this.emit('trick', { name: def.name });
     }
+    if (A.glitchTumble) {
+      A.glitchFlip = (A.glitchFlip || 0) + A.glitchTumble * dt;
+      A.glitchTumble *= Math.exp(-1.8 * dt);
+      if (Math.abs(A.glitchTumble) < 0.4) { A.glitchTumble = 0; A.glitchFlip = Math.round(A.glitchFlip / TAU) * TAU; }
+      A.flipAngle = A.glitchFlip;
+    }
     if (A.bodyFlip) {
       const BF = A.bodyFlip;
       BF.t = Math.min(BF.dur, BF.t + dt);
@@ -804,6 +831,7 @@ export class Player {
       A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; A.pitchAngle = 0; // close enough — snap it
     }
     if (A.grab && P.bailIfGrabbingOnLand) return 'Still grabbing!';
+    if (A.glitchTumble) return 'The glitch got you!';
     if (A.bodyFlip && A.bodyFlip.t / A.bodyFlip.dur < 0.9) return 'Under-rotated the ' + A.bodyFlip.def.name + '!';
     const vth = Math.hypot(vtx, vtz);
     if (vth > 0.8) {
@@ -883,6 +911,7 @@ export class Player {
   //   (→ held = Lipslide), otherwise 50-50
   chooseGrind(r) {
     const inp = this.input, dir = inp.heldDir();
+    if (inp.held.grind && inp.held.shift) return SHIFT_GRINDS[dir] || SHIFT_GRINDS.none;
     if (inp.held.grind) return GRINDS[dir] || GRINDS.none;
     const railYaw = Math.atan2(r.dx, r.dz);
     const d = Math.abs(wrapAngle((this.air ? this.air.yaw : this.heading) - railYaw));
@@ -1079,7 +1108,7 @@ export class Player {
   }
 
   // ------------------------------------------------------------------ WALK
-  // Off the board: the board stays on the ground where you stepped off
+  // Off the board: you pick the board up and carry it
   enterWalk() {
     this.groundBoard = { pos: this.pos.clone().add(new THREE.Vector3(Math.sin(this.heading) * 0.5, 0.075, Math.cos(this.heading) * 0.5)),
       quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading) };
@@ -1182,6 +1211,7 @@ export class Player {
     if (this.state === 'bail') yaw = this.bailInfo.yaw;
     if (this.state === 'ride' && this.powersliding) yaw += (this.fakie ? -1 : 1) * 1.25;
     if (this.state === 'grind' && this.grind.def.sideways) yaw += (this.grind.def.name === 'Lipslide' ? -1 : 1) * Math.PI / 2;
+    if (this.state === 'grind' && this.grind.def.yawOff) yaw += this.grind.def.yawOff;
     // lean into carves: bank angle from the sideways (centripetal) acceleration
     let bank = 0;
     if (this.state === 'ride' && !this.powersliding) {
@@ -1215,15 +1245,24 @@ export class Player {
     sk.setTransform(pos, yaw, n, dt, rate, this.bankSmooth);
     if (this.state === 'air' && this.air.bodyFlip && this.air.bodyFlip.angle) {
       const r = sk.root, q = this._bfq || (this._bfq = new THREE.Quaternion()), ax = this._bfa || (this._bfa = new THREE.Vector3());
-      ax.set(0, 0, 1).applyQuaternion(r.quaternion);                         // board's long axis
-      q.setFromAxisAngle(ax, this.air.bodyFlip.angle * (sk.stance || 1));
+      sk._baseQ = (sk._baseQ0 || (sk._baseQ0 = new THREE.Quaternion())).copy(r.quaternion);   // restored before next frame's easing
+      // a real backflip turns nose-over-tail: about the horizontal axis across the direction
+      // of travel (forward × up), positive = the front goes up and back
+      const hs = Math.hypot(this.vel.x, this.vel.z);
+      const fx = hs > 0.3 ? this.vel.x / hs : Math.sin(this.air.yaw), fz = hs > 0.3 ? this.vel.z / hs : Math.cos(this.air.yaw);
+      ax.set(-fz, 0, fx);
+      q.setFromAxisAngle(ax, this.air.bodyFlip.angle);
       const pivot = this._bfp || (this._bfp = new THREE.Vector3());
       pivot.set(0, 0.95, 0).applyQuaternion(r.quaternion).add(r.position);   // spin around the centre of mass
       r.position.sub(pivot).applyQuaternion(q).add(pivot);
       r.quaternion.premultiply(q);
     }
     if (this.state === 'bail') sk.setLooseBoard(true, this.bailInfo.boardPos, this.bailInfo.boardQuat);
-    else if (this.state === 'walk' && this.groundBoard) sk.setLooseBoard(true, this.groundBoard.pos, this.groundBoard.quat);
+    else if (this.state === 'walk' && this.groundBoard) {
+      // you carry the board: grabbed by the front truck in your trailing hand, deck
+      // hanging down along your leg, grip tape facing you. Drawn after the pose is set.
+      this._carry = true;
+    }
     else sk.setLooseBoard(false);
     // wheels keep spinning in the air and slowly stop
     if (this.state === 'ride') this.wheelSpeed = this.speed;
@@ -1232,6 +1271,22 @@ export class Player {
     const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
     sk.setBlob(this.pos.x, g.h, this.pos.z, this.pos.y - g.h);
     sk.animate(this.animState(), dt);
+    if (this._carry) {
+      this._carry = false;
+      const hand = sk.arms[0].el, v = this._cv || (this._cv = new THREE.Vector3()), q = this._cq || (this._cq = new THREE.Quaternion());
+      sk.root.updateMatrixWorld(true);
+      hand.localToWorld(v.set(0, -0.29, 0));                         // the palm
+      // orientation from the body (not the swinging hand): deck hanging vertically beside
+      // the right leg, grip tape facing the leg, nose pointing down
+      sk.body.getWorldQuaternion(q);
+      const bq = this._cbq || (this._cbq = new THREE.Quaternion());
+      bq.copy(q).multiply(this._cr || (this._cr = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+        new THREE.Vector3(0, 0, -1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0)))));
+      const off = this._co || (this._co = new THREE.Vector3());
+      off.set(-0.035, -0.3, 0).applyQuaternion(q);                    // hand holds it near the top truck
+      v.add(off);
+      sk.setLooseBoard(true, v, bq);
+    }
   }
 
   animState() {
@@ -1244,7 +1299,7 @@ export class Player {
       balance: this.state === 'ride' ? (this.balance || 0) * (this.fakie ? -1 : 1) : 0,
       comp: clamp(this.comp || 0, 0, 1),
       walkAir: this.state === 'walk' && this.walkVy !== 0,
-      pushPhase: this.pushPhase,
+      pushPhase: this._glitching ? (this.glitchTap || 0) * 0.5 + 0.2 : this.pushPhase,
       flipAngle: A ? A.flipAngle : 0,
       shuvAngle: A ? A.shuvAngle : 0,
       pitchAngle: A ? A.pitchAngle || 0 : 0,

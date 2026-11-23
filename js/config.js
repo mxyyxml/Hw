@@ -1,10 +1,10 @@
 // =============================================================================
-//  Lunch Break Skate — config.js
+//  Jew Board — config.js
 //  Every number and name you might want to tweak lives in this one file.
 //  Units: metres, seconds, radians (unless a comment says degrees).
 // =============================================================================
 
-export const GAME_TITLE = 'Lunch Break Skate';
+export const GAME_TITLE = 'Jew Board';
 
 // -----------------------------------------------------------------------------
 //  PHYSICS — how the board rolls, pushes, turns and flies
@@ -144,6 +144,14 @@ export const GRINDS = {
   left:  { name: 'Boardslide',   sideways: true,  pitch: 0 },
   right: { name: 'Lipslide',     sideways: true,  pitch: 0 },
 };
+// Shift + K + direction: the angled / locked-in grinds
+export const SHIFT_GRINDS = {
+  up:    { name: 'Crooked Grind', sideways: false, pitch: 0.2, yawOff: 0.35 },   // nosegrind with the nose angled over
+  down:  { name: 'Feeble Grind',  sideways: false, pitch: -0.2, yawOff: -0.3 },  // back truck on, front truck over the rail
+  left:  { name: 'Bluntslide',    sideways: false, pitch: -0.75 },               // tail locked on top, board pointing up
+  right: { name: 'Noseblunt',     sideways: false, pitch: 0.75 },
+  none:  { name: 'Crooked Grind', sideways: false, pitch: 0.2, yawOff: 0.35 },
+};
 export const GRIND_POINTS = { base: 200, perSecond: 450 };
 export const GRIND = {
   snapRadius: 0.5,          // horizontal distance to rail to snap on
@@ -264,7 +272,9 @@ export const KEYS = {
   help:   ['KeyH'],
   replay: ['KeyY'],
   bodyflip: ['KeyF'],       // in the air: backflip (S) / frontflip (W)
-  revert: ['KeyQ'],         // on the ground: revert (spin the board 180° and roll away fakie)         // cinematic replay of the last 12 seconds
+  revert: ['KeyQ'],
+  speedGlitch: ['KeyG'],    // hold: Skate-style speed glitch (rapid tap-pushes past the push cap)
+  popGlitch: ['KeyN'],      // Skate-style pop glitch: the board clips and fires you into the sky         // on the ground: revert (spin the board 180° and roll away fakie)         // cinematic replay of the last 12 seconds
 };
 
 // -----------------------------------------------------------------------------
@@ -290,6 +300,7 @@ export const PHYSICS2 = {
   truckBase: 0.26,          // half the distance between the trucks (m) — board pitch comes from both wheel sets
   // wallrides (hold K in the air along a tall wall)
   wallride: { minSpeed: 3.5, maxAngle: 35, gravityStart: 0.25, gripTime: 0.9, friction: 1.2, maxTime: 1.6, wallieUp: 4.2, wallieOut: 1.8, points: 600 },
+  glitch: { speedAccel: 7, tapRate: 11, popUp: [10, 13.5], popSpin: 9, popFlip: 14 },   // big pops are survivable only on a lucky landing
   wobbleSpeed: 13,          // m/s: above this, standing tall gives speed wobbles (crouch = Space to stop them)
   steerResponse: 9,         // how fast you shift your weight into / out of a carve (1/s)
   minCarveRadius: 1.0,      // tightest turn the trucks allow (m)
@@ -306,7 +317,7 @@ export const PHYSICS2 = {
   surfaceFriction: { street: 1.45, street_top: 1.2, halfpipe: 0.7, miniramp: 0.7, quarter: 0.7,
     mega_rollin: 0.65, mega_kicker: 0.65, mega_land: 0.7, mega_quarter: 0.7, bowl: 0.75 },
   // grind friction per grind type (fraction of speed lost per second)
-  grindFriction: { '50-50': 0.05, 'Smith Grind': 0.07, 'Nosegrind': 0.07, '5-0': 0.06, 'Boardslide': 0.13, 'Lipslide': 0.13 },
+  grindFriction: { '50-50': 0.05, 'Smith Grind': 0.07, 'Nosegrind': 0.07, '5-0': 0.06, 'Boardslide': 0.13, 'Lipslide': 0.13, 'Crooked Grind': 0.08, 'Feeble Grind': 0.08, 'Bluntslide': 0.16, 'Noseblunt': 0.16 },
   // landings: under landClean degrees = clean; up to landMax = sketchy but you
   // ride it out (rolling the way the BOARD points, losing some speed); more = bail
   // the allowed angle depends on SPEED: slow = you can land almost any way and

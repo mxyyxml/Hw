@@ -1,5 +1,5 @@
 // =============================================================================
-//  main.js — boots Lunch Break Skate and runs the game loop.
+//  main.js — boots Jew Board and runs the game loop.
 //  Fixed-step physics (config.PHYSICS.fixedStep) + one render per frame.
 //  Modes: 'title' (menu backdrop), 'free' (free skate), 'lunch' (2-min session)
 // =============================================================================
@@ -395,6 +395,7 @@ class Game {
         this.challenges.onManual(d);
         break;
       case 'powerslide': this.combo.add({ name: d.name, base: d.name, points: d.points }); break;
+      case 'glitch': ui.popup(d.name); au.push(); break;
       case 'revert': this.combo.add({ name: d.name, base: d.name, points: d.points }); ui.popup(d.name); break;
       case 'bail':
         ui.popup('BAIL! ' + d.reason, 'bail');

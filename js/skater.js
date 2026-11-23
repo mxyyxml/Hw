@@ -194,7 +194,8 @@ export class Skater {
     this.hips = bone(this.body, 0, 0.8, 0);
     const m = this.mat;
     m.top.map = this._cotton = getFabric('cotton');
-    m.shoe.map = shoeTexture();
+    m.shoeUpper = m.shoeUpper || new THREE.MeshLambertMaterial({ color: 0xffffff });
+    m.shoeUpper.map = shoeTexture();
     m.eyeball.map = humanTex('eye.jpg');
     m.pack.map = canvasWeave(); m.hat.map = knitTexture(); m.sock.map = knitTexture();
     m.grip.map = gripTexture(); m.deckSide.map = plyTexture(); m.grip.color.setHex(0xffffff); m.deckSide.color.setHex(0xffffff);
@@ -442,9 +443,12 @@ export class Skater {
       g.setIndex(I); g.computeVertexNormals();
       return g;
     };
-    const add = (geo, mat, shadow = true) => { const o = new THREE.Mesh(geo, mat); o.castShadow = shadow; o.receiveShadow = true; foot.add(o); return o; };
+    // all parts are merged per material at the end (a few draw calls per shoe)
+    const buckets = new Map();
+    const add = (geo, mat) => { if (!buckets.has(mat)) buckets.set(mat, []); const g = geo.index ? geo.toNonIndexed() : geo; g.deleteAttribute('uv'); buckets.get(mat).push(g); return g; };
+    const addUV = (geo, mat) => { if (!buckets.has(mat)) buckets.set(mat, []); buckets.get(mat).push(geo.index ? geo.toNonIndexed() : geo); };
     // upper (printed panels come from the shoe texture via u = around, v = along)
-    add(loft(0, y0 - 0.002, Hgt), m.shoe);
+    addUV(loft(0, y0 - 0.002, Hgt), m.shoeUpper);
     // sole: a low, wide loft (rounded sidewall) + flat bottom
     const soleGeo = loft(0.005, -fh, () => SOLE + 0.002);
     add(soleGeo, m.soleW);
@@ -453,7 +457,7 @@ export class Skater {
     for (let k = Nb; k >= 0; k--) { const z = Z0 + (Z1 - Z0) * k / Nb; bottom.lineTo(-(W(z) + 0.005), z); }
     add(new THREE.ShapeGeometry(bottom).rotateX(Math.PI / 2).translate(0, -fh + 0.0005, 0), m.sole);
     // foxing band: thin dark stripe round the top of the sole
-    add(loft(0.0055, y0 - 0.006, () => 0.004), m.sole, false);
+    add(loft(0.0055, y0 - 0.006, () => 0.004), m.sole);
     // padded collar round the ankle opening
     const col = new THREE.TorusGeometry(0.036, 0.0105, 8, 22).rotateX(Math.PI / 2).scale(0.9, 1, 1.25);
     add(col.translate(0, y0 + 0.084, -0.028), m.shoe);
@@ -461,15 +465,22 @@ export class Skater {
     const tg = new THREE.BoxGeometry(0.046, 0.008, 0.08, 1, 1, 4), tp = tg.attributes.position;
     for (let i = 0; i < tp.count; i++) tp.setY(i, tp.getY(i) + 0.02 * Math.sin((tp.getZ(i) / 0.08 + 0.5) * Math.PI) * 0.3);
     tg.computeVertexNormals();
-    const tongue = add(tg, m.shoe); tongue.position.set(0, y0 + 0.094, 0.002); tongue.rotation.x = -0.32;
+    add(tg.rotateX(-0.32).translate(0, y0 + 0.094, 0.002), m.shoe);
     // laces: criss-cross between eyelets across the instep
     for (let k = 0; k < 5; k++) {
       const z = 0.012 + k * 0.021, y = y0 + Hgt(z) + 0.004;
       for (const sx of [-1, 1]) {
         const g = new THREE.CylinderGeometry(0.0028, 0.0028, 0.05, 5).rotateZ(Math.PI / 2).rotateY(sx * 0.42);
-        add(g.translate(0, y, z), m.lace, false);
+        add(g.translate(0, y, z), m.lace);
       }
-      for (const sx of [-1, 1]) add(new THREE.TorusGeometry(0.003, 0.0012, 4, 8).rotateX(Math.PI / 2).translate(sx * 0.019, y - 0.001, z), m.bolt, false);   // eyelets
+      for (const sx of [-1, 1]) add(new THREE.TorusGeometry(0.003, 0.0012, 4, 8).rotateX(Math.PI / 2).translate(sx * 0.019, y - 0.001, z), m.bolt);   // eyelets
+    }
+    for (const [mat, list] of buckets) {
+      const hasUV = list.every((g) => g.attributes.uv);
+      if (!hasUV) for (const g of list) if (g.attributes.uv) g.deleteAttribute('uv');
+      const o = new THREE.Mesh(mergeGeometries(list), mat);
+      o.castShadow = mat !== m.lace && mat !== m.bolt; o.receiveShadow = true;
+      foot.add(o);
     }
   }
 
@@ -611,7 +622,7 @@ export class Skater {
     }
     m.top.color.setHex(o.topColor); m.topDark.color.copy(dark(o.topColor, o.top === 'flannel' ? 0.55 : 0.78));
     m.pants.color.setHex(o.pantsColor); m.pantsDark.color.copy(dark(o.pantsColor));
-    m.shoe.color.setHex(o.shoeColor);
+    m.shoe.color.setHex(o.shoeColor); if (m.shoeUpper) m.shoeUpper.color.setHex(o.shoeColor);
     m.sock.color.setHex(o.sockColor ?? 0xf2f2f2);
     m.hat.color.setHex(o.hatColor); m.hatDark.color.copy(dark(o.hatColor));
     m.deck.map = deckTexture(o.deckGraphic || 'stripes', o.deckColor); m.deck.color.setHex(0xffffff); m.deck.needsUpdate = true;
@@ -686,6 +697,8 @@ export class Skater {
   }
 
   setTransform(pos, yaw, normal, dt, alignRate = 14, bank = 0) {
+    // ease from the un-flipped orientation (body flips are layered on top each frame)
+    if (this._baseQ) { this.root.quaternion.copy(this._baseQ); this._baseQ = null; }
     this.root.position.copy(pos);
     this._q2.setFromAxisAngle(this._up, yaw);
     this._n.copy(normal || this._up).normalize();
@@ -762,7 +775,8 @@ export class Skater {
     const buzz = ch * 0.012 * Math.sin(now * 83) + ch * 0.008 * Math.sin(now * 131);
     this.board.rotation.z = (st.flipAngle || 0) + a.deckRoll + shake + buzz + wb * 0.09 * Math.sin(now * 11);
     this.board.rotation.x = ch * 0.006 * Math.sin(now * 97) + (st.pitchAngle || 0);
-    this.board.position.y = DECK_Y - 0.012 + (st.boardLift || 0);
+    // the board rises up into the tucked feet while it flips (no hanging below the rider)
+    this.board.position.y = DECK_Y - 0.012 + (st.boardLift || 0) + (a.clear || 0) * 0.05;
 
     // manual pivot (tail wheels for manual, nose wheels for nose manual)
     const piv = a.manual >= 0 ? -0.3 : 0.3;
@@ -773,7 +787,8 @@ export class Skater {
     const legL = this.thigh + this.shin;
     // athletic skate stance: knees always a little bent
     const stand = 0.84 * legL + this.footH, low = 0.47 * legL + this.footH;
-    const bend = Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95) + a.dip * 0.6);
+    // flips: knees tuck up hard while the board spins under the feet (a.clear from last frame)
+    const bend = Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95, (a.clear || 0) * 0.85) + a.dip * 0.6);
     let hipH = lerp(stand, low, bend);
     hipH -= a.push * 0.08;                    // bend the standing knee (a little) so the push foot reaches the floor
     this.hips.position.set(0, hipH, 0);
@@ -815,7 +830,7 @@ export class Skater {
       const L = this.legs[i], front = i === frontIdx;
       const nose = s > 0 ? -1 : 1;                                  // body-X direction of the nose
       const x = footPos(i) + (front ? nose * 0.07 * a.slideUp * (1 - a.clear) : 0);
-      const lift = a.clear * (front ? 0.2 : 0.15);
+      const lift = a.clear * (front ? 0.085 : 0.06);              // just clear of the spinning deck
       const zOff = -0.045 + (front ? a.clear * 0.09 : a.clear * 0.02);
       this._legIK(L, rx(x, zOff) - L.sgn * this.hipX, -hipH + this.footH + lift, rz(x, zOff));
       // real footplant: front foot angled toward the nose, back foot across the tail
