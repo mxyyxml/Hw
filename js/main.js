@@ -322,7 +322,7 @@ class Game {
     this._fullscreen();
     this.player.teleport(this.world.spots[0]);
     this.rig.snap();
-    this.ui.toast('🔔 Lunch Session! Score as much as you can in 2 minutes', '', 3000);
+    this.ui.toast('🔔 Board Session! Score as much as you can in 2 minutes', '', 3000);
   }
 
   endLunch() {

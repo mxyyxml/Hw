@@ -539,12 +539,14 @@ export class Skater {
     };
     // static parts are merged per material at the end (a handful of draw calls per board)
     const buckets = new Map();
-    const add = (geo, mat, x = 0, y = 0, z = 0, shadow = true, rotX = 0) => {
+    const add = (geo, mat, x = 0, y = 0, z = 0, shadow = true, rotX = 0, target = parent) => {
       if (rotX) geo.rotateX(rotX);
       geo.translate(x, y, z);
-      if (!buckets.has(mat)) buckets.set(mat, []);
-      buckets.get(mat).push(geo.index ? geo.toNonIndexed() : geo);
+      const key = target.uuid + mat.uuid;
+      if (!buckets.has(key)) buckets.set(key, { mat, target, list: [] });
+      buckets.get(key).list.push(geo.index ? geo.toNonIndexed() : geo);
     };
+    const trucks = [];
     const Y0 = 0.006;                                     // deck centre height (grip top ≈ board origin + 0.012)
     add(deckGeo(Y0 + T / 2 + 0.0008, true, 'grip'), m.grip);
     add(deckGeo(Y0 - T / 2, false, 'graphic'), m.deck);
@@ -570,9 +572,14 @@ export class Skater {
       for (let i = 0; i < hp.count; i++) { const x = hp.getX(i); hp.setY(i, hp.getY(i) * (1 - 0.35 * Math.abs(x) / 0.075)); }
       hg.computeVertexNormals();
       const ay = -0.094 + R;                              // wheels sit on the ground plane of the board
-      add(hg, m.truck, 0, ay + 0.008, z);
-      add(new THREE.CylinderGeometry(0.004, 0.004, 0.215, 8).rotateZ(Math.PI / 2), m.bolt, 0, ay, z, false);
-      add(new THREE.SphereGeometry(0.014, 10, 6).scale(1, 1.1, 1.3), m.truck, 0, ay + 0.02, z - toC * 0.02);   // pivot
+      // the hanger, axle and wheels turn as one piece around the kingpin (truck steering)
+      const tg = joint(parent, 0, ay + 0.02, z - toC * 0.012);
+      tg.userData.front = z > 0;
+      trucks.push(tg);
+      const lz = toC * 0.012, ly = -0.02;                 // offsets into the truck's frame
+      add(hg, m.truck, 0, ly + 0.008, lz, true, 0, tg);
+      add(new THREE.CylinderGeometry(0.004, 0.004, 0.215, 8).rotateZ(Math.PI / 2), m.bolt, 0, ly, lz, false, 0, tg);
+      add(new THREE.SphereGeometry(0.014, 10, 6).scale(1, 1.1, 1.3), m.truck, 0, ly + 0.02, lz - toC * 0.02, true, 0, tg);   // pivot
       // wheels: lathe profile with a rounded lip
       const prof = [];
       const wW = 0.033;
@@ -582,7 +589,7 @@ export class Skater {
       }
       const wheelGeo = new THREE.LatheGeometry(prof.reverse(), 24).rotateZ(Math.PI / 2);   // (order sets the outward normals)
       for (const x of [-0.088, 0.088]) {
-        const spin = joint(parent, x, ay, z);
+        const spin = joint(tg, x, ly, lz);
         const w = new THREE.Mesh(wheelGeo, m.wheel); w.castShadow = true; spin.add(w);
         const coreParts = [new THREE.CylinderGeometry(R * 0.62, R * 0.62, wW * 0.98, 16, 1, true).rotateZ(Math.PI / 2)], shieldParts = [];
         for (const sx of [-1, 1]) {
@@ -591,15 +598,16 @@ export class Skater {
         }
         spin.add(new THREE.Mesh(mergeGeometries(coreParts.map((g2) => g2.toNonIndexed())), m.wheelCore));
         spin.add(new THREE.Mesh(mergeGeometries(shieldParts.map((g2) => g2.toNonIndexed())), m.bearing));
-        add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.006, 6).rotateZ(Math.PI / 2), m.bolt, x + Math.sign(x) * 0.02, ay, z, false);   // axle nut
+        add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.006, 6).rotateZ(Math.PI / 2), m.bolt, x + Math.sign(x) * 0.02, ly, lz, false, 0, tg);   // axle nut
         wheels.push(spin);
       }
     }
-    for (const [mat, list] of buckets) {
+    for (const { mat, target, list } of buckets.values()) {
       const o = new THREE.Mesh(mergeGeometries(list), mat);
       o.castShadow = mat !== m.bolt; o.receiveShadow = true;
-      parent.add(o);
+      target.add(o);
     }
+    parent.userData.trucks = trucks;
     return wheels;
   }
 
@@ -767,6 +775,13 @@ export class Skater {
     this.board.rotation.y = st.shuvAngle || 0;
     // the deck tilts on its trucks when you lean into a turn, and shakes on a sketchy landing
     a.deckRoll = damp(a.deckRoll || 0, mode === 'ride' ? -st.lean * 0.13 : 0, 8, dt);
+    // TRUCKS: leaning the deck squeezes the bushings and the hangers turn (front into the
+    // turn, back the other way) — the wheels stay flat on the ground under the tilted deck
+    for (const T of this.board.userData.trucks || []) {
+      T.rotation.order = 'ZYX';
+      T.rotation.z = -a.deckRoll;
+      T.rotation.y = a.deckRoll * 1.6 * (T.userData.front ? 1 : -1);
+    }
     // the deck tips toward the side the rider's weight is falling (balance physics)
     a.bal = damp(a.bal || 0, st.balance || 0, 30, dt);
     const shake = -a.bal * this.stance * 0.35;

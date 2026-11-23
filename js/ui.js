@@ -95,7 +95,7 @@ export class UI {
   showHUD(on) { $('hud').classList.toggle('hidden', !on); }
   refreshTitle() {
     const g = this.game;
-    $('title-best').textContent = `Best Lunch Session: ${fmt(g.best.lunch)} · Best combo: ${fmt(g.best.combo)} · Challenges ${g.challenges.count}/10`;
+    $('title-best').textContent = `Best Board Session: ${fmt(g.best.lunch)} · Best combo: ${fmt(g.best.combo)} · Challenges ${g.challenges.count}/10`;
   }
   toggleHelp(force) {
     const el = $('help');
@@ -137,7 +137,7 @@ export class UI {
           <button data-act="closet">Closet (clothes &amp; board)</button>
           <button data-act="settings">Settings</button>
           <button data-act="controls">Controls</button>
-          ${g.mode === 'lunch' ? '<button data-act="lunch">Restart Lunch Session</button>' : '<button data-act="lunch">Start a Lunch Session</button>'}
+          ${g.mode === 'lunch' ? '<button data-act="lunch">Restart Board Session</button>' : '<button data-act="lunch">Start a Board Session</button>'}
           <button data-act="title">Quit to title</button></div>`;
         break;
       case 'controls':
@@ -209,7 +209,7 @@ export class UI {
         break;
       case 'results': {
         const r = top.data;
-        h = `<h2>Lunch's over! 🔔</h2>
+        h = `<h2>Session over! 🔔</h2>
           <div class="big-score">${fmt(r.score)}</div>
           <p class="center">${r.newBest ? '<b style="color:#7ae582">NEW BEST!</b>' : `Best: ${fmt(r.best)}`} · Biggest combo: ${fmt(r.bestCombo)}</p>
           <div class="menu-buttons"><button class="primary" data-act="lunch">Go again</button>

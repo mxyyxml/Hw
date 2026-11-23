@@ -2,7 +2,7 @@
 
 A chill, physics-based, free-roam 3D skateboarding game that runs in the browser.
 Flick-style trick input, momentum riding, grinds, manuals, combos, 10 challenges and a
-2-minute **Lunch Session** score-attack mode. Everything (city, skater, sounds) is generated
+2-minute **Board Session** score-attack mode. Everything (city, skater, sounds) is generated
 in code — no image or audio files.
 
 Built with plain HTML + JavaScript modules and [three.js](https://threejs.org) **0.160.0**
@@ -197,7 +197,7 @@ Titan Park – Rail Line, Titan Park – Drop Line, Titan Park – Giant Bowl & 
 ## 🏆 Modes
 
 - **Play** – free skate with challenges and best-combo tracking.
-- **Lunch Session** – 2 minutes, score as much as you can before the bell.
+- **Board Session** – 2 minutes, score as much as you can before the bell.
   Best scores and completed challenges are saved in your browser (localStorage).
 
 ## ⚙️ Settings

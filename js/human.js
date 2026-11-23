@@ -86,8 +86,8 @@ function printTexture(kind) {
   const x = c.getContext('2d'); x.clearRect(0, 0, 256, 256);
   x.textAlign = 'center'; x.textBaseline = 'middle';
   if (kind === 'logo') {
-    x.fillStyle = '#e63946'; x.font = 'bold 54px sans-serif'; x.fillText('LUNCH', 128, 92);
-    x.fillStyle = '#1d1d1d'; x.font = 'bold 54px sans-serif'; x.fillText('BREAK', 128, 148);
+    x.fillStyle = '#e63946'; x.font = 'bold 54px sans-serif'; x.fillText('JEW', 128, 92);
+    x.fillStyle = '#1d1d1d'; x.font = 'bold 54px sans-serif'; x.fillText('BOARD', 128, 148);
     x.fillRect(48, 182, 160, 8);
   } else if (kind === 'wheel') {
     x.strokeStyle = '#1d1d1d'; x.lineWidth = 16; x.beginPath(); x.arc(128, 128, 80, 0, Math.PI * 2); x.stroke();

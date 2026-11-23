@@ -15,7 +15,7 @@ function buildAtlas() {
   const x = c.getContext('2d'), r = rngOf(17);
   x.clearRect(0, 0, 1024, 1024);
   // ---- graffiti: chunky outlined letters with a fill gradient, drips and a 3D drop shadow
-  const words = ['SK8', 'RAD', 'NOLLIE', 'LUNCH'];
+  const words = ['SK8', 'RAD', 'NOLLIE', 'JEW BOARD'];
   const fills = [['#f2c14e', '#e63946'], ['#2a9d8f', '#9be7ff'], ['#9b5de5', '#f15bb5'], ['#f4a261', '#ffe066']];
   words.forEach((w, i) => {
     const ox = (i % 2) * 512, oy = Math.floor(i / 2) * 256;

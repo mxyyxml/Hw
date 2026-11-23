@@ -206,7 +206,7 @@ export const GAPS = [
 export const SCORING = {
   comboWindow: 1.6,         // seconds on the ground before the combo is banked
   repeatPenalty: 0.5,       // repeated trick in the same combo is worth this much
-  lunchSessionSeconds: 120, // length of "Lunch Session" mode
+  lunchSessionSeconds: 120, // length of the "Board Session" mode
 };
 
 // -----------------------------------------------------------------------------
@@ -346,7 +346,7 @@ export const OUTFIT_OPTIONS = {
   hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat'], ['kippah', 'Kippah']],
   glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],
   top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['hoodie', 'Hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
-  print:  [['none', 'Plain'], ['logo', 'Lunch Break logo'], ['wheel', 'Skate club wheel'], ['tlv', 'Tel Aviv star'], ['stripe', 'Stripes']],
+  print:  [['none', 'Plain'], ['logo', 'Jew Board logo'], ['wheel', 'Skate club wheel'], ['tlv', 'Tel Aviv star'], ['stripe', 'Stripes']],
   socks:  [['crew', 'Crew'], ['high', 'High'], ['ankle', 'Ankle'], ['none', 'No-show']],
   pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts'], ['boardshorts', 'Board shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
