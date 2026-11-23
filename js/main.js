@@ -13,6 +13,28 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+// REMASTER colour grade (runs after tone mapping, in display space): a touch of
+// contrast, warm highlights / cool shadows (split toning), restrained saturation
+// and a soft vignette — a filmic, sunny-afternoon look without crushing anything.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, contrast: { value: 1.08 }, saturation: { value: 1.06 }, vignette: { value: 0.22 },
+    warm: { value: new THREE.Vector3(1.04, 1.0, 0.94) }, cool: { value: new THREE.Vector3(0.95, 0.99, 1.06) } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float contrast, saturation, vignette; uniform vec3 warm, cool; varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c *= mix(cool, warm, smoothstep(0.15, 0.75, l));                  // split toning
+      c = mix(vec3(l), c, saturation);
+      c = (c - 0.5) * contrast + 0.5;                                     // contrast around mid-grey
+      vec2 d = vUv - 0.5; c *= 1.0 - vignette * smoothstep(0.35, 0.85, length(d * vec2(1.25, 1.0)));
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
 import { Input } from './input.js';
 import { Skater } from './skater.js';
 import { Player } from './player.js';
@@ -250,18 +272,25 @@ class Game {
     this.scene.fog.far = g.fogFar;
     this.camera.far = g.drawDistance;
     this.camera.updateProjectionMatrix();
-    // Ultra: post-processing — ambient occlusion (contact shadows in corners and
-    // under things) + SMAA anti-aliasing. OutputPass applies tone mapping.
-    if (g.post && !this.composer) {
-      const w = window.innerWidth, h = window.innerHeight;
+    // REMASTERED pipeline (High & Ultra): scene → ambient occlusion → bloom on real
+    // highlights only → tone mapping (OutputPass) → colour grade → SMAA anti-aliasing.
+    // High renders AO at half resolution to stay light on school PCs.
+    if (g.post && (!this.composer || this.composerLevel !== level)) {
+      if (this.composer) this.composer.dispose();
+      const w = window.innerWidth, h = window.innerHeight, pr = this.renderer.getPixelRatio();
       this.composer = new EffectComposer(this.renderer);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      const ao = new GTAOPass(this.scene, this.camera, w, h);
+      const aoScale = level === 'ultra' ? 1 : 0.5;
+      const ao = new GTAOPass(this.scene, this.camera, Math.round(w * aoScale), Math.round(h * aoScale));
       ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.2, scale: 1.1 });
-      ao.blendIntensity = 0.85;
+      ao.blendIntensity = 0.72;
       this.composer.addPass(ao);
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(w / 2, h / 2), 0.22, 0.5, 0.92);   // strength, radius, threshold
+      this.composer.addPass(this.bloom);
       this.composer.addPass(new OutputPass());
-      this.composer.addPass(new SMAAPass(w * this.renderer.getPixelRatio(), h * this.renderer.getPixelRatio()));
+      this.composer.addPass(new ShaderPass(GradeShader));
+      this.composer.addPass(new SMAAPass(w * pr, h * pr));
+      this.composerLevel = level;
     }
     this.usePost = !!g.post;
     // materials must recompile when shadows are toggled

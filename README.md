@@ -98,6 +98,13 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
   every push, crouch and landing).
 - Rolling back down a ramp (fakie) no longer whips the camera round — it glides round smoothly.
 
+### 🎨 Remastered graphics (High & Ultra)
+A full post-processing pipeline on every PC preset: ground-truth ambient occlusion (contact shadows in
+corners, under ledges and the board; half resolution on High), bloom only on real highlights, ACES tone
+mapping, a filmic colour grade (split toning, light contrast, soft vignette) and SMAA anti-aliasing.
+City blocks have real facade relief: a stone band at every floor, deep cornices and corner pilasters.
+Use **Low** on very weak machines (no post-processing).
+
 ### 👟 Character & board detail
 - **Skate shoes** are lofted through foot-shaped cross-sections (narrow heel, wide ball, rounded toe box,
   padded collar) with a vulcanised sole, foxing band, tongue, criss-cross laces through eyelets, suede

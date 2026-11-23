@@ -242,7 +242,7 @@ export const CAMERA = {
 // -----------------------------------------------------------------------------
 export const GRAPHICS = {
   low:  { pixelRatio: 1,   shadows: false, fogFar: 220, drawDistance: 800 },
-  high: { pixelRatio: 1.5, shadows: true,  fogFar: 320, drawDistance: 800, shadowMapSize: 2048 },
+  high: { pixelRatio: 1.25, shadows: true,  fogFar: 320, drawDistance: 800, shadowMapSize: 2048, post: true },
   // Ultra (gaming / school PCs): ambient occlusion + anti-aliasing post-processing, 4K shadows
   ultra: { pixelRatio: 2, shadows: true, fogFar: 360, drawDistance: 800, shadowMapSize: 4096, post: true },
 };

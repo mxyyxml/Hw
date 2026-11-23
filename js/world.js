@@ -1479,6 +1479,12 @@ export class World {
       this.geo.prism({ x, z, w: 18, d: 16, yaw: 0 }, [h, h, h, h], 0, col, col);
       this.geo.castShadow(GeoBuilder.prismPoints({ x, z, w: 18, d: 16 }, [h, h, h, h], 0), 0);
       this.geo.prism({ x, z, w: 18.3, d: 16.3 }, [h + 0.4, h + 0.4, h + 0.4, h + 0.4], h, 0x6c6f72, 0x6c6f72); // roof edge
+      // REMASTER: real facade relief — a stone band at every floor, a deep cornice
+      // and corner pilasters, so the blocks catch light and cast their own shadows
+      const trim = [0xd8d0c0, 0xc9c1b0, 0xb9b3a7][k % 3];
+      for (let y = 4; y < h - 0.5; y += 4) this.geo.prism({ x, z, w: 18.35, d: 16.35 }, [y + 0.22, y + 0.22, y + 0.22, y + 0.22], y, trim, trim);
+      this.geo.prism({ x, z, w: 18.9, d: 16.9 }, [h - 0.05, h - 0.05, h - 0.05, h - 0.05], h - 0.55, trim, trim);   // cornice
+      for (const [ox, oz] of [[-9, -8], [9, -8], [-9, 8], [9, 8]]) this.geo.prism({ x: x + ox, z: z + oz, w: 0.7, d: 0.7 }, [h - 0.5, h - 0.5, h - 0.5, h - 0.5], 3.4, trim, trim);
       // rooftop details: AC units, a water tank or a stair hut
       this.geo.prism({ x: x - 4, z: z + 3, w: 2.2, d: 1.6 }, [h + 1.4, h + 1.4, h + 1.4, h + 1.4], h, 0xb7b9ba, 0x8f9193);
       this.geo.prism({ x: x + 3, z: z - 4, w: 1.4, d: 1.4 }, [h + 1.1, h + 1.1, h + 1.1, h + 1.1], h, 0xb7b9ba, 0x8f9193);
