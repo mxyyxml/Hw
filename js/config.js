@@ -187,18 +187,12 @@ export const BIG_AIR = { name: 'Big Air', minAirTime: 1.1, points: 300 };
 // -----------------------------------------------------------------------------
 //  GAPS — bonus for taking off from one tagged spot and landing in a zone
 // -----------------------------------------------------------------------------
-export const GAPS = [
+export const GAPS = [   // (the designed jumps add Mega Gap & Container Gap themselves)
   { name: '3-Stair',       from: 'stair3_top',  to: 'stair3_land',  points: 200 },
   { name: '5-Stair',       from: 'stair5_top',  to: 'stair5_land',  points: 400 },
   { name: '10-Stair',      from: 'stair10_top', to: 'stair10_land', points: 1000 },
   { name: 'Plaza Gap',     from: 'gapA',        to: 'gapB',         points: 600 },
-  { name: 'Mega Gap',      from: 'mega_kicker', to: 'mega_land',    points: 1500 },
-  { name: 'Euro Gap',      from: 'euro_bank',   to: 'euro_land',    points: 700 },
-  { name: 'Mega Park Gap', from: 'mega2_kicker', to: 'mega2_land',  points: 2000 },
-  { name: '3-Step-3',      from: 'kink_top',    to: 'kink_land',    points: 600 },
-  { name: 'Funbox Clear',  from: 'funbox_s',    to: 'funbox_n_land', points: 250 },
-  { name: 'Funbox Clear',  from: 'funbox_n',    to: 'funbox_s_land', points: 250 },
-];
+]
 
 // -----------------------------------------------------------------------------
 //  SCORING / COMBOS
@@ -218,7 +212,7 @@ export const CHALLENGES = [
   { id: 'c2',  text: 'Kickflip the 5-stair',                 type: 'gapTrick', gap: '5-Stair',  trick: 'Kickflip' },
   { id: 'c3',  text: 'Kickflip the 10-stair',                type: 'gapTrick', gap: '10-Stair', trick: 'Kickflip' },
   { id: 'c4',  text: 'Grind the long rail for 3 seconds',    type: 'grind', rail: 'longrail', seconds: 3 },
-  { id: 'c5',  text: 'Land a 360 Flip off the mega-ramp',    type: 'takeoffTrick', takeoff: 'mega_kicker', trick: '360 Flip' },
+  { id: 'c5',  text: 'Land a 360 Flip off the mega-ramp',    type: 'takeoffTrick', takeoff: 'mega_kick', trick: '360 Flip' },
   { id: 'c6',  text: 'Boardslide a handrail',                type: 'grind', rail: 'handrail', grind: 'Boardslide', seconds: 0.4 },
   { id: 'c7',  text: 'Hold a manual for 4 seconds',          type: 'manual', seconds: 4 },
   { id: 'c8',  text: 'Clear the plaza gap',                  type: 'gap', gap: 'Plaza Gap' },
@@ -314,8 +308,8 @@ export const PHYSICS2 = {
   hardLandingLoss: 0.035,   // fraction of speed lost per m/s of impact above that
   maxBank: 0.32,            // rad — max lean into a carve
   // surface grip: multiplies rolling resistance (tags come from world.js)
-  surfaceFriction: { street: 1.45, street_top: 1.2, halfpipe: 0.7, miniramp: 0.7, quarter: 0.7,
-    mega_rollin: 0.65, mega_kicker: 0.65, mega_land: 0.7, mega_quarter: 0.7, bowl: 0.75 },
+  surfaceFriction: { street: 1.45, street_top: 1.2, halfpipe: 0.7, miniramp: 0.7, park_quarter: 0.7, spine: 0.7, roof_quarter: 0.7,
+    mega_rollin: 0.65, mega_kick: 0.65, mega_land: 0.7, mega_quarter: 0.7, bowl: 0.75 },
   // grind friction per grind type (fraction of speed lost per second)
   grindFriction: { '50-50': 0.05, 'Smith Grind': 0.07, 'Nosegrind': 0.07, '5-0': 0.06, 'Boardslide': 0.13, 'Lipslide': 0.13, 'Crooked Grind': 0.08, 'Feeble Grind': 0.08, 'Bluntslide': 0.16, 'Noseblunt': 0.16 },
   // landings: under landClean degrees = clean; up to landMax = sketchy but you

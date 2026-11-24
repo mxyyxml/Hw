@@ -82,12 +82,13 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
   **360 Shuvit** ← ← (FS: → →), **Impossible** ↑ ↑, **Nollie Flip / Heelflip** ↑ ← / ↑ →.
 - **Q = Revert** (the board spins 180° on its wheels; hold Q as you land to revert straight out of it).
 - **F in the air = Backflip**, hold **W** for a **Frontflip**. The rider tucks tighter to rotate faster,
-  but needs real air (big kickers, mega ramp, Titan Park); land short of a full rotation and you slam.
+  but needs real air (mega ramp, container gap, garage roof, vert); land short of a full rotation and you slam.
 - **Glitches (Skate-style):** hold **G** for the speed glitch (rapid tap-pushes past the normal push
   speed, up to the board's max); **N** = pop glitch (the board clips and fires you 4–7 m into the sky
   tumbling — sort the board out before you land).
 - **More grinds:** **Shift + K** + ↑ Crooked, ↓ Feeble, ← Bluntslide, → Noseblunt.
-- **Backflip / frontflip** now rotate nose-over-tail (a real backflip), not sideways.
+- **Backflip / frontflip:** press **F** in the air for a backflip, hold **W** + **F** for a frontflip — they rotate
+  nose-over-tail. Needs real air: the mega ramp, the container gap, the garage roof or vert.
 - **Off the board** you carry it by the truck in your hand; E drops it and you hop on.
 - **Wallrides:** hold **K** in the air while travelling along a tall wall (buildings, the Tel Aviv
   apartment lobbies, big walls): wall friction holds you up at first, then gravity takes over. **Space**
@@ -125,14 +126,6 @@ sound different on smooth ramps, concrete (with the clack of paving joints), rou
 metal grinds and wood/concrete slides sound different; footsteps off the board; city hum and waves
 at the beach.
 
-### 🏖️ Tel Aviv Beach (teleport: "Tel Aviv Beach Promenade")
-A Mediterranean beachfront on the west side of the city: open sea, a sand beach (sand slows you down)
-with umbrellas, loungers and a lifeguard tower, a raised tiled promenade with a grindable sea-wall edge,
-three stair sets with handrails down to the sand, banks up from the street, palm trees, granite benches
-and white Bauhaus-style apartment blocks on pilotis across the beach road. Israeli flags line the promenade
-and rooftops, Stars of David are set into the promenade, on the buildings and as a big beach sculpture,
-with a golden menorah monument, a synagogue, blue-and-white bunting and Hebrew signs.
-
 ### 🛹 How the physics feels
 - **Drop in** by rolling off any deck or coping into a ramp — you stay on the ramp and pick up speed.
 - **Land a bit crooked?** Up to ~60° off you ride it out ("Sketchy!") and roll the way your **board** points,
@@ -169,37 +162,37 @@ in the air. Land with the board straight (forward or fakie) and your flip finish
 bail. Tricks chain into a combo while you keep landing within ~1.5 s — the combo total is
 multiplied by the number of tricks in it. A bail loses the combo.
 
-## 🗺️ The park
+## 🗺️ Jew Board City (the map, rebuilt from scratch)
 
-- **Centre plaza** – ledges, manual pads, a 30 m long rail, funbox, benches, kickers, the Plaza Gap
-- **Stair plaza (north)** – 3-, 5- and 10-stair sets with handrails and hubbas
-- **East** – halfpipe and mini-ramp (hold W while dropping in to pump)
-- **West** – the bowl
-- **Far west** – the mega-ramp (roll-in tower → kicker → gap → landing → quarter)
-- **South** – a long downhill street with kickers and a rail
+The old map was wiped and replaced (the original game is preserved on the `original-v1` branch).
+Everything is laid out in `js/map.js`; world bounds 300 × 320 m, north is up.
 
-- **South-east – Southside Skatepark** – a fenced concrete park: quarter-pipe lines with coping, a spine,
-  a pyramid with hip corners and a top rail, a 3-step-3 with a kinked rail, a funbox with an A-frame rail,
-  manual pads, a flat bar, a euro gap, rollers, a big quarter-pipe and a flow bowl
+- **Kikar Plaza (centre, spawn)** – granite fountain-ring ledges around a tree planter, a stair terrace with a
+  3-stair and a 5-stair (handrails, hubbas), a terrace ledge, the 32 m long rail, manual pads, benches, a kicker,
+  the Plaza Gap and a Star of David inlaid in the paving
+- **Park HaYarkon (east skatepark)** – halfpipe, mini ramp, spine, pyramid with hips and a top rail, a 3 m-deep
+  bowl, quarter pipes with decks, flat bar, hubba ledge and floodlights, fenced
+- **Mega ramp (north-east)** – 14 m roll-in tower → kicker → designed gap → landing → vert quarter
+- **Beit Sefer schoolyard (north-west)** – raised yard with a 10-stair and two handrails, picnic tables you can
+  grind, a basketball court and the school building
+- **Hill street (north)** – a long downhill road with curbs, two kickers and a down-rail
+- **Parking garage (south-east)** – two decks joined by ramps, roof ledges, a roof rail, a roof quarter pipe
+  and a drop back to the lower deck
+- **Industrial yard** – a 7 m roll-in into the **Container Gap**, a loading dock with a bank, drums and crates
+- **Secret backyard pool** – an empty pool behind a fence (find the gap on the east side)
+- **Tayelet beachfront (south)** – the sea, a sand beach (sand slows you down) with umbrellas, loungers,
+  palms, a lifeguard tower and a big Star of David sculpture; a raised promenade with a grindable sea wall,
+  three stair sets with handrails down to the sand, benches, palm planters, Israeli flags, a golden menorah,
+  white Bauhaus blocks on pilotis and a synagogue on the avenue
+- **Streets** – an east–west avenue with parked cars, a north–south avenue, parks with trees, city blocks with
+  real facade relief all round, rolling hills on the horizon
 
-- **Far east – Mega Park** – a 12 m drop-in tower into a giant roll-in, a big kicker gap to a long landing,
-  a 6 m vert quarter, a 6 m bank with a 30 m down-rail and hubba, a 4 m deep bowl, a giant spine, a big pyramid,
-  quarter-pipe walls, bleachers and floodlights
-- **Far south – Titan Park** – the biggest area, built around long lines that start from drop-in towers:
-  - *Mega Air line*: 22 m tower → 40 m roll-in → two huge gaps (≈23 m and ≈16 m) → 7 m vert quarter
-  - *Rail line*: 12 m tower → roll-in onto a 3 m-high deck of ledges and rails → 17-stair with long handrails → street section
-  - *Drop line*: roll off a 10 m deck onto a 30 m landing → designed gap → quarter
-  - a funbox section, a 5 m-deep giant bowl, a big spine, a mega hip and an 8 m quarter-pipe wall
-  Every big jump is **designed by physics** (`World._designJump` in `js/world.js`): it works out the speed you'll
-  have at the kicker, the flight path, matches the landing angle to it and sizes the gap so an 8 %-slower rider still
-  clears it and a 6 %-faster rider still lands on the slope (no overshoot). Each line was then ridden in-game to check.
- an avenue with lane lines, crosswalk and rideable curbs, a road out to the Mega Park, lawns
-  with trees and bushes, parked cars, hydrants, a bus shelter, shopfronts with awnings and rooftop details;
-  rolling hills on the horizon
+Every big jump is **designed by physics** (`World._designJump`): it works out the speed you'll have at the
+kicker from the roll-in height, the flight path, matches the landing slope and sizes the gap; both jump lines
+were then ridden in-game (Mega Gap and Container Gap land on their landings).
 
-Teleport spots (Pause → Teleport): Plaza, Stair Plaza, Mega-Ramp Roll-in, Downhill Street, Southside Skatepark,
-Mega Park – The Drop, Mega Park – Big Bank & Rail, Mega Park – Mega Bowl, Titan Park – Mega Air Line,
-Titan Park – Rail Line, Titan Park – Drop Line, Titan Park – Giant Bowl & Wall.
+Teleport spots (Pause → Teleport): Kikar Plaza, Stair Terrace, Mega Ramp, Hill Street, Park HaYarkon,
+Beit Sefer 10-Stair, Parking Garage Roof, Container Gap, Tayelet Beach Promenade, Secret Backyard Pool.
 
 ## 🏆 Modes
 
