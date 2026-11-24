@@ -56,7 +56,7 @@ const CONTROLS = [
   ['<kbd>K</kbd> (air, along a wall)', 'Wallride — the board sticks to a tall wall; Space to wallie off'],
   ['<kbd>F</kbd> (air)', 'Backflip — hold W for a frontflip. Needs big air (mega ramp / big kickers)'],
   ['<kbd>G</kbd> (hold)', 'Speed glitch — rapid tap-pushes that go past the normal push speed'],
-  ['<kbd>N</kbd>', 'Pop glitch — the board clips and launches you into the sky (sort the board out before you land!)'],
+  ['<kbd>N</kbd>', 'Pop glitch — an extra-big pop (~1.4 m): hit Z / X / V / B while you\'re up there to flip it'],
   ['<kbd>Y</kbd>', 'Cinematic replay of the last 12 seconds (Y again to go back)'],
   ['<kbd>H</kbd>', 'Show / hide this help'],
   ['<kbd>P</kbd> / <kbd>Esc</kbd>', 'Pause menu'],

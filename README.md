@@ -84,8 +84,8 @@ hems, hairlines), loosened where fabric hangs and skinned to the same bones, so 
 - **F in the air = Backflip**, hold **W** for a **Frontflip**. The rider tucks tighter to rotate faster,
   but needs real air (mega ramp, container gap, garage roof, vert); land short of a full rotation and you slam.
 - **Glitches (Skate-style):** hold **G** for the speed glitch (rapid tap-pushes past the normal push
-  speed, up to the board's max); **N** = pop glitch (the board clips and fires you 4–7 m into the sky
-  tumbling — sort the board out before you land).
+  speed, up to the board's max); **N** = pop glitch (an extra-big pop, about 1.4 m — enough air to time a
+  flip with Z / X / V / B).
 - **More grinds:** **Shift + K** + ↑ Crooked, ↓ Feeble, ← Bluntslide, → Noseblunt.
 - **Backflip / frontflip:** press **F** in the air for a backflip, hold **W** + **F** for a frontflip — they rotate
   nose-over-tail. Needs real air: the mega ramp, the container gap, the garage roof or vert.

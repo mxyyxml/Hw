@@ -66,6 +66,7 @@ export const PHYSICS = {
   popChargeTime: 0.55,      // seconds of holding Space for full pop
   flickWindow: 1.6,         // flick keys pressed this long before releasing Space still count
   flickPreWindow: 0.35,     // ...and keys pressed up to this long BEFORE pressing Space count too
+  minFlipTime: 0.26,        // fastest a flip can be flicked (s) — flips speed up to fit short air
   lateFlipWindow: 0.38,     // one-key tricks pressed this soon after leaving the ground = late flip
 
   // Walking (E)
@@ -294,7 +295,7 @@ export const PHYSICS2 = {
   truckBase: 0.26,          // half the distance between the trucks (m) — board pitch comes from both wheel sets
   // wallrides (hold K in the air along a tall wall)
   wallride: { minSpeed: 3.5, maxAngle: 35, gravityStart: 0.25, gripTime: 0.9, friction: 1.2, maxTime: 1.6, wallieUp: 4.2, wallieOut: 1.8, points: 600 },
-  glitch: { speedAccel: 7, tapRate: 11, popUp: [10, 13.5], popSpin: 9, popFlip: 14 },   // big pops are survivable only on a lucky landing
+  glitch: { speedAccel: 7, tapRate: 11, popUp: 1.4 },   // pop glitch: a full pop + 1.4 m/s ≈ 1.4 m of air (~0.9 s) — time a flip in it
   wobbleSpeed: 13,          // m/s: above this, standing tall gives speed wobbles (crouch = Space to stop them)
   steerResponse: 9,         // how fast you shift your weight into / out of a carve (1/s)
   minCarveRadius: 1.0,      // tightest turn the trucks allow (m)

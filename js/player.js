@@ -272,15 +272,14 @@ export class Player {
       this.glitchTap = ((this.glitchTap || 0) + G.tapRate * dt) % 1;
       if (!this._glitching) { this._glitching = true; this.emit('glitch', { name: 'Speed Glitch' }); }
     } else this._glitching = false;
-    // --- POP GLITCH (N): the board clips into the ground and spits you into the sky
+    // --- POP GLITCH (N): like Skate's, the board catches the ground wrong and gives you
+    // an extra-big pop — about 1.5 m, just enough air to time a flip (Z / X / V / B)
     if (inp.pressed.popGlitch) {
-      const G = P2.glitch;
-      this.vel.y = G.popUp[0] + Math.random() * (G.popUp[1] - G.popUp[0]);
+      this.vel.y += P.popMax + P2.glitch.popUp;
       this.pos.y += 0.05;
       this.launch(true);
-      this.air.spinVel = (Math.random() - 0.5) * 2 * G.popSpin;
-      this.air.glitchTumble = (Math.random() < 0.5 ? -1 : 1) * G.popFlip;
-      this.startAirTrick({ name: 'Pop Glitch', flips: 0, shuv: 0, time: 0, points: 2000 });
+      this.air.glitch = true;
+      this.startAirTrick({ name: 'Pop Glitch', flips: 0, shuv: 0, time: 0, points: 300 });
       this.emit('glitch', { name: 'Pop Glitch' });
       return;
     }
@@ -459,12 +458,23 @@ export class Player {
     this.startAirTrick(def, popInfo.holdKey);
   }
 
+  // seconds until the ballistic flight path meets the ground under it
+  _airLeft() {
+    for (let t = 0.02; t < 2; t += 0.02) {
+      const x = this.pos.x + this.vel.x * t, z = this.pos.z + this.vel.z * t, y = this.pos.y + this.vel.y * t - 0.5 * P.gravity * t * t;
+      if (y <= this.col.ground(x, z, y + 0.3).h) return t;
+    }
+    return 2;
+  }
+
   startAirTrick(def, holdKey) {
     const A = this.air;
     const entry = { name: def.name, base: def.name, points: def.points };
     A.tricks.push(entry);
     // holdKey: action that, while held, keeps the board flipping (Double / Triple)
-    if (def.time > 0) A.trick = { def, t: 0, loops: 0, entry, holdKey: holdKey || (def.flips ? 'down' : null) };
+    // a flip rotates as fast as it has to: with less air the flick is harder (never
+    // slower than the trick's natural speed, never faster than a human can flick)
+    if (def.time > 0) A.trick = { def, t: 0, loops: 0, entry, holdKey: holdKey || (def.flips ? 'down' : null), dur: clamp(this._airLeft() * 0.88, P.minFlipTime, def.time) };
     this.emit('trick', { name: def.name });
   }
 
@@ -475,7 +485,7 @@ export class Player {
     const g = this.col.ground(this.pos.x, this.pos.z, this.pos.y + 0.05);
     const h = this.pos.y - g.h, vy = this.vel.y;
     const tLand = (vy + Math.sqrt(vy * vy + 2 * P.gravity * Math.max(0, h))) / P.gravity;
-    if (tLand < T.def.time * 1.1) return false;               // not enough air left for another full flip
+    if (tLand < T.dur * 1.1) return false;               // not enough air left for another full flip
     T.loops++; T.t = 0;
     const base = T.def.name.replace(/^Double /, '');
     T.entry.name = ['', 'Double ', 'Triple '][T.loops] + base;
@@ -647,9 +657,9 @@ export class Player {
     const hs = Math.hypot(this.vel.x, this.vel.z);
     // nearly-finished flip: help it finish before the wheels touch down
     if (A.trick && t < 0.3) {
-      const p = A.trick.t / A.trick.def.time;
+      const p = A.trick.t / A.trick.dur;
       if (p > 0.45) {
-        const need = (1 - p) * A.trick.def.time;
+        const need = (1 - p) * A.trick.dur;
         if (need > t * 0.9) A.trick.t += (need - t * 0.9) * Math.min(1, dt / Math.max(t, dt)) + dt * 0.5;
       }
     }
@@ -689,7 +699,7 @@ export class Player {
     // --- board rotation of the current flip / shuvit
     if (A.trick) {
       A.trick.t += dt;
-      const p = Math.min(1, A.trick.t / A.trick.def.time);
+      const p = Math.min(1, A.trick.t / A.trick.dur);
       const e = 1 - (1 - p) * (1 - p) * 0.35 - 0.65 * (1 - p); // slightly eased
       A.flipAngle = A.trick.def.flips * TAU * e;
       A.shuvAngle = A.trick.def.shuv * Math.PI * e;
@@ -699,9 +709,11 @@ export class Player {
     // --- late flip: a one-key trick right after take-off replaces the plain ollie
     if (A.lateTrick) {
       const def = A.lateTrick; A.lateTrick = null;
-      const plain = A.tricks.length === 0 || (A.tricks.length === 1 && (A.tricks[0].name === 'Ollie' || A.tricks[0].name === 'Nollie'));
-      if (!A.trick && !A.grab && A.time <= P.lateFlipWindow && plain) {
-        A.tricks = [];
+      const plain = A.tricks.length === 0 || (A.tricks.length === 1 && ['Ollie', 'Nollie', 'Pop Glitch'].includes(A.tricks[0].name));
+      // late flips work as long as there's still air to flip in (a pop glitch gives a longer window)
+      const window = A.glitch ? P.lateFlipWindow * 2 : P.lateFlipWindow;
+      if (!A.trick && !A.grab && A.time <= window && plain && this._airLeft() > P.minFlipTime) {
+        if (!A.glitch) A.tricks = [];
         this.startAirTrick(def, A.lateKey);
       }
     }
@@ -711,21 +723,11 @@ export class Player {
       // tucking tighter spins you faster (smaller moment of inertia): the flip takes
       // as long as the air you have left, but a body can't turn it faster than ~0.72 s
       // air left: follow the ballistic path until it meets the ground under it
-      let left = 2;
-      for (let t = 0.02; t < 2; t += 0.02) {
-        const x = this.pos.x + this.vel.x * t, z = this.pos.z + this.vel.z * t, y = this.pos.y + this.vel.y * t - 0.5 * P.gravity * t * t;
-        if (y <= this.col.ground(x, z, y + 0.3).h) { left = t; break; }
-      }
+      const left = this._airLeft();
       A.bodyFlip = { def, t: 0, dur: clamp(left * 0.93, 0.72, 1.15) };
       const entry = { name: def.name, base: def.name, points: def.points };
       A.tricks.push(entry);
       this.emit('trick', { name: def.name });
-    }
-    if (A.glitchTumble) {
-      A.glitchFlip = (A.glitchFlip || 0) + A.glitchTumble * dt;
-      A.glitchTumble *= Math.exp(-1.8 * dt);
-      if (Math.abs(A.glitchTumble) < 0.4) { A.glitchTumble = 0; A.glitchFlip = Math.round(A.glitchFlip / TAU) * TAU; }
-      A.flipAngle = A.glitchFlip;
     }
     if (A.bodyFlip) {
       const BF = A.bodyFlip;
@@ -826,12 +828,11 @@ export class Player {
     const A = this.air;
     if (impact > P.maxLandingImpact) return 'Too much impact!';
     if (A.trick) {
-      const p = A.trick.t / A.trick.def.time;
+      const p = A.trick.t / A.trick.dur;
       if (p < P.flipCompleteThreshold) return 'Didn\'t finish the ' + A.trick.def.name + '!';
       A.trick = null; A.flipAngle = 0; A.shuvAngle = 0; A.pitchAngle = 0; // close enough — snap it
     }
     if (A.grab && P.bailIfGrabbingOnLand) return 'Still grabbing!';
-    if (A.glitchTumble) return 'The glitch got you!';
     if (A.bodyFlip && A.bodyFlip.t / A.bodyFlip.dur < 0.9) return 'Under-rotated the ' + A.bodyFlip.def.name + '!';
     const vth = Math.hypot(vtx, vtz);
     if (vth > 0.8) {
@@ -882,7 +883,7 @@ export class Player {
     if (!hit) return false;
     // board still flipping → can't lock in yet (it will snap once the flip is done)
     if (A.trick) {
-      if (A.trick.t / A.trick.def.time < P.flipCompleteThreshold) return false;
+      if (A.trick.t / A.trick.dur < P.flipCompleteThreshold) return false;
       A.trick = null; A.flipAngle = 0; A.shuvAngle = 0;
     }
     const r = hit.rail;
