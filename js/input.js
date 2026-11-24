@@ -7,9 +7,10 @@ import { KEYS } from './config.js';
 const DIRS = ['up', 'down', 'left', 'right'];
 
 export class Input {
-  constructor() {
-    this.codeToAction = {};
-    for (const [action, codes] of Object.entries(KEYS)) for (const c of codes) this.codeToAction[c] = action;
+  constructor(customKeys = {}) {
+    // custom bindings (Settings → Controls) replace the first key of an action
+    for (const [action, code] of Object.entries(customKeys)) if (KEYS[action]) KEYS[action] = [code, ...KEYS[action].slice(1).filter((c) => c !== code)];
+    this._mapKeys();
     this.held = {};        // action -> bool
     this.pressed = {};     // action -> true for the frame it went down
     this.released = {};    // action -> true for the frame it went up
@@ -42,6 +43,17 @@ export class Input {
       this.released[action] = true;
       this.releasedAt[action] = performance.now() / 1000;
     }
+  }
+
+  _mapKeys() {
+    this.codeToAction = {};
+    for (const [action, codes] of Object.entries(KEYS)) for (const c of codes) this.codeToAction[c] = action;
+  }
+  // bind `code` as the main key for `action` (any other action using it loses it)
+  rebind(action, code) {
+    for (const [a, codes] of Object.entries(KEYS)) KEYS[a] = codes.filter((c) => c !== code);
+    KEYS[action] = [code, ...KEYS[action].slice(1)];
+    this._mapKeys();
   }
 
   // call once at the end of each rendered frame

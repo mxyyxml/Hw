@@ -1,9 +1,13 @@
 // =============================================================================
-//  ui.js — HUD, trick pop-ups, help overlay and all menus (DOM based).
+//  ui.js — loading screen, main menu, panel menus (pause, settings with key
+//  rebinding, Locker, Career, Challenges), HUD, pop-ups and the help overlay.
 //  The game object passed in provides: startFree(), startLunch(), resume(),
 //  quitToTitle(), teleport(i), applySetting(key, value), settings, challenges...
 // =============================================================================
-import { CHALLENGES, OUTFIT_OPTIONS, OUTFIT_COLORS } from './config.js';
+import { CHALLENGES, OUTFIT_OPTIONS, OUTFIT_COLORS, KEYS } from './config.js';
+import { LOAD } from './textures.js';
+import { Storage } from './storage.js';
+import { WEATHER_OPTIONS } from './weather.js';
 import { TOUCH_HELP } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
@@ -12,7 +16,7 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 // The controls table (shown on the H overlay and in the Controls menu)
 const CONTROLS = [
   ['Riding'],
-  ['<kbd>W</kbd> / <kbd>↑</kbd>', 'Push — tap for one stroke, hold to keep pushing. On a ramp: pump. (Regular / Goofy / Mongo in the Closet)'],
+  ['<kbd>W</kbd> / <kbd>↑</kbd>', 'Push — tap for one stroke, hold to keep pushing. On a ramp: pump. (Regular / Goofy / Mongo in the Locker)'],
   ['<kbd>S</kbd> / <kbd>↓</kbd>', 'Brake — at speed it\'s a powerslide'],
   ['<kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd>', 'Steer on the ground, spin in the air'],
   ['<kbd>Space</kbd> hold → release', 'Crouch, then ollie (longer hold = higher)'],
@@ -71,31 +75,114 @@ export function controlsHTML(rows = CONTROLS) {
   return h + '</div>';
 }
 
+
+// ---------------------------------------------------------------- menu data
+const TIPS = [
+  'Hold Space longer for a higher ollie.',
+  'Tap N for a pop glitch, then flip it with Z / X / V / B.',
+  'Hold G to speed-glitch past the push cap.',
+  'Line up with a rail and it snaps into a 50-50.',
+  'F in big air: backflip. Hold W for a frontflip.',
+  'Q on the ground reverts — hold it when landing to revert out.',
+  'Every banked combo is XP for your Career level.',
+  'The Mega Gap is at the end of Park HaYarkon. Bring speed.',
+  'Rebind any key in Settings → Controls.',
+];
+const LOCKER = [
+  ['skater', 'Skater', ['body', 'skin', 'hairStyle', 'hairColor', 'facialHair', 'glasses', 'stance', 'pushStyle']],
+  ['tops', 'Tops', ['top', 'topColor', 'print']],
+  ['bottoms', 'Bottoms', ['pants', 'pantsColor', 'socks', 'sockColor']],
+  ['shoes', 'Shoes', ['shoeStyle', 'shoeColor', 'soleColor']],
+  ['acc', 'Accessories', ['hat', 'hatColor', 'backpack', 'packColor', 'chain']],
+  ['board', 'Board', ['deckGraphic', 'deckColor', 'gripColor', 'truckColor', 'wheelSize', 'wheelColor']],
+];
+const LABELS = { hat: 'Headwear', top: 'Top', pants: 'Bottoms', backpack: 'Backpack', hatColor: 'Headwear colour', topColor: 'Top colour', pantsColor: 'Bottoms colour',
+  shoeColor: 'Upper colour', soleColor: 'Sole colour', shoeStyle: 'Silhouette', skin: 'Skin tone', hairColor: 'Hair colour', deckColor: 'Deck colour', stance: 'Stance', pushStyle: 'Pushing',
+  body: 'Body', hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Eyewear', packColor: 'Backpack colour', deckGraphic: 'Deck graphic', wheelSize: 'Wheel size',
+  wheelColor: 'Wheel colour', print: 'Graphic', socks: 'Socks', sockColor: 'Sock colour', chain: 'Chain', gripColor: 'Grip tape', truckColor: 'Trucks' };
+const SETTINGS_TABS = [['graphics', 'Graphics'], ['audio', 'Audio'], ['controls', 'Controls'], ['camera', 'Camera'], ['gameplay', 'Gameplay']];
+const BIND_NAMES = { up: 'Push / forward', down: 'Brake / back', left: 'Steer left', right: 'Steer right', pop: 'Ollie (hold)', shift: 'Shuvit modifier',
+  grab: 'Grab', grind: 'Grind / wallride', manual: 'Manual', walk: 'Step off / on', respawn: 'Respawn', setSpot: 'Set drop spot', camera: 'Camera',
+  kickflip: 'Kickflip', heelflip: 'Heelflip', treflip: '360 Flip', popshuv: 'Pop Shuvit', pause: 'Pause', help: 'Help', replay: 'Replay',
+  bodyflip: 'Back / frontflip', revert: 'Revert', speedGlitch: 'Speed glitch', popGlitch: 'Pop glitch' };
+const ARROWS = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
+const keyName = (c) => ARROWS[c] || (c || '—').replace(/^Key|^Digit/, '').replace(/(Left|Right)$/, ' $1');
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+
+// XP → career level: level n starts at 1500·(n−1)² XP
+export const levelOf = (xp) => { const l = Math.floor(Math.sqrt(xp / 1500)) + 1, a = 1500 * (l - 1) ** 2, b = 1500 * l * l; return { level: l, frac: (xp - a) / (b - a), next: b - xp }; };
+
 export class UI {
   constructor(game) {
     this.game = game;
     this.menuStack = [];
+    this.tab = { closet: 'skater', settings: 'graphics' };
     $('help-body').innerHTML = controlsHTML();
-    // title screen buttons
     $('title').addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      this.game.audio.init(); this.game.audio.ui();
-      const act = b.dataset.act;
-      if (act === 'play') this.game.startFree();
-      else if (act === 'lunch') this.game.startLunch();
-      else { this.showTitle(false); this.openMenu(act, true); }
+      this._go(b.dataset.act, true);
+    });
+    // menu keyboard: ↑/↓ move between buttons, Enter starts from the title
+    window.addEventListener('keydown', (e) => {
+      if (this._binding) return;
+      const onTitle = !$('title').classList.contains('hidden');
+      if (!onTitle && !this.menuOpen) return;
+      if (e.code === 'Enter' && onTitle && !e.target.closest?.('button')) { this._go('play', true); return; }
+      if (e.code !== 'ArrowUp' && e.code !== 'ArrowDown') return;
+      const root = onTitle ? $('title') : $('menu-card');
+      const items = [...root.querySelectorAll('button.nav-item, button.btn')];
+      if (!items.length) return;
+      const i = items.indexOf(document.activeElement);
+      items[(i + (e.code === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
     });
     this._toastTimer = 0;
-    this._lastCombo = '';
-    this.refreshTitle();
+    this._loading(performance.now());
   }
 
+  _go(act, fromTitle) {
+    const g = this.game;
+    g.audio.init(); g.audio.ui();
+    if (act === 'play') g.startFree();
+    else if (act === 'lunch') g.startLunch();
+    else { this.showTitle(false); this.openMenu(act, fromTitle); }
+  }
+
+  // ---------------------------------------------------------------- loading screen
+  _loading(t0) {
+    const el = $('loading');
+    $('load-tip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+    const tick = () => {
+      const t = (performance.now() - t0) / 1000;
+      const frac = LOAD.total ? LOAD.done / LOAD.total : 0;
+      const shown = Math.min(frac, t / 1.2);                     // never jump to 100% instantly
+      $('load-fill').style.width = (shown * 100).toFixed(1) + '%';
+      $('load-pct').textContent = Math.round(shown * 100) + '%';
+      if ((frac >= 1 && t > 1.2) || t > 12) {                    // shortcut: 12 s cap so a dead asset never blocks the menu
+        el.classList.add('done');
+        setTimeout(() => el.remove(), 700);
+        if (this.game.mode === 'title' && !this.menuOpen) this.showTitle(true);
+        return;
+      }
+      if (Math.floor(t / 3.5) !== this._tipN) { this._tipN = Math.floor(t / 3.5); $('load-tip').textContent = TIPS[(this._tipN * 5 + 3) % TIPS.length]; }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  get loaded() { return !document.getElementById('loading') || $('loading').classList.contains('done'); }
+
   // ---------------------------------------------------------------- screens
-  showTitle(on) { $('title').classList.toggle('hidden', !on); if (on) this.refreshTitle(); }
+  showTitle(on) {
+    if (on && !this.loaded) return;
+    $('title').classList.toggle('hidden', !on);
+    if (on) { this.refreshTitle(); $('title').querySelector('.nav-item').focus({ preventScroll: true }); }
+  }
   showHUD(on) { $('hud').classList.toggle('hidden', !on); }
   refreshTitle() {
-    const g = this.game;
-    $('title-best').textContent = `Best Board Session: ${fmt(g.best.lunch)} · Best combo: ${fmt(g.best.combo)} · Challenges ${g.challenges.count}/10`;
+    const g = this.game, L = levelOf(g.stats.xp);
+    $('nav-ch').textContent = `${g.challenges.count}/10 complete`;
+    $('player-card').innerHTML = `<div class="pc-top"><span class="pc-lvl">LEVEL <b>${L.level}</b></span><span class="muted">${fmt(L.next)} XP to next</span></div>
+      <div class="xp"><i style="width:${(L.frac * 100).toFixed(1)}%"></i></div>
+      <div class="pc-stats"><span><b>${fmt(g.best.lunch)}</b>Best session</span><span><b>${fmt(g.best.combo)}</b>Best combo</span><span><b>${g.challenges.count}/10</b>Challenges</span></div>`;
   }
   toggleHelp(force) {
     const el = $('help');
@@ -105,9 +192,9 @@ export class UI {
     el.classList.toggle('hidden', !show);
   }
   get menuOpen() { return !$('menu').classList.contains('hidden'); }
-  get topMenu() { const t = this.menuStack[this.menuStack.length - 1]; return t && !$('menu').classList.contains('hidden') ? t.name : null; }
+  get topMenu() { const t = this.menuStack[this.menuStack.length - 1]; return t && this.menuOpen ? t.name : null; }
 
-  // name: pause | settings | controls | challenges | teleport | results
+  // name: pause | settings | controls | closet | stats | challenges | teleport | results
   openMenu(name, fromTitle = false, data) {
     this.menuStack.push({ name, fromTitle, data });
     this._renderMenu();
@@ -119,105 +206,108 @@ export class UI {
   }
   closeMenu() {
     this.menuStack = [];
+    this._binding = null;
     $('menu').classList.add('hidden');
+  }
+
+  // ---------------------------------------------------------------- panel builders
+  _head(crumb, title) { return `<div class="crumb">${crumb}</div><h1>${title}</h1>`; }
+  _tabs(menu, tabs) { return `<div class="tabs">${tabs.map(([k, n]) => `<button class="tab ${this.tab[menu] === k ? 'sel' : ''}" data-tab="${menu}" data-val="${k}">${n}</button>`).join('')}</div>`; }
+  _seg(key, opts, cur) { return `<span class="seg">${opts.map(([v, n]) => `<button data-set="${key}" data-val="${v}" class="${cur === v ? 'sel' : ''}">${n}</button>`).join('')}</span>`; }
+  _back() { return `<button class="back" data-act="back">← Back <kbd>Esc</kbd></button>`; }
+
+  _pause(g) {
+    return this._head(g.mode === 'lunch' ? 'Board Session' : 'Free Skate', 'Paused') + `<div class="list">
+      <button class="btn primary" data-act="resume">Resume <small>P</small></button>
+      <button class="btn" data-act="teleport">Teleport <small>${g.world.spots.length} spots</small></button>
+      <button class="btn" data-act="closet">Locker <small>Skater · fits · board</small></button>
+      <button class="btn" data-act="challenges">Challenges <small>${g.challenges.count}/10</small></button>
+      <button class="btn" data-act="stats">Career <small>Level ${levelOf(g.stats.xp).level}</small></button>
+      <button class="btn" data-act="settings">Settings</button>
+      <button class="btn" data-act="lunch">${g.mode === 'lunch' ? 'Restart Board Session' : 'Start a Board Session'}</button>
+      <button class="btn danger" data-act="title">Quit to main menu</button></div>`;
+  }
+
+  _closet(g) {
+    const o = g.outfit, tab = LOCKER.find((t) => t[0] === this.tab.closet);
+    let h = this._head('Locker', tab[1]) + this._tabs('closet', LOCKER.map(([k, n]) => [k, n]));
+    for (const k of tab[2]) {
+      if (OUTFIT_OPTIONS[k]) h += `<h3>${LABELS[k]}</h3><div class="tiles">` + OUTFIT_OPTIONS[k].map(([v, name]) =>
+        `<button class="tile ${o[k] === v ? 'sel' : ''}" data-outfit="${k}" data-val="${v}">${name}</button>`).join('') + '</div>';
+      else if (OUTFIT_COLORS[k]) h += `<h3>${LABELS[k]}</h3><div class="swatches">` + OUTFIT_COLORS[k].map((c) =>
+        `<button class="swatch ${o[k] === c ? 'sel' : ''}" style="background:${hex(c)}" data-outfit="${k}" data-color="${c}" aria-label="${LABELS[k]} ${hex(c)}"></button>`).join('') + '</div>';
+    }
+    return `<div class="locker">${h}${this._back()}</div>`;
+  }
+
+  _settings(g) {
+    const s = g.settings, t = this.tab.settings;
+    let h = this._head('Options', 'Settings') + this._tabs('settings', SETTINGS_TABS);
+    const row = (name, desc, ctl) => `<div class="set-row"><span>${name}${desc ? `<span class="desc">${desc}</span>` : ''}</span>${ctl}</div>`;
+    if (t === 'graphics') {
+      const cards = [['low', 'Low', 'Fastest. Phones and old laptops.'], ['high', 'High', 'Shadows, PBR, photo sky, AO, bloom, SMAA.'], ['ultra', 'Ultra', 'High + full-res AO and 4K shadows.']];
+      h += `<h3>Preset</h3><div class="cards3">${cards.map(([v, n, d]) => `<button class="card-opt ${g.graphicsLevel === v ? 'sel' : ''}" data-set="graphics" data-val="${v}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`;
+      h += row('Weather', 'Sky, light, fog and rain', this._seg('weather', WEATHER_OPTIONS, s.weather || 'clear'));
+      h += row('Frame rate', 'Live measurement', `<b>${Math.round(g.fps)} fps</b>`);
+    } else if (t === 'audio') {
+      h += row(`Master volume <b id="vol-val">${Math.round(s.volume * 100)}%</b>`, 'Wheels, pops, grinds, the city and the sea', `<input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-range="volume">`);
+    } else if (t === 'controls') {
+      h += `<p class="muted">Click a binding, then press the new key. <kbd>Esc</kbd> cancels. Arrow keys stay as a second binding for movement.</p>`;
+      for (const [a, n] of Object.entries(BIND_NAMES)) if (KEYS[a]) h += `<div class="bind"><span>${n}</span><button data-bind="${a}" class="${this._binding === a ? 'wait' : ''}">${this._binding === a ? 'Press a key…' : keyName(KEYS[a][0])}</button></div>`;
+      h += `<div class="list"><button class="btn" data-act="controls">Full controls reference</button><button class="btn danger" data-act="resetkeys">Reset to defaults</button></div>`;
+    } else if (t === 'camera') {
+      h += row('Camera', 'Also C while skating', this._seg('camera', [['follow', 'Follow'], ['filmer', 'Filmer'], ['fisheye', 'Fisheye'], ['first', 'First person']], g.rig.mode));
+      h += row(`Mouse sensitivity <b id="sens-val">${s.camSensitivity.toFixed(1)}</b>`, 'Right-mouse drag look', `<input type="range" min="0.3" max="2" step="0.1" value="${s.camSensitivity}" data-range="camSensitivity">`);
+    } else {
+      h += row('Landing assist', 'Small corrections so near-misses land', this._seg('assist', [['on', 'On'], ['off', 'Off']], s.assist !== false ? 'on' : 'off'));
+      h += row('Touch controls', 'On-screen pads for phones and tablets', this._seg('touch', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], s.touch || 'auto'));
+    }
+    return h + this._back();
+  }
+
+  _stats(g) {
+    const S = g.stats, L = levelOf(S.xp), m = (x) => (x >= 1000 ? (x / 1000).toFixed(1) + ' km' : Math.round(x) + ' m');
+    const t = (x) => (x >= 3600 ? (x / 3600).toFixed(1) + ' h' : Math.round(x / 60) + ' min');
+    const cells = [[fmt(S.tricks), 'Tricks landed'], [fmt(S.flips), 'Flip tricks'], [fmt(S.grinds), 'Grinds'], [fmt(S.combos), 'Combos banked'], [fmt(S.bails), 'Bails'],
+      [S.grindTime.toFixed(1) + ' s', 'Time grinding'], [S.airTime.toFixed(0) + ' s', 'Air time'], [S.bestAir.toFixed(2) + ' m', 'Highest air'], [m(S.distance), 'Distance'],
+      [t(S.playTime), 'Time skated'], [fmt(g.best.lunch), 'Best session'], [fmt(g.best.combo), 'Best combo']];
+    return this._head('Career', 'Stats') + `<div class="level-hero"><span class="big">${L.level}</span><div style="flex:1"><b>LEVEL ${L.level}</b> · ${fmt(S.xp)} XP
+      <div class="xp"><i style="width:${(L.frac * 100).toFixed(1)}%"></i></div><span class="muted">${fmt(L.next)} XP to level ${L.level + 1} — bank combos to earn XP</span></div></div>
+      <div class="stat-grid">${cells.map(([v, n]) => `<div class="stat"><b>${v}</b><span>${n}</span></div>`).join('')}</div>` + this._back();
+  }
+
+  _challenges(g) {
+    let h = this._head('Progression', `Challenges ${g.challenges.count}/10`) + '<div class="xp" style="margin:16px 0"><i style="width:' + g.challenges.count * 10 + '%"></i></div>';
+    for (const c of CHALLENGES) { const d = g.challenges.isDone(c.id); h += `<div class="ch ${d ? 'done' : ''}"><span class="dot"></span><span>${c.text}</span><small>${d ? 'DONE' : ''}</small></div>`; }
+    return h + `<div class="list"><button class="btn danger" data-act="resetch">Reset progress</button></div>` + this._back();
   }
 
   _renderMenu() {
     const top = this.menuStack[this.menuStack.length - 1];
     const g = this.game, card = $('menu-card');
     $('menu').classList.remove('hidden');
-    const backBtn = `<div class="menu-buttons"><button data-act="back">Back</button></div>`;
     let h = '';
     switch (top.name) {
-      case 'pause':
-        h = `<h2>Paused</h2><div class="menu-buttons">
-          <button class="primary" data-act="resume">Resume</button>
-          <button data-act="teleport">Teleport to a spot</button>
-          <button data-act="challenges">Challenges (${g.challenges.count}/10)</button>
-          <button data-act="closet">Closet (clothes &amp; board)</button>
-          <button data-act="settings">Settings</button>
-          <button data-act="controls">Controls</button>
-          ${g.mode === 'lunch' ? '<button data-act="lunch">Restart Board Session</button>' : '<button data-act="lunch">Start a Board Session</button>'}
-          <button data-act="title">Quit to title</button></div>`;
-        break;
+      case 'pause': h = this._pause(g); break;
+      case 'closet': h = this._closet(g); break;
+      case 'settings': h = this._settings(g); break;
+      case 'stats': h = this._stats(g); break;
+      case 'challenges': h = this._challenges(g); break;
       case 'controls':
-        h = `<h2>Controls</h2>${g.touchOn ? '<p class="muted center">Touch controls are on. Keyboard controls below the touch guide.</p>' + controlsHTML(TOUCH_HELP) : ''}${controlsHTML()}${backBtn}`;
-        break;
-      case 'closet': {
-        const o = g.outfit;
-        const labels = { hat: 'Hat', top: 'Top', pants: 'Bottoms', backpack: 'Backpack',
-          hatColor: 'Hat colour', topColor: 'Top colour', pantsColor: 'Pants colour', shoeColor: 'Shoes',
-          skin: 'Skin tone', hairColor: 'Hair', deckColor: 'Board', stance: 'Stance', pushStyle: 'Pushing', body: 'Body',
-          hairStyle: 'Hairstyle', facialHair: 'Facial hair', glasses: 'Glasses', packColor: 'Backpack colour', deckGraphic: 'Deck graphic', wheelSize: 'Wheels', wheelColor: 'Wheel colour', print: 'Shirt print', socks: 'Socks', sockColor: 'Sock colour' };
-        h = `<h2>Closet</h2><div class="closet">`;
-        for (const [k, opts] of Object.entries(OUTFIT_OPTIONS)) {
-          h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="row-buttons">` +
-            opts.map(([v, name]) => `<button class="chip ${o[k] === v ? 'sel' : ''}" data-outfit="${k}" data-val="${v}">${name}</button>`).join('') +
-            `</span></div>`;
-        }
-        for (const [k, cols] of Object.entries(OUTFIT_COLORS)) {
-          h += `<div class="closet-row"><span class="closet-label">${labels[k]}</span><span class="swatches">` +
-            cols.map((c) => `<button class="swatch ${o[k] === c ? 'sel' : ''}" style="background:#${c.toString(16).padStart(6, '0')}" data-outfit="${k}" data-color="${c}" aria-label="${labels[k]} colour"></button>`).join('') +
-            `</span></div>`;
-        }
-        h += `</div>${backBtn}`;
-        break;
-      }
-      case 'settings': {
-        const s = g.settings;
-        h = `<h2>Settings</h2>
-          <div class="setting"><span>Graphics</span><span class="row-buttons">
-            <button data-set="graphics" data-val="low" class="${g.graphicsLevel === 'low' ? 'sel' : ''}">Low</button>
-            <button data-set="graphics" data-val="high" class="${g.graphicsLevel === 'high' ? 'sel' : ''}">High</button>
-            <button data-set="graphics" data-val="ultra" class="${g.graphicsLevel === 'ultra' ? 'sel' : ''}">Ultra</button></span></div>
-          <p class="muted">Low = fastest (phones / old laptops). High = real shadows, surface detail &amp; sky reflections (default on PCs).
-          Ultra = High + ambient occlusion, anti-aliasing and 4K shadows (needs a decent graphics card).</p>
-          <div class="setting"><span>Volume <b id="vol-val">${Math.round(s.volume * 100)}%</b></span>
-            <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-range="volume"></div>
-          <div class="setting"><span>Camera sensitivity <b id="sens-val">${s.camSensitivity.toFixed(1)}</b></span>
-            <input type="range" min="0.3" max="2" step="0.1" value="${s.camSensitivity}" data-range="camSensitivity"></div>
-          <div class="setting"><span>Landing assist</span><span class="row-buttons">
-            <button data-set="assist" data-val="on" class="${s.assist !== false ? 'sel' : ''}">On</button>
-            <button data-set="assist" data-val="off" class="${s.assist === false ? 'sel' : ''}">Off</button></span></div>
-          <div class="setting"><span>Touch controls</span><span class="row-buttons">
-            <button data-set="touch" data-val="auto" class="${(s.touch || 'auto') === 'auto' ? 'sel' : ''}">Auto</button>
-            <button data-set="touch" data-val="on" class="${s.touch === 'on' ? 'sel' : ''}">On</button>
-            <button data-set="touch" data-val="off" class="${s.touch === 'off' ? 'sel' : ''}">Off</button></span></div>
-          <div class="setting"><span>Camera</span><span class="row-buttons">
-            <button data-set="camera" data-val="follow" class="${g.rig.mode === 'follow' ? 'sel' : ''}">Follow</button>
-            <button data-set="camera" data-val="filmer" class="${g.rig.mode === 'filmer' ? 'sel' : ''}">Filmer</button>
-            <button data-set="camera" data-val="fisheye" class="${g.rig.mode === 'fisheye' ? 'sel' : ''}">Fisheye</button>
-            <button data-set="camera" data-val="first" class="${g.rig.mode === 'first' ? 'sel' : ''}">First person</button></span></div>
-          ${backBtn}`;
-        break;
-      }
-      case 'challenges': {
-        h = `<h2>Challenges ${g.challenges.count}/10</h2><ul class="challenge-list">`;
-        for (const c of CHALLENGES) {
-          const d = g.challenges.isDone(c.id);
-          h += `<li class="${d ? 'done' : ''}"><span class="tick">${d ? '✔' : '○'}</span>${c.text}</li>`;
-        }
-        h += `</ul><p class="muted center">Tip: the Pause menu can teleport you to the Stair Plaza and Mega-Ramp.</p>
-          <div class="menu-buttons"><button data-act="resetch">Reset progress</button></div>${backBtn}`;
-        break;
-      }
+        h = this._head('Settings', 'Controls') + (g.touchOn ? controlsHTML(TOUCH_HELP) : '') + controlsHTML() + this._back(); break;
       case 'teleport':
-        h = `<h2>Teleport</h2><div class="menu-buttons">` +
-          g.world.spots.map((s, i) => `<button data-tp="${i}">${s.name}</button>`).join('') +
-          (g.player.customSpot ? `<button data-act="custom">My drop spot (T)</button>` : '') +
-          `</div>${backBtn}`;
-        break;
+        h = this._head('Map', 'Teleport') + '<div class="list">' + g.world.spots.map((s, i) => `<button class="btn" data-tp="${i}">${s.name}<small>${String(i + 1).padStart(2, '0')}</small></button>`).join('') +
+          (g.player.customSpot ? `<button class="btn" data-act="custom">My drop spot <small>T</small></button>` : '') + '</div>' + this._back(); break;
       case 'results': {
         const r = top.data;
-        h = `<h2>Session over! 🔔</h2>
-          <div class="big-score">${fmt(r.score)}</div>
-          <p class="center">${r.newBest ? '<b style="color:#7ae582">NEW BEST!</b>' : `Best: ${fmt(r.best)}`} · Biggest combo: ${fmt(r.bestCombo)}</p>
-          <div class="menu-buttons"><button class="primary" data-act="lunch">Go again</button>
-          <button data-act="play">Free skate</button><button data-act="title">Title screen</button></div>`;
+        h = this._head('Board Session', 'Time!') + `<div class="results-score">${fmt(r.score)}</div>
+          <p>${r.newBest ? '<b style="color:var(--good)">NEW PERSONAL BEST</b>' : `Best: ${fmt(r.best)}`} · Biggest combo: ${fmt(r.bestCombo)}</p>
+          <div class="list"><button class="btn primary" data-act="lunch">Go again</button><button class="btn" data-act="play">Free skate</button><button class="btn" data-act="title">Main menu</button></div>`;
         break;
       }
     }
     card.innerHTML = h;
+    if (this._lastTop !== top) { card.scrollTop = 0; this._lastTop = top; }
     card.onclick = (e) => this._menuClick(e, top);
     card.oninput = (e) => {
       const k = e.target.dataset.range; if (!k) return;
@@ -226,26 +316,40 @@ export class UI {
       if (k === 'volume') $('vol-val').textContent = Math.round(v * 100) + '%';
       if (k === 'camSensitivity') $('sens-val').textContent = v.toFixed(1);
     };
-    const first = card.querySelector('button'); if (first) first.focus({ preventScroll: true });
+  }
+
+  _rerender() { const c = $('menu-card'), s = c.scrollTop; this._renderMenu(); c.scrollTop = s; }
+
+  // wait for one key press and bind it (capture phase so the game never sees it)
+  _startBind(action) {
+    this._binding = action; this._rerender();
+    const onKey = (e) => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      window.removeEventListener('keydown', onKey, true);
+      if (e.code !== 'Escape' && this._binding === action) {
+        this.game.input.rebind(action, e.code);
+        const saved = Storage.get('keys', {}); saved[action] = e.code;
+        for (const [a, c] of Object.entries(saved)) if (a !== action && c === e.code) delete saved[a];
+        Storage.set('keys', saved);
+      }
+      this._binding = null; if (this.menuOpen) this._rerender();
+    };
+    window.addEventListener('keydown', onKey, true);
   }
 
   _menuClick(e, top) {
     const b = e.target.closest('button'); if (!b) return;
     const g = this.game;
     g.audio.init(); g.audio.ui();
-    if (b.dataset.set) {
-      g.applySetting(b.dataset.set, b.dataset.val);
-      this._renderMenu();
-      return;
-    }
+    if (b.dataset.tab) { this.tab[b.dataset.tab] = b.dataset.val; this._renderMenu(); $('menu-card').scrollTop = 0; return; }
+    if (b.dataset.bind) { if (!this._binding) this._startBind(b.dataset.bind); return; }
+    if (b.dataset.set) { g.applySetting(b.dataset.set, b.dataset.val); this._rerender(); return; }
     if (b.dataset.outfit) {
       const k = b.dataset.outfit;
       let v = b.dataset.color !== undefined ? parseInt(b.dataset.color, 10) : b.dataset.val;
       if (v === 'true') v = true; else if (v === 'false') v = false; else if (/^\d+$/.test(v)) v = Number(v);
       g.setOutfit(k, v);
-      const scroll = $('menu-card').scrollTop;
-      this._renderMenu();
-      $('menu-card').scrollTop = scroll;
+      this._rerender();
       return;
     }
     if (b.dataset.tp !== undefined) { this.closeMenu(); g.teleport(+b.dataset.tp); return; }
@@ -261,6 +365,7 @@ export class UI {
       case 'play': this.closeMenu(); g.startFree(); break;
       case 'title': this.closeMenu(); g.quitToTitle(); break;
       case 'resetch': g.challenges.reset(); this.refreshChallenges(); this._renderMenu(); break;
+      case 'resetkeys': Storage.set('keys', {}); location.reload(); break;
       default: this.openMenu(b.dataset.act, top.fromTitle);
     }
   }

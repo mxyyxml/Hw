@@ -281,6 +281,7 @@ export const DEFAULT_SETTINGS = {
   camSensitivity: 1.0,      // 0.3..2 — how fast the camera swings behind you
   touch: 'auto',            // 'auto' | 'on' | 'off' — on-screen touch controls
   assist: true,             // landing assist (straighten board / reach landing ramps)
+  weather: 'clear',         // 'clear' | 'overcast' | 'golden' | 'rain'
 };
 
 // -----------------------------------------------------------------------------
@@ -340,11 +341,13 @@ export const OUTFIT_OPTIONS = {
   facialHair: [['none', 'None'], ['stubble', 'Stubble'], ['mustache', 'Mustache'], ['goatee', 'Goatee'], ['beard', 'Beard']],
   hat:    [['none', 'None'], ['beanie', 'Beanie'], ['cap', 'Cap'], ['capBack', 'Cap (backwards)'], ['helmet', 'Helmet'], ['bucket', 'Bucket hat'], ['kippah', 'Kippah']],
   glasses: [['none', 'None'], ['clear', 'Glasses'], ['round', 'Round frames'], ['shades', 'Sunglasses']],
-  top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['hoodie', 'Hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
+  top:    [['tee', 'T-shirt'], ['bigtee', 'Oversized tee'], ['tank', 'Tank top'], ['longsleeve', 'Long sleeve'], ['crewneck', 'Crewneck'], ['hoodie', 'Hoodie'], ['ziphoodie', 'Zip hoodie'], ['flannel', 'Flannel'], ['jacket', 'Jacket'], ['windbreaker', 'Windbreaker'], ['jersey', 'Jersey'], ['none', 'Shirtless']],
   print:  [['none', 'Plain'], ['logo', 'Jew Board logo'], ['wheel', 'Skate club wheel'], ['tlv', 'Tel Aviv star'], ['stripe', 'Stripes']],
   socks:  [['crew', 'Crew'], ['high', 'High'], ['ankle', 'Ankle'], ['none', 'No-show']],
   pants:  [['jeans', 'Jeans'], ['baggy', 'Baggy jeans'], ['skinny', 'Skinny jeans'], ['cargo', 'Cargos'], ['chinos', 'Chinos (cropped)'], ['shorts', 'Shorts'], ['boardshorts', 'Board shorts']],
   backpack: [[true, 'Yes'], [false, 'No']],
+  chain:  [['none', 'None'], ['wallet', 'Wallet chain'], ['necklace', 'Necklace'], ['both', 'Both']],
+  shoeStyle: [['vulc', 'Vulc low-top'], ['hightop', 'High-top'], ['chunky', 'Chunky cupsole']],
   deckGraphic: [['stripes', 'Stripes'], ['sunset', 'Sunset'], ['checker', 'Checker'], ['bolt', 'Bolt'], ['star', 'Blue & white star'], ['plain', 'Solid']],
   wheelSize: [[52, '52 mm (street)'], [54, '54 mm'], [56, '56 mm (park)'], [60, '60 mm (cruiser)']],
   stance: [['regular', 'Regular (left foot forward)'], ['goofy', 'Goofy (right foot forward)']],
@@ -358,6 +361,9 @@ export const OUTFIT_COLORS = {
   pantsColor: [0x2b3a55, 0x3d5a80, 0x6d8fb3, 0x1d1d1d, 0x6b705c, 0xc2b280, 0x5c677d, 0xa3a3a3, 0x7f4f24, 0x2b2d42],
   sockColor:  [0xf2f2f2, 0x1d1d1d, 0x8a8a8a, 0xe63946, 0x2a9d8f, 0xf2c14e],
   shoeColor:  [0xf1f1f1, 0x9a9a9a, 0x1d1d1d, 0xe63946, 0x457b9d, 0xf2c14e, 0x8d6e63, 0x2a9d8f],
+  soleColor:  [0xf2efe8, 0xe8d9b0, 0x1d1d1d, 0x8d5524, 0xe63946],
+  gripColor:  [0x262626, 0xe8e8e8, 0xe63946, 0x3b6fd4, 0x2a9d8f, 0x9b5de5, 0xf2c14e],
+  truckColor: [0xb9bec4, 0x1d1d1d, 0xd4af37, 0xe63946, 0x3b6fd4, 0xffffff],
   wheelColor: [0xf8f4e3, 0xf2c14e, 0xe63946, 0x2a9d8f, 0x1d1d1d, 0x9b5de5],
   packColor:  [0x264653, 0x1d1d1d, 0x8b1e2d, 0x3d5a80, 0x6b705c, 0xf4a261, 0x9b5de5],
   deckColor:  [0xe9c46a, 0xe63946, 0x2a9d8f, 0x6a4c93, 0xf4a261, 0x1d1d1d, 0xffffff, 0x90be6d],
@@ -365,7 +371,7 @@ export const OUTFIT_COLORS = {
 export const DEFAULT_OUTFIT = {
   hat: 'none', hatColor: 0xf4743b, top: 'tee', topColor: 0xf2f2f2, pants: 'jeans', pantsColor: 0x2b3a55,
   shoeColor: 0x9a9a9a, skin: 0xe0ac69, hairColor: 0x2b1d14, deckColor: 0x1d1d1d, backpack: false,
-  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none', packColor: 0x264653, deckGraphic: 'stripes', wheelSize: 54, print: 'logo', socks: 'crew', sockColor: 0xf2f2f2, wheelColor: 0xf8f4e3,
+  stance: 'regular', pushStyle: 'normal', body: 'male', hairStyle: 'short', facialHair: 'none', glasses: 'none', packColor: 0x264653, deckGraphic: 'stripes', wheelSize: 54, print: 'logo', socks: 'crew', sockColor: 0xf2f2f2, wheelColor: 0xf8f4e3, chain: 'none', shoeStyle: 'vulc', soleColor: 0xf2efe8, gripColor: 0x262626, truckColor: 0xb9bec4,
 };
 
 // -----------------------------------------------------------------------------

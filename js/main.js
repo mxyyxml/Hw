@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { PHYSICS, PHYSICS2, GRAPHICS, SCORING, DEFAULT_SETTINGS } from './config.js';
 import { World, SUN } from './world.js';
-import { assetURL } from './textures.js';
+import { assetURL, LOAD } from './textures.js';
 import { Ragdoll } from './ragdoll.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -44,6 +44,7 @@ import { Challenges } from './challenges.js';
 import { Audio } from './audio.js';
 import { Replay } from './replay.js';
 import { UI } from './ui.js';
+import { Weather, Particles } from './weather.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { FlickGesture } from './gesture.js';
 import { DEFAULT_OUTFIT } from './config.js';
@@ -97,6 +98,9 @@ class Game {
     // ---------------------------------------------------------------- settings & saves
     this.settings = { ...DEFAULT_SETTINGS, ...Storage.get('settings', {}) };
     this.best = { combo: Storage.get('bestCombo', 0), lunch: Storage.get('bestLunch', 0) };
+    // career stats & progression (Stats menu); XP comes from banked points
+    this.stats = { tricks: 0, bails: 0, combos: 0, grindTime: 0, airTime: 0, distance: 0, playTime: 0, xp: 0, bestAir: 0, flips: 0, grinds: 0, ...Storage.get('stats', {}) };
+    this._statsSave = 0;
     this.comboWindow = SCORING.comboWindow;
 
     // ---------------------------------------------------------------- renderer & scene
@@ -123,7 +127,7 @@ class Game {
     // ---------------------------------------------------------------- game objects
     this.world = new World(this.scene);
     this.world.col.vertSlope = PHYSICS.vertSlope;
-    this.input = new Input();
+    this.input = new Input(Storage.get('keys', {}));
     this.skater = new Skater(this.scene);
     this.player = new Player(this.world, this.input, this.skater);
     this.rig = new CameraRig(this.camera);
@@ -175,6 +179,8 @@ class Game {
     // ---------------------------------------------------------------- wiring
     this.player.on((type, data) => this.onPlayerEvent(type, data));
     this.combo.on((type, data) => this.onComboEvent(type, data));
+    this.weather = new Weather(this);
+    this.particles = new Particles(this.scene);
     this.applySetting('graphics', this.settings.graphics);
     this.applySetting('volume', this.settings.volume);
     this.applySetting('camSensitivity', this.settings.camSensitivity);
@@ -195,7 +201,9 @@ class Game {
   // Real sky: a CC0 photo-based panorama (Poly Haven). Falls back to the
   // gradient dome if it can't load.
   loadSkyPhoto() {
+    LOAD.total++;
     new THREE.TextureLoader().load(assetURL('assets/sky.jpg'), (tex) => {
+      LOAD.done++;
       tex.mapping = THREE.EquirectangularReflectionMapping;
       tex.colorSpace = THREE.SRGBColorSpace;
       this.skyTex = tex;
@@ -203,7 +211,8 @@ class Game {
       this.sky.visible = false;
       if (this.envMap) { this.envMap.dispose(); this.envMap = null; }
       if (this.settings.graphics === 'high') this.applyGraphics('high');
-    });
+      this.weather.set(this.settings.weather);
+    }, undefined, () => { LOAD.done++; });
   }
 
   // ================================================================ settings
@@ -213,6 +222,7 @@ class Game {
     else if (key === 'camSensitivity') this.rig.sensitivity = value;
     else if (key === 'camera') { this.rig.mode = value; return; }
     else if (key === 'touch') { this.settings.touch = value; this.updateTouch(); }
+    else if (key === 'weather') { if (this.weather) this.weather.set(value); }
     else if (key === 'assist') value = value === 'on' || value === true;
     this.settings[key] = value;
     Storage.set('settings', this.settings);
@@ -269,7 +279,8 @@ class Game {
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     }
     this.skater.blob.visible = !g.shadows;
-    this.scene.fog.far = g.fogFar;
+    this.scene.fog.far = this._fogFarBase = g.fogFar;
+    if (this.weather) this.weather.set(this.settings.weather);
     this.camera.far = g.drawDistance;
     this.camera.updateProjectionMatrix();
     // REMASTERED pipeline (High & Ultra): scene → ambient occlusion → bloom on real
@@ -405,7 +416,11 @@ class Game {
       case 'grabStart': break;
       case 'land':
         if (d.impact > 5.5) this.rig.addShake((d.impact - 5.5) * 0.03);
+        if (d.impact > 3) { const q = this.player.pos; this.particles.emit(q.x, q.y, q.z, Math.min(24, Math.round(d.impact * 2)), 'dust', this.player.vel.x, this.player.vel.z); }
         for (const t of d.tricks) this.combo.add(t);
+        this.stats.tricks += d.tricks.filter((t) => t.name !== 'Ollie').length;
+        this.stats.flips += d.tricks.filter((t) => /flip|Impossible/i.test(t.name)).length;
+        this.stats.bestAir = Math.max(this.stats.bestAir, d.height || 0);
         for (const gp of d.gaps) { this.combo.add(gp); ui.popup(gp.name + '!', 'good'); }
         if (d.spinName) ui.popup(d.spinName, 'small');
         if (!d.onRail) au.land(d.impact);
@@ -415,6 +430,7 @@ class Game {
       case 'sketchy': ui.popup('Sketchy!', 'small'); break;
       case 'jump': au.push(); break;
       case 'grindEnd':
+        this.stats.grinds++; this.stats.grindTime += d.time || 0;
         this.combo.add(d);
         this.challenges.onGrind(d);
         break;
@@ -427,6 +443,7 @@ class Game {
       case 'glitch': ui.popup(d.name); au.push(); break;
       case 'revert': this.combo.add({ name: d.name, base: d.name, points: d.points }); ui.popup(d.name); break;
       case 'bail':
+        this.stats.bails++;
         ui.popup('BAIL! ' + d.reason, 'bail');
         au.bail();
         this.combo.drop();
@@ -453,6 +470,7 @@ class Game {
       this.ui.showCombo(this.combo, 'banked', pts);
       this.audio.bank(d.mult);
       this.challenges.onCombo(pts);
+      this.stats.combos++; this.stats.xp += pts;
     } else if (type === 'drop') {
       this.ui.showCombo(this.combo, 'dropped', d.lost);
       this.audio.drop();
@@ -497,6 +515,7 @@ class Game {
       else if (!this.paused) { this.step(realDt); this.replay.record(realDt); }
       else if (this.ui.topMenu === 'closet') this.closetCam(realDt);
     }
+    this.weather.update(realDt, this.camera.position);
     if (this.touch) this.touch.setVisible(this.mode !== 'title' && !this.paused);
     inp.endFrame();
     if (this.usePost && this.composer) this.composer.render();
@@ -524,6 +543,10 @@ class Game {
     if (n === PHYSICS.maxSubSteps) this.acc = 0;
 
     p.sync(dt);
+    // particles: sparks off metal grinds, dust from powerslides
+    if (p.state === 'grind' && !(p.grind && p.grind.def && /slide/i.test(p.grind.def.name)) && p.speed > 1.5) this.particles.emit(p.pos.x, p.pos.y, p.pos.z, 2, 'spark', p.vel.x, p.vel.z);
+    if (p.powersliding && p.speed > 2) this.particles.emit(p.pos.x, p.pos.y, p.pos.z, 1, 'dust', p.vel.x, p.vel.z);
+    this.particles.update(dt);
     this.combo.update(dt, p.isHoldingCombo());
     if (p.state === 'ride') this.rig.addShake(((p.chatter || 0) * 0.0025 + (p.wobble || 0) * 0.004) * realDt * 60);
     this.rig.update(realDt, p, this.world.col);
@@ -535,6 +558,12 @@ class Game {
       this.audio.update(p.state === 'wallride' ? 'ride' : p.state, p.displaySpeed(), { surface, chatter: p.chatter || 0, grindName: p.grind && p.grind.def ? p.grind.def.name : '', walkSpeed: p.walkSpeed || 0, dt: realDt, beach });
     }
     this.ui.updateHUD(realDt);
+    // career stats
+    const S = this.stats;
+    S.playTime += realDt;
+    if (p.state === 'ride') S.distance += p.speed * dt;
+    if (p.state === 'air') S.airTime += dt;
+    if ((this._statsSave += realDt) > 5) { this._statsSave = 0; Storage.set('stats', S); }
 
     if (this.mode === 'lunch' && !this.lunch.over) {
       this.lunch.time -= realDt;
@@ -552,7 +581,9 @@ class Game {
     this.closetAngle = (this.closetAngle || 0) + dt * 0.5;
     const p = this.player.pos, a = this.closetAngle;
     this.camera.position.set(p.x + Math.cos(a) * 2.6, p.y + 1.35, p.z + Math.sin(a) * 2.6);
-    this.camera.lookAt(p.x, p.y + 0.9, p.z);
+    // aim left of the skater so they stand to the right of the Locker panel
+    const off = innerWidth > 760 ? 0.85 : 0;
+    this.camera.lookAt(p.x - Math.sin(a) * off, p.y + 0.9, p.z + Math.cos(a) * off);
     if (this.camera.fov !== 50) { this.camera.fov = 50; this.camera.updateProjectionMatrix(); }
     this.sky.position.copy(this.camera.position);
     this.player.sync(dt);

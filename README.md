@@ -64,15 +64,19 @@ Hold your phone sideways.
 | **GRAB / GRIND / MANUAL / SHUV** | Same as J / K / L / Shift+arrow (the joystick picks the direction) |
 | **? · CAM · WALK · ↺ · ❚❚** | Help, camera, walk, respawn, pause |
 
-### 👕 Closet
-Title screen or Pause → **Closet**: body type, 9 hairstyles (real modelled short, crop, skater flow, long,
-ponytail and afro hair, plus buzz, mohawk, bald), hats fitted to the head (beanie, cap, backwards cap,
-bucket hat, helmet, kippah), a padded backpack with fitted straps (8 colours), facial hair (stubble, mustache, goatee, beard), hats, glasses / sunglasses,
-9 tops (tee, oversized tee, tank, long sleeve, hoodie, flannel, jacket, jersey, shirtless),
-7 bottoms (jeans, baggy, skinny, cargos, cropped chinos, shorts, board shorts), colours for everything, skin tone,
-hair colour, backpack, shirt prints, socks (crew / high / ankle) and sock colour, deck graphics,
-wheel size (52–60 mm) and colour, board colour, **stance (Regular / Goofy)** and **push style (Normal / Mongo)**.
-Saved in your browser.
+### 👕 Locker (character & board customisation)
+Main menu or Pause → **Locker**, with tabs:
+- **Skater**: body type, skin tone, 9 hairstyles (modelled short, crop, skater flow, long, ponytail and afro, plus buzz,
+  mohawk and bald), hair colour, facial hair, eyewear, stance (**Regular / Goofy**) and push style (**Normal / Mongo**).
+- **Tops**: tee, oversized tee, tank, long sleeve, **crewneck**, hoodie, **zip hoodie** (metal zip), flannel, jacket,
+  **windbreaker** (loose nylon shell with a two-tone yoke), jersey or shirtless; colours and chest graphics.
+- **Bottoms**: jeans, baggy jeans, skinny, cargos, cropped chinos, shorts, board shorts; socks and sock colour.
+- **Shoes**: three silhouettes, each its own model (**vulc low-top**, **high-top**, **chunky cupsole**), plus upper and sole colours.
+- **Accessories**: beanie, cap, backwards cap, bucket hat, helmet, kippah, a padded backpack, and a **wallet chain** and/or
+  **necklace** (real links lying on the clothes).
+- **Board**: deck graphic and colour, **grip tape colour**, **truck colour**, wheel size (52–60 mm) and colour.
+
+The camera turns around your skater beside the panel while you shop. Everything is saved in your browser.
 
 Clothes and hair are real layers cut from the body surface along smooth lines (necklines, sleeves,
 hems, hairlines), loosened where fabric hangs and skinned to the same bones, so they move with the body.
@@ -147,7 +151,7 @@ at the beach.
   weaker ollie.
 - **Two-truck contact:** the board sits on its front and back wheels, so it pitches across ramp
   bottoms, lips and curbs instead of floating on one point.
-- **Wheels matter:** bigger wheels (Closet) roll over rough ground more easily and chatter less.
+- **Wheels matter:** bigger wheels (Locker) roll over rough ground more easily and chatter less.
 - **Wheel chatter & speed wobbles:** rough asphalt and sand buzz through the board; bombing faster than
   ~47 km/h standing tall starts speed wobbles — crouch (hold Space) to settle them.
 - **Grass & dirt** stop you within a couple of metres; roll onto a lawn too fast and you get thrown off.
@@ -200,11 +204,23 @@ Beit Sefer 10-Stair, Parking Garage Roof, Container Gap, Tayelet Beach Promenade
 - **Board Session** – 2 minutes, score as much as you can before the bell.
   Best scores and completed challenges are saved in your browser (localStorage).
 
+## 🧭 Menus
+
+A rebuilt menu system: a loading screen with real asset progress and tips; a main menu (Free Skate, Board Session,
+Challenges, Locker, Career, Settings) with your level and XP card; a pause menu; **Career** stats (tricks, flips,
+grinds, bails, air time, distance, time skated; banked combo points are XP for your level); Challenges with
+progress; and Teleport to every spot. Arrow keys and Enter work in every menu.
+
 ## ⚙️ Settings
 
-Graphics **Auto** (High on PCs, Low on phones), **Low**, **High** (shadows, photo-texture surface relief,
-sky reflections) or **Ultra** (High + ambient occlusion, SMAA anti-aliasing and 4K shadows — for PCs with a
-decent graphics card). Also volume, camera sensitivity, camera style, landing assist and touch controls.
+Tabs:
+- **Graphics**: preset **Low**, **High** (shadows, PBR, photo sky, ambient occlusion, bloom, SMAA) or **Ultra**
+  (High + full-resolution AO and 4K shadows), and **weather**: Clear, Overcast, Golden hour or Rain (falling rain,
+  rain sound, low cloud and fog).
+- **Audio**: master volume.
+- **Controls**: **rebind every key** (click, then press the key; saved), the full controls reference, reset to defaults.
+- **Camera**: Follow, Filmer, Fisheye or First person, and mouse sensitivity.
+- **Gameplay**: landing assist and touch controls.
 
 ## 🛠️ Tweaking the game
 

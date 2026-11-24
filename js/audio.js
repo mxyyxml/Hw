@@ -38,6 +38,8 @@ export class Audio {
     this.hum = this._loop(140, 'lowpass', 0.5);
     this.hum.gain.gain.value = 0.035;
     this.sea = this._loop(500, 'lowpass', 0.6);
+    this.rain = this._loop(5200, 'bandpass', 0.4);           // rain hiss (weather)
+    this.setRain(this.rainOn);
     this.jointDist = 0; this.stepDist = 0;
   }
 
@@ -49,6 +51,11 @@ export class Audio {
     src.connect(f); f.connect(g); g.connect(this.master);
     src.start();
     return { src, filter: f, gain: g };
+  }
+
+  setRain(on) {
+    this.rainOn = on;
+    if (this.rain) this.rain.gain.gain.setTargetAtTime(on ? 0.09 : 0, this.ctx.currentTime, 0.8);
   }
 
   setVolume(v) {

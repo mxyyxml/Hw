@@ -11,7 +11,7 @@
 //  leaves sway in the wind.
 // =============================================================================
 import * as THREE from 'three';
-import { assetURL } from './textures.js';
+import { assetURL, track } from './textures.js';
 
 const rngOf = (seed) => () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
@@ -19,7 +19,7 @@ function loadTex(path, srgb = true, repeat = false) {
   const t = new THREE.Texture();
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  const img = new Image();
+  const img = track(new Image());
   img.onload = () => { t.image = img; t.needsUpdate = true; };
   img.src = assetURL(path);
   return t;

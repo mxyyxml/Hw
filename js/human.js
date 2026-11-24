@@ -13,14 +13,15 @@
 // =============================================================================
 import * as THREE from 'three';
 import { HUMAN } from './humanData.js';
-import { assetURL } from './textures.js';
+import { assetURL, track } from './textures.js';
+import { mergeGeometries as mergeGeos } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // textures for the MakeHuman assets (photo skin, hair / brow / lash cut-outs, eyes)
 const _tex = {};
 export function humanTex(name, srgb = true) {
   if (_tex[name]) return _tex[name];
   const t = new THREE.Texture(); if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-  const img = new Image(); img.onload = () => { t.image = img; t.needsUpdate = true; }; img.src = assetURL('assets/human/' + name);
+  const img = track(new Image()); img.onload = () => { t.image = img; t.needsUpdate = true; }; img.src = assetURL('assets/human/' + name);
   return (_tex[name] = t);
 }
 
@@ -51,6 +52,9 @@ export const TOPS = {
   hoodie:     { sleeve: 0.9, base: 0.014, drape: 0.022, sleeveLoose: 0.008, hem: 0.11, neck: 'hood', cuff: true },
   jacket:     { sleeve: 0.92, base: 0.016, drape: 0.02, sleeveLoose: 0.012, hem: 0.1, neck: 'collar' },
   flannel:    { sleeve: 0.9, base: 0.009, drape: 0.018, sleeveLoose: 0.01, hem: 0.12, neck: 'collar' },
+  ziphoodie:  { sleeve: 0.9, base: 0.013, drape: 0.02, sleeveLoose: 0.008, hem: 0.1, neck: 'hood', cuff: true, zip: true },
+  crewneck:   { sleeve: 0.9, base: 0.012, drape: 0.008, sleeveLoose: 0.004, hem: 0.07, neck: 'crew', cuff: true },
+  windbreaker: { sleeve: 0.93, base: 0.017, drape: 0.034, sleeveLoose: 0.022, hem: 0.13, neck: 'collar', cuff: true, zip: true, yoke: true },
   jersey:     { sleeve: 0.3, base: 0.008, drape: 0.02, sleeveLoose: 0.02, hem: 0.12, neck: 'vee' },
 };
 // rise: waistband height vs the natural waist, hem: 'ankle' | 'knee' | 'calf',
@@ -827,7 +831,7 @@ export function buildHuman(sk) {
       attach(geo, sk.head, M.hat, false);
     }
     // ---- HOOD (hoodie): the hood lies bunched on the upper back, cut from the body
-    if (o.top === 'hoodie') {
+    if (T && T.neck === 'hood') {
       const hood = (i) => {
         const r = reg[i];
         if (r !== R.collar && r !== R.torso && r !== R.neck) return 1;
@@ -835,6 +839,24 @@ export function buildHuman(sk) {
         return Math.max(z + 0.005, Math.abs(x) - 0.14, (shY - 0.16) - y, y - (neckY + 0.04));
       };
       addLayer(layer(hood, (i, fv) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.05 * sstep(0, 0.045, -fv) + 0.006, { smooth: 6 }), M.topDark);
+    }
+    // ---- ZIP (zip hoodie, windbreaker): a metal zip tape down the centre front
+    const topOff = (i) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0);
+    if (T && T.zip && topGeo) {
+      const zip = (i) => {
+        const r = reg[i]; if (r !== R.torso && r !== R.collar && r !== R.pelvis) return 1;
+        const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
+        return Math.max(-z + 0.02, Math.abs(x) - 0.0055, (waistY - T.hem + 0.01) - y, y - (neckY - 0.01));
+      };
+      addLayer(layer(zip, (i) => topOff(i) + 0.0022, { hem: false }), M.bolt, { shadow: false });
+    }
+    // ---- YOKE (windbreaker): a contrast panel across the shoulders and upper arms
+    if (T && T.yoke && topGeo) {
+      const yoke = (i) => {
+        const r = reg[i]; if (r !== R.torso && r !== R.collar && r !== R.upperArm) return 1;
+        return (shY - 0.11) - base[i * 3 + 1];
+      };
+      addLayer(layer(yoke, (i) => topOff(i) + 0.0018, { smooth: 3 }), M.topTrim || M.topDark);
     }
     // ---- BACKPACK: padded straps cut over the shoulders + a real pack on the back
     if (o.backpack) {
@@ -862,6 +884,50 @@ export function buildHuman(sk) {
       attach(new THREE.TorusGeometry(0.03, 0.006, 6, 12, Math.PI).translate(c.x, c.y + h / 2 - 0.004, c.z + 0.01), sk.torso, M.packDark);
       attach(new THREE.TorusGeometry(dp / 2 + 0.002, 0.0035, 4, 18, Math.PI).rotateY(Math.PI / 2).scale(1, 0.55, 1).translate(c.x, c.y + h / 2 - 0.045, c.z), sk.torso, M.sole, false);
       attach(new THREE.BoxGeometry(w * 0.66, 0.006, 0.006).translate(c.x, c.y - h * 0.2 + h * 0.2 - 0.012, c.z - dp / 2 - 0.038), sk.torso, M.sole, false);
+    }
+    // ---- CHAINS: a wallet chain looping from the belt to the back pocket and/or a
+    // curb-link necklace lying on the chest. Each link sits on the body+clothes surface.
+    const surf = (phi, y, regs, off) => {        // phi: 0 = front, +π/2 = character's right (x < 0)
+      let best = null, bd = 1e9;
+      for (let i = 0; i < n; i++) {
+        if (!regs.includes(reg[i])) continue;
+        const by = base[i * 3 + 1]; if (Math.abs(by - y) > 0.015) continue;
+        const x = base[i * 3], z = base[i * 3 + 2];
+        const d = Math.abs(Math.atan2(-x, z) - phi) + Math.abs(by - y) * 4;
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best === null) return null;
+      const x = base[best * 3], z = base[best * 3 + 2], rr = Math.hypot(x, z) + off(best);
+      return new THREE.Vector3(-Math.sin(phi) * rr, y, Math.cos(phi) * rr);
+    };
+    const linkChain = (pts, r, bone) => {
+      const geos = [], q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
+      const curve = new THREE.CatmullRomCurve3(pts), N = Math.round(curve.getLength() / (r * 1.6));
+      for (let k = 0; k <= N; k++) {
+        const p = curve.getPointAt(k / N), t = curve.getTangentAt(k / N);
+        const g = new THREE.TorusGeometry(r, r * 0.28, 4, 8).scale(1.35, 1, 1).rotateY(Math.PI / 2);
+        if (k % 2) g.rotateZ(Math.PI / 2);
+        g.applyQuaternion(q.setFromUnitVectors(Z, t)).translate(p.x, p.y, p.z);
+        geos.push(g.toNonIndexed());
+      }
+      const merged = mergeGeos(geos); if (merged) attach(merged, bone, M.chain || M.bolt, false);
+    };
+    if ((o.chain === 'wallet' || o.chain === 'both') && pantsGeo) {
+      const y0 = waistY - 0.035, pOff = (i) => Math.max(pantsGeo.userData.offset[i], 0) + 0.006, regs = [R.pelvis, R.thigh];
+      const pts = [];
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10, phi = 0.75 + t * 1.75, y = y0 - 0.17 * Math.sin(Math.PI * t) - 0.01 * t;
+        const p = surf(phi, y, regs, pOff); if (p) pts.push(p.add(new THREE.Vector3(-Math.sin(phi), 0, Math.cos(phi)).multiplyScalar(0.01 * Math.sin(Math.PI * t))));
+      }
+      if (pts.length > 3) linkChain(pts, 0.0055, sk.hips);
+    }
+    if (o.chain === 'necklace' || o.chain === 'both') {
+      const regs = [R.neck, R.collar, R.torso], nOff = (i) => topOff(i) + 0.005, pts = [];
+      for (let k = 0; k <= 16; k++) {
+        const phi = -Math.PI * 0.85 + (k / 16) * Math.PI * 1.7, front = Math.max(0, Math.cos(phi));
+        const p = surf(phi, neckY - 0.045 - 0.085 * front ** 2, regs, nOff); if (p) pts.push(p);
+      }
+      if (pts.length > 3) linkChain(pts, 0.0048, sk.torso);
     }
     // skin: drop what is well covered (so it can't poke through when bending),
     // paint the scalp under hair with the hair colour, hide the feet (sneakers)

@@ -15,6 +15,7 @@ import { PHYSICS as P, SHUVITS, GRABS, GRAB_POINTS, SPIN_POINTS_PER_180, BIG_AIR
   GRINDS, SHIFT_GRINDS, GRIND, GRIND_POINTS, MANUALS, MANUAL_POINTS, MANUAL_BALANCE as MB } from './config.js';
 import { resolveFlick, spinLabel } from './tricks.js';
 import { PHYSICS2 as P2, PUSH, BODY_FLIPS, REVERT } from './config.js';
+const GETUP = 1.1;                                     // seconds to get back up after a bail
 
 const smoothstep01 = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 const TAU = Math.PI * 2;
@@ -67,6 +68,7 @@ export class Player {
 
   // ------------------------------------------------------------------ spawning
   respawnAt(spot) {
+    this.getUpT = this.state === 'bail' ? GETUP : 0;     // after a bail you climb back up onto the board
     if (this.ragdoll && this.ragdoll.active) this.ragdoll.clear(this.skater);
     this.pos.set(spot.x, spot.y, spot.z);
     const g = this.col.ground(spot.x, spot.z, spot.y + 0.5);
@@ -171,6 +173,11 @@ export class Player {
     const K = P2.knees;
     this.compVel = (this.compVel || 0) + (-K.stiff * (this.comp || 0) - K.damp * this.compVel) * dt;
     this.comp = clamp((this.comp || 0) + this.compVel * dt, -0.15, 1.15);
+    // getting up after a bail: no pushing / popping until you're standing
+    if (this.getUpT > 0) { this.getUpT = Math.max(0, this.getUpT - dt); this.pushPhase = -1; this.wantPop = null; }
+    // idle: standing still on the board with no input (fidget animation)
+    const h = this.input.held;
+    this.idleT = this.state === 'ride' && this.speed < 0.15 && !(h.up || h.down || h.left || h.right || h.pop) ? (this.idleT || 0) + dt : 0;
     this.updatePushStroke(dt);
     if (this.wantPop) {
       const w = this.wantPop; this.wantPop = null;
@@ -1310,6 +1317,8 @@ export class Player {
       sideways: !!(this.grind && this.grind.def.sideways),
       airTime: A ? A.time : 0,
       manualPitch: this.grind ? -this.grind.def.pitch : (this.manual ? (this.manual.nose ? -0.3 : 0.3) + this.manual.b * 0.12 : 0),
+      getUp: this.getUpT > 0 ? this.getUpT / GETUP : 0,
+      idle: this.idleT || 0,
       bailTime: this.bailInfo ? this.bailInfo.t : 0,
       bailRoll: this.bailInfo ? this.bailInfo.roll : 0,
       walkSpeed: this.walkSpeed,

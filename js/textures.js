@@ -150,8 +150,16 @@ const NORMALS = {
 // average colour of each photo (used to tint the procedural fallback the same way)
 const PHOTO_AVG = { concrete: '#969590', tiles: '#96938c', asphalt: '#5f5f5f', ramp: '#9b9b98', wood: '#7e6141', grass: '#606c30', building: '#644a3c' };
 
+// asset loading progress (the loading screen reads it)
+export const LOAD = { total: 0, done: 0 };
+export function track(img) {
+  LOAD.total++;
+  const fin = () => { LOAD.done++; img.removeEventListener('load', fin); img.removeEventListener('error', fin); };
+  img.addEventListener('load', fin); img.addEventListener('error', fin);
+  return img;
+}
 function loadImage(url, ok) {
-  const img = new Image();
+  const img = track(new Image());
   img.onload = () => ok(img);
   img.onerror = () => { /* keep the procedural texture */ };
   img.src = assetURL(url);

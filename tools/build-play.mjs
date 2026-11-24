@@ -35,7 +35,7 @@ walk('assets');
 const assetScript = `<script>window.__LBS_ASSETS = ${JSON.stringify(assets)};</script>`;
 let html = readFileSync('index.html', 'utf8');
 html = html
-  .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}\n</style>`)
+  .replace(/<link rel="stylesheet" href="css\/style.css">/, () => `<style>\n${css}\n</style>`)
   .replace(/<!-- three\.js[\s\S]*?<\/script>/, '')
   .replace(/<script type="module" src="js\/main\.js"><\/script>/, () => `${assetScript}\n<script>\n${js}\n</script>`);
 writeFileSync('play.html', html);

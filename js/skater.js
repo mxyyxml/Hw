@@ -69,13 +69,13 @@ function knitTexture() {
   return t;
 }
 
-// skateboard textures: grip tape (fine black grit) and original deck graphics
+// skateboard textures: grip tape (fine grit, tinted per board) and original deck graphics
 let _grip = null;
 function gripTexture() {
   if (_grip) return _grip;
   const c = document.createElement('canvas'); c.width = c.height = 128;
-  const x = c.getContext('2d'); x.fillStyle = '#2a2a2a'; x.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 2600; i++) { const g = 20 + Math.random() * 70; x.fillStyle = `rgb(${g},${g},${g})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1, 1); }
+  const x = c.getContext('2d'); x.fillStyle = '#c4c4c4'; x.fillRect(0, 0, 128, 128);   // light grit, tinted by the grip colour
+  for (let i = 0; i < 2600; i++) { const g = 120 + Math.random() * 135; x.fillStyle = `rgb(${g},${g},${g})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1, 1); }
   _grip = new THREE.CanvasTexture(c); _grip.wrapS = _grip.wrapT = THREE.RepeatWrapping; _grip.colorSpace = THREE.SRGBColorSpace;
   return _grip;
 }
@@ -198,7 +198,7 @@ export class Skater {
     m.shoeUpper.map = shoeTexture();
     m.eyeball.map = humanTex('eye.jpg');
     m.pack.map = canvasWeave(); m.hat.map = knitTexture(); m.sock.map = knitTexture();
-    m.grip.map = gripTexture(); m.deckSide.map = plyTexture(); m.grip.color.setHex(0xffffff); m.deckSide.color.setHex(0xffffff);
+    m.grip.map = gripTexture(); m.deckSide.map = plyTexture(); m.grip.color.setHex(0x262626); m.deckSide.color.setHex(0xffffff);
     m.pants.map = getFabric('denim');
     this.belt = mesh(this.hips, new THREE.CylinderGeometry(0.168, 0.168, 0.035, 16).scale(1, 1, 0.64), m.sole, 0, 0.075, 0); // belt
     this.torso = bone(this.hips, 0, 0.08, 0);
@@ -402,24 +402,27 @@ export class Skater {
   //    toe box; printed suede toe & heel panels, stitching and a side stripe
   //  * vulcanised sole with a raised rubber foxing band and toe bumper
   //  * padded collar, tongue, and real criss-cross laces through eyelets
-  _makeSneaker(foot) {
+  // style: 'vulc' (slim low-top), 'hightop' (padded collar over the ankle), 'chunky' (puffy cupsole)
+  _makeSneaker(foot, style = 'vulc') {
     const m = this.mat;
     if (!m.soleW) m.soleW = new THREE.MeshLambertMaterial({ color: 0xf2efe8 });
     const fh = this.footH, Z0 = -0.078, Z1 = 0.218;
+    const HI = style === 'hightop', CH = style === 'chunky', puff = CH ? 0.006 : 0;
     // half-width of the last along the foot
     const W = (z) => {
       const t = (z - Z0) / (Z1 - Z0);
       const base = 0.03 + 0.016 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.55) + 0.006 * Math.sin(t * Math.PI);
       const toe = t > 0.82 ? Math.sqrt(Math.max(0, 1 - ((t - 0.82) / 0.18) ** 2)) : 1;
       const heel = t < 0.08 ? Math.sqrt(Math.max(0, 1 - ((0.08 - t) / 0.08) ** 2)) : 1;
-      return base * toe * heel + 0.0015;
+      return base * toe * heel + 0.0015 + puff;
     };
-    const SOLE = 0.024;                                    // sole thickness
+    const SOLE = CH ? 0.034 : 0.024;                                    // sole thickness
     // upper height above the sole along the foot: collar → instep → toe box
     const Hgt = (z) => {
       const t = (z - Z0) / (Z1 - Z0);
-      if (t < 0.32) return 0.088 - 0.006 * t;               // heel counter / collar
-      if (t < 0.68) return 0.086 - (t - 0.32) * 0.09;        // instep (laces)
+      if (HI) { if (t < 0.36) return 0.14 - 0.02 * t; if (t < 0.68) return 0.133 - (t - 0.36) * 0.24; }
+      if (t < 0.32) return 0.088 - 0.006 * t + puff;        // heel counter / collar
+      if (t < 0.68) return 0.086 + puff - (t - 0.32) * 0.09; // instep (laces)
       return Math.max(0.012, 0.054 - (t - 0.68) * 0.135);   // toe box slopes down
     };
     const NZ = 40, NA = 18, y0 = -fh + SOLE;
@@ -459,15 +462,16 @@ export class Skater {
     // foxing band: thin dark stripe round the top of the sole
     add(loft(0.0055, y0 - 0.006, () => 0.004), m.sole);
     // padded collar round the ankle opening
-    const col = new THREE.TorusGeometry(0.036, 0.0105, 8, 22).rotateX(Math.PI / 2).scale(0.9, 1, 1.25);
-    add(col.translate(0, y0 + 0.084, -0.028), m.shoe);
+    const col = new THREE.TorusGeometry(0.036 + puff * 0.5, CH ? 0.014 : 0.0105, 8, 22).rotateX(Math.PI / 2).scale(0.9, 1, 1.25);
+    add(col.translate(0, y0 + (HI ? 0.134 : 0.084 + puff), HI ? -0.02 : -0.028), m.shoe);
     // tongue
     const tg = new THREE.BoxGeometry(0.046, 0.008, 0.08, 1, 1, 4), tp = tg.attributes.position;
     for (let i = 0; i < tp.count; i++) tp.setY(i, tp.getY(i) + 0.02 * Math.sin((tp.getZ(i) / 0.08 + 0.5) * Math.PI) * 0.3);
     tg.computeVertexNormals();
-    add(tg.rotateX(-0.32).translate(0, y0 + 0.094, 0.002), m.shoe);
+    if (CH) tg.scale(1.15, 2.2, 1);
+    add(HI ? tg.scale(1, 1, 1.5).rotateX(-0.45).translate(0, y0 + 0.13, -0.005) : tg.rotateX(-0.32).translate(0, y0 + 0.094 + puff, 0.002), m.shoe);
     // laces: criss-cross between eyelets across the instep
-    for (let k = 0; k < 5; k++) {
+    for (let k = HI ? -2 : 0; k < 5; k++) {
       const z = 0.012 + k * 0.021, y = y0 + Hgt(z) + 0.004;
       for (const sx of [-1, 1]) {
         const g = new THREE.CylinderGeometry(0.0028, 0.0028, 0.05, 5).rotateZ(Math.PI / 2).rotateY(sx * 0.42);
@@ -479,7 +483,7 @@ export class Skater {
       const hasUV = list.every((g) => g.attributes.uv);
       if (!hasUV) for (const g of list) if (g.attributes.uv) g.deleteAttribute('uv');
       const o = new THREE.Mesh(mergeGeometries(list), mat);
-      o.castShadow = mat !== m.lace && mat !== m.bolt; o.receiveShadow = true;
+      o.castShadow = mat !== m.lace && mat !== m.bolt; o.receiveShadow = true; o.userData.shoe = true;
       foot.add(o);
     }
   }
@@ -631,6 +635,17 @@ export class Skater {
     m.top.color.setHex(o.topColor); m.topDark.color.copy(dark(o.topColor, o.top === 'flannel' ? 0.55 : 0.78));
     m.pants.color.setHex(o.pantsColor); m.pantsDark.color.copy(dark(o.pantsColor));
     m.shoe.color.setHex(o.shoeColor); if (m.shoeUpper) m.shoeUpper.color.setHex(o.shoeColor);
+    if (m.soleW) m.soleW.color.setHex(o.soleColor ?? 0xf2efe8);
+    if (this.human && (o.shoeStyle || 'vulc') !== (this._shoeStyle || 'vulc')) {   // new silhouette: rebuild both shoes
+      this._shoeStyle = o.shoeStyle;
+      for (const L of this.legs) {
+        for (const c of [...L.foot.children]) if (c.userData.shoe) { L.foot.remove(c); c.geometry.dispose(); }
+        this._makeSneaker(L.foot, o.shoeStyle);
+      }
+    }
+    m.grip.color.setHex(o.gripColor ?? 0x262626);
+    m.truck.color.setHex(o.truckColor ?? 0xb9bec4);
+    if (m.top.isMeshStandardMaterial) m.topDark.roughness = m.top.roughness = o.top === 'windbreaker' ? 0.42 : 0.92;
     m.sock.color.setHex(o.sockColor ?? 0xf2f2f2);
     m.hat.color.setHex(o.hatColor); m.hatDark.color.copy(dark(o.hatColor));
     m.deck.map = deckTexture(o.deckGraphic || 'stripes', o.deckColor); m.deck.color.setHex(0xffffff); m.deck.needsUpdate = true;
@@ -757,7 +772,7 @@ export class Skater {
     a.grab = damp(a.grab, st.grab ? 1 : 0, 12, dt);
     a.manual = damp(a.manual, st.manualPitch || 0, 12, dt);
     a.slide = damp(a.slide, st.sideways ? 1 : 0, 12, dt);
-    a.walk = damp(a.walk, mode === 'walk' ? 1 : 0, 10, dt);
+    a.walk = damp(a.walk, mode === 'walk' ? 1 : 0, 6, dt);          // ~0.4 s step off / on
     a.bail = mode === 'bail' ? Math.min(1, a.bail + dt * 3) : damp(a.bail, 0, 20, dt);
     a.armsOut = damp(a.armsOut, (mode === 'grind' || mode === 'manual') ? 1 : 0.35, 6, dt);
     // knee compression comes straight from the physics (spring-damper); walking landings still dip
@@ -803,8 +818,10 @@ export class Skater {
     // athletic skate stance: knees always a little bent
     const stand = 0.84 * legL + this.footH, low = 0.47 * legL + this.footH;
     // flips: knees tuck up hard while the board spins under the feet (a.clear from last frame)
-    const bend = Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95, (a.clear || 0) * 0.85) + a.dip * 0.6);
-    let hipH = lerp(stand, low, bend);
+    // getting up after a bail: start crouched right down over the board and rise (eased)
+    const gu = st.getUp ? st.getUp * st.getUp * (3 - 2 * st.getUp) : 0;
+    const bend = Math.min(1, Math.max(a.crouch, a.tuck * 0.55, a.grab * 0.95, (a.clear || 0) * 0.85, gu) + a.dip * 0.6);
+    let hipH = lerp(stand, low, bend) - gu * 0.06;
     hipH -= a.push * 0.08;                    // bend the standing knee (a little) so the push foot reaches the floor
     this.hips.position.set(0, hipH, 0);
     // real crouches hinge at the hips too: the pelvis tips forward as you go down
@@ -898,6 +915,18 @@ export class Skater {
       // relaxed arms: hang near the body with soft elbows, spread for balance on rails / manuals
       A.sh.rotation.set(0.12 + a.dip * 0.3 + swing + a.crouch * 0.25, 0, A.sgn * (0.1 + a.armsOut * 0.55 + wobble + a.dip * 0.35 + Math.min(0.9, Math.abs(a.bal) * 2.2)) * (1 - a.push * 0.6));
       A.el.rotation.set(-0.45 - a.push * 0.3 - a.crouch * 0.3, 0, 0);
+    }
+    if (gu > 0.01) {                       // getting up: chest over the knees, hands push off the deck
+      this.torso.rotation.x += gu * 0.55; this.head.rotation.x += gu * 0.35;
+      for (const A of this.arms) { A.sh.rotation.x += gu * 0.9; A.sh.rotation.z += A.sgn * gu * 0.2; A.el.rotation.x += gu * 0.3; }
+    }
+    // idle on the board: breathing, looking around, shaking out the arms
+    if (mode === 'ride' && (st.idle || 0) > 1.2 && a.push < 0.05) {
+      const w = Math.min(1, (st.idle - 1.2) / 0.8), it = st.idle;
+      this.torso.rotation.x += Math.sin(it * 1.7) * 0.018 * w;
+      this.head.rotation.y += w * (0.45 * Math.sin(it * 0.42) + 0.15 * Math.sin(it * 1.13));
+      this.head.rotation.x += w * 0.08 * Math.sin(it * 0.29);
+      for (const A of this.arms) { A.sh.rotation.z += A.sgn * w * 0.06 * Math.sin(it * 0.8 + A.sgn); A.el.rotation.x -= w * 0.12 * (0.5 + 0.5 * Math.sin(it * 0.6 + A.sgn * 2)); }
     }
     if (a.grab > 0.01) {
       const A = this.arms[st.grabHand === 'back' ? 1 : 0];

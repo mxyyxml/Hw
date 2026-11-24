@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1d2433">
   <title>Jew Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;800&display=swap">
   <link rel="stylesheet" href="css/style.css">
   <!-- three.js and Rapier physics pinned to exact versions from a CDN — no build step needed -->
   <script type="importmap">
@@ -40,7 +42,7 @@
       <div id="combo-points"><span id="combo-sum">0</span> <span class="x">x<span id="combo-mult">1</span></span></div>
       <div id="combo-timer"><div id="combo-timer-fill"></div></div>
     </div>
-    <div id="hud-hint">H help · P pause · C camera · Closet in the pause menu</div>
+    <div id="hud-hint">H help · P pause · C camera · Locker in the pause menu</div>
   </div>
 
   <!-- ============================== HELP OVERLAY (H) ============================== -->
@@ -52,26 +54,36 @@
     </div>
   </div>
 
-  <!-- ============================== TITLE SCREEN ============================== -->
-  <div id="title" class="screen">
-    <div class="title-card">
-      <div class="logo"><span class="l1">Jew</span><span class="l2">BOARD</span></div>
-      <p class="tagline">Free-roam the city. Flick tricks. Land them clean.</p>
-      <div class="menu-buttons">
-        <button data-act="play" class="primary">Play</button>
-        <button data-act="lunch">Board Session <small>2 min</small></button>
-        <button data-act="challenges">Challenges</button>
-        <button data-act="closet">Closet</button>
-        <button data-act="controls">Controls</button>
-        <button data-act="settings">Settings</button>
-      </div>
-      <p class="muted" id="title-best"></p>
-    </div>
+  <!-- ============================== LOADING SCREEN ============================== -->
+  <div id="loading">
+    <div class="load-logo"><span class="ll1">JEW</span><span class="ll2">BOARD</span></div>
+    <div class="load-bar"><div id="load-fill"></div></div>
+    <div class="load-row"><span id="load-pct">0%</span><span id="load-tip"></span></div>
   </div>
 
-  <!-- ============================== MENU PANEL (pause, settings, etc.) ============================== -->
+  <!-- ============================== MAIN MENU ============================== -->
+  <div id="title" class="screen hidden">
+    <aside class="rail">
+      <div class="brand">
+        <svg class="brand-star" viewBox="-12 -12 24 24" aria-hidden="true"><path d="M0,-10 L8.66,5 L-8.66,5 Z M0,10 L-8.66,-5 L8.66,-5 Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <div class="brand-text"><span class="b1">JEW</span><span class="b2">BOARD</span></div>
+      </div>
+      <nav class="main-nav">
+        <button data-act="play" class="nav-item primary"><span class="num">01</span><span class="lbl">Free Skate</span><span class="sub">Roam Jew Board City</span></button>
+        <button data-act="lunch" class="nav-item"><span class="num">02</span><span class="lbl">Board Session</span><span class="sub">2-minute score attack</span></button>
+        <button data-act="challenges" class="nav-item"><span class="num">03</span><span class="lbl">Challenges</span><span class="sub" id="nav-ch"></span></button>
+        <button data-act="closet" class="nav-item"><span class="num">04</span><span class="lbl">Locker</span><span class="sub">Skater, fits &amp; board</span></button>
+        <button data-act="stats" class="nav-item"><span class="num">05</span><span class="lbl">Career</span><span class="sub">Stats &amp; progression</span></button>
+        <button data-act="settings" class="nav-item"><span class="num">06</span><span class="lbl">Settings</span><span class="sub">Graphics, audio, controls</span></button>
+      </nav>
+      <div class="player-card" id="player-card"></div>
+    </aside>
+    <div class="title-hint">ENTER to skate · H for controls</div>
+  </div>
+
+  <!-- ============================== MENU PANEL (pause, settings, locker, ...) ============================== -->
   <div id="menu" class="screen hidden">
-    <div class="card" id="menu-card"></div>
+    <section class="panel" id="menu-card"></section>
   </div>
 
   <noscript>Jew Board needs JavaScript.</noscript>

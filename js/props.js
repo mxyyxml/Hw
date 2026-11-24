@@ -6,7 +6,7 @@
 // =============================================================================
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { assetURL } from './textures.js';
+import { assetURL, LOAD } from './textures.js';
 
 export const PROP_MODELS = ['metal_trash_can', 'utility_box_01', 'barrel_03', 'old_tyre', 'trashbag', 'wooden_crate_02'];
 
@@ -21,6 +21,7 @@ export class Props {
 
   load(onDone) {
     const manager = new THREE.LoadingManager();
+    manager.onStart = () => { LOAD.total++; }; manager.onLoad = () => { LOAD.done++; };
     manager.setURLModifier((u) => assetURL(u));
     const loader = new GLTFLoader(manager);
     let left = 0;
