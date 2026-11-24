@@ -75,20 +75,61 @@ function car(W, x, z, yaw, color) {
   W.geo.castShadow([[x - 1, 0, z - 2.2], [x + 1, 0, z - 2.2], [x - 1, 0, z + 2.2], [x + 1, 0, z + 2.2], [x, 1.4, z]], 0);
 }
 
-// a city block with real facade relief (floor bands, cornice, corner pilasters, shopfront, awning)
+// A Tel Aviv "White City" apartment block, all real geometry: white / cream stucco,
+// a glazed shopfront with an awning, dark window bands on every floor, Bauhaus
+// ribbon balconies with solid parapets (style 0), or plain fronts with AC units
+// and roller shutters (style 1); on the roof a parapet, solar water heaters
+// (dud shemesh: tilted panel + white tank), a water tank and an aerial.
+const ACCENT = [0xf3efe6, 0xe9d8c4, 0xd9e2e3, 0xf0e1cf, 0xe3e7dc];
 function block(W, x, z, w, d, h, col, k) {
-  W.box({ x, z, w, d, h, tag: 'building' }, col, col);
-  const trim = [0xd8d0c0, 0xc9c1b0, 0xb9b3a7][k % 3];
-  for (let y = 4; y < h - 0.5; y += 4) W.geo.prism({ x, z, w: w + 0.35, d: d + 0.35 }, [y + 0.22, y + 0.22, y + 0.22, y + 0.22], y, trim, trim);
-  W.geo.prism({ x, z, w: w + 0.9, d: d + 0.9 }, [h + 0.35, h + 0.35, h + 0.35, h + 0.35], h - 0.2, trim, trim);
-  for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) W.geo.prism({ x: x + ox * w / 2, z: z + oz * d / 2, w: 0.7, d: 0.7 }, [h - 0.2, h - 0.2, h - 0.2, h - 0.2], 3.4, trim, trim);
-  W.geo.prism({ x, z, w: w + 0.15, d: d + 0.15 }, [3.2, 3.2, 3.2, 3.2], 0.4, 0x2f3b47, 0x2f3b47);              // shop glass
+  const STUCCO = [C.stucco, C.stuccoShade];
+  const G = W.geo, wall = STUCCO[k % 2], acc = ACCENT[k % ACCENT.length], style = k % 3 === 2 ? 1 : 0;
+  const GLASS = 0x2b3743, FRAME = 0x9aa1a6, rect = (cx, cz, sx, sz, y0, y1, top, side) => G.prism({ x: cx, z: cz, w: sx, d: sz }, [y1, y1, y1, y1], y0, top, side ?? top);
+  W.box({ x, z, w, d, h, tag: 'building' }, wall, wall);
+  // ground floor: shop glass all round + plinth band + awnings on the long sides
+  rect(x, z, w + 0.12, d + 0.12, 0.45, 3.1, GLASS);
+  rect(x, z, w + 0.3, d + 0.3, 3.1, 3.6, acc);
   const aw = [0x8e2c2c, 0x2c5f8e, 0x2c8e5a, 0x8e6d2c][k % 4];
-  W.geo.prism({ x, z, w: w + 1.2, d: d + 1.2 }, [3.6, 3.6, 3.35, 3.35], 3.3, aw, aw);                            // awning
-  W.geo.prism({ x: x - w * 0.2, z: z + d * 0.15, w: 2.2, d: 1.6 }, [h + 1.4, h + 1.4, h + 1.4, h + 1.4], h, 0xb7b9ba, 0x8f9193);   // AC unit
-  if (k % 3 === 0) {
-    W.geo.addGeometry(new THREE.CylinderGeometry(1.3, 1.3, 2.2, 12), new THREE.Matrix4().makeTranslation(x + w * 0.25, h + 3.2, z - d * 0.2), 0x8a6a4a);
-    for (const [ox, oz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) W.geo.beam([x + w * 0.25 + ox, h, z - d * 0.2 + oz], [x + w * 0.25 + ox, h + 2.1, z - d * 0.2 + oz], 0.08, C.metal);
+  // the four facades: n = outward normal, L = facade length
+  const sides = [[0, -1, w, d], [0, 1, w, d], [-1, 0, d, w], [1, 0, d, w]];
+  for (const [nx, nz, L, D] of sides) {
+    const fx = x + nx * D / 2, fz = z + nz * D / 2, along = nx === 0;
+    const R = (off, len, dep, y0, y1, c, side) => rect(fx + nx * off, fz + nz * off, along ? len : dep, along ? dep : len, y0, y1, c, side);
+    if (L > 10) G.prism({ x: fx + nx * 0.7, z: fz + nz * 0.7, w: along ? L * 0.8 : 1.4, d: along ? 1.4 : L * 0.8 }, along ? (nz < 0 ? [3.65, 3.65, 3.3, 3.3] : [3.3, 3.3, 3.65, 3.65]) : (nx < 0 ? [3.65, 3.3, 3.3, 3.65] : [3.3, 3.65, 3.65, 3.3]), 3.25, aw, aw);
+    for (let fy = 3.6; fy + 3 <= h - 0.3; fy += 3.2) {
+      const long = L > 12;
+      // window band (glass + a light frame line above and below)
+      R(0.04, L * 0.82, 0.08, fy + 0.9, fy + 2.5, GLASS);
+      R(0.06, L * 0.84, 0.1, fy + 0.82, fy + 0.92, FRAME);
+      if (style === 0 && long) {
+        // Bauhaus ribbon balcony: slab + solid parapet (the white horizontal stripes)
+        R(0.6, L * 0.7, 1.2, fy - 0.08, fy + 0.08, acc);
+        R(1.15, L * 0.7, 0.12, fy + 0.08, fy + 1.05, acc);
+      } else {
+        // AC units under some windows, roller-shutter boxes over the glass
+        for (let i = 0; i < Math.floor(L / 6); i++) {
+          const t = (i + 0.5) / Math.floor(L / 6) - 0.5;
+          if ((i + k + Math.round(fy)) % 3 === 0) rect(fx + nx * 0.35 + (along ? t * L * 0.8 : 0), fz + nz * 0.35 + (along ? 0 : t * L * 0.8), along ? 0.9 : 0.6, along ? 0.6 : 0.9, fy + 0.15, fy + 0.75, 0xd6d8d8, 0xb9bcbd);
+        }
+        R(0.12, L * 0.82, 0.22, fy + 2.5, fy + 2.75, acc);
+      }
+    }
+  }
+  // roof: parapet ring, solar water heaters, water tank, aerial
+  const P = 0.25;
+  rect(x, z - d / 2 + P / 2, w, P, h, h + 0.9, acc); rect(x, z + d / 2 - P / 2, w, P, h, h + 0.9, acc);
+  rect(x - w / 2 + P / 2, z, P, d, h, h + 0.9, acc); rect(x + w / 2 - P / 2, z, P, d, h, h + 0.9, acc);
+  const n = 2 + (k % 3);
+  for (let i = 0; i < n; i++) {
+    const sx = x - w / 2 + 2 + (i + 0.5) * (w - 4) / n, sz = z - d * 0.15;
+    G.prism({ x: sx, z: sz, w: 1.2, d: 1.8 }, [h + 1.2, h + 1.2, h + 0.35, h + 0.35], h, 0x1f2e4a, FRAME);          // tilted collector
+    G.addGeometry(new THREE.CylinderGeometry(0.32, 0.32, 1.4, 10).rotateZ(Math.PI / 2), new THREE.Matrix4().makeTranslation(sx, h + 1.55, sz - 1.05), 0xf2f2f0);   // hot-water tank
+    G.beam([sx - 0.5, h, sz - 1.05], [sx - 0.5, h + 1.3, sz - 1.05], 0.06, FRAME); G.beam([sx + 0.5, h, sz - 1.05], [sx + 0.5, h + 1.3, sz - 1.05], 0.06, FRAME);
+  }
+  if (k % 2 === 0) {
+    G.addGeometry(new THREE.CylinderGeometry(1.1, 1.1, 1.8, 12), new THREE.Matrix4().makeTranslation(x + w * 0.3, h + 0.9, z + d * 0.25), 0xa9adb0);
+    G.beam([x - w * 0.3, h, z + d * 0.3], [x - w * 0.3, h + 4, z + d * 0.3], 0.05, FRAME);
+    G.beam([x - w * 0.3 - 0.8, h + 3.4, z + d * 0.3], [x - w * 0.3 + 0.8, h + 3.4, z + d * 0.3], 0.04, FRAME);
   }
 }
 
@@ -110,6 +151,31 @@ export function buildMap(W) {
   road(-150, 46, 150, 56, true);           // Sderot avenue (east–west)
   road(42, -150, 50, 112, false);           // north–south avenue east of the plaza
   road(-150, -44, 40, -36, true);           // northern street
+  // zebra crossings where the avenues meet, either side of the junction
+  const zebra = (x0, z0, x1, z1, alongX) => {
+    if (alongX) for (let x = x0; x < x1; x += 0.9) W.patch(x, z0, x + 0.5, z1, 0xf2f2ee, 0.017);
+    else for (let z = z0; z < z1; z += 0.9) W.patch(x0, z, x1, z + 0.5, 0xf2f2ee, 0.017);
+  };
+  zebra(42, 40, 50, 44, true); zebra(42, 58, 50, 62, true); zebra(36, 46, 40, 56, false); zebra(52, 46, 56, 56, false);
+  zebra(30, -44, 34, -36, false); zebra(-12, -44, -8, -36, false);
+  // bike-share docks (green bikes) and bus shelters along the avenue sidewalk
+  const bikes = (bx, bz) => {
+    G.prism({ x: bx, z: bz, w: 6, d: 0.3 }, [0.12, 0.12, 0.12, 0.12], 0, 0x7a7f84, 0x7a7f84);
+    for (let i = 0; i < 5; i++) {
+      const x = bx - 2.4 + i * 1.2;
+      G.beam([x, 0, bz], [x, 0.9, bz], 0.08, 0x5e9e3a);
+      for (const dz of [-0.75, 0.75]) G.addGeometry(new THREE.TorusGeometry(0.33, 0.035, 6, 16).rotateY(Math.PI / 2), new THREE.Matrix4().makeTranslation(x, 0.36, bz + dz), 0x1d1d1d);
+      G.beam([x, 0.45, bz - 0.75], [x, 0.85, bz + 0.6], 0.05, 0x5e9e3a);
+    }
+  };
+  const shelter = (sx, sz) => {
+    col.addBox({ x: sx, z: sz, w: 4, d: 0.2, h: 2.6, tag: 'shelter' });
+    G.prism({ x: sx, z: sz, w: 4, d: 0.08 }, [2.5, 2.5, 2.5, 2.5], 0.1, 0xa9c4d4, 0xa9c4d4);
+    G.prism({ x: sx, z: sz + 0.6, w: 4.4, d: 1.6 }, [2.75, 2.75, 2.75, 2.75], 2.6, 0x2c5f8e, 0x2c5f8e);
+    for (const ox of [-2, 2]) G.beam([sx + ox, 0, sz], [sx + ox, 2.6, sz], 0.1, C.metal);
+  };
+  for (const bx of [-120, -70, 70, 120]) bikes(bx, 44.2);
+  for (const sx of [-95, 95]) shelter(sx, 43.6);
   const lawn = (x0, z0, x1, z1, trees = 0, seed = 1) => {
     W.patch(x0, z0, x1, z1, C.grass, 0.013); F.addLawn(x0, z0, x1, z1, 0.013); col.addLawn(x0, z0, x1, z1);
     let s = seed * 7919;
