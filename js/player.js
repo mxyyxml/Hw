@@ -248,7 +248,7 @@ export class Player {
     const f = this._f || (this._f = new THREE.Vector3());
 
     // --- steering
-    const want = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+    const want = inp.steerAxis != null ? -inp.steerAxis : (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);   // analog stick or keys
     // WEIGHT SHIFT: you lean into a carve (and back up out of it) over a fraction
     // of a second instead of the board snapping to full lock — taps make small
     // line corrections, holding builds into a full carve
@@ -1147,7 +1147,7 @@ export class Player {
   // buffered press just before landing), you slide along walls.
   updateWalk(dt) {
     const inp = this.input;
-    const turnIn = (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
+    const turnIn = inp.steerAxis != null ? -inp.steerAxis : (inp.held.left ? 1 : 0) - (inp.held.right ? 1 : 0);
     this.walkTurnVel = this.walkTurnVel || 0;
     this.walkTurnVel += clamp(turnIn * P.walkTurnRate - this.walkTurnVel, -14 * dt, 14 * dt);
     this.heading += this.walkTurnVel * dt + (this.mouseTurn || 0);

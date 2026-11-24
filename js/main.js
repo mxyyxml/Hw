@@ -45,6 +45,7 @@ import { Audio } from './audio.js';
 import { Replay } from './replay.js';
 import { UI, levelOf } from './ui.js';
 import { Weather, Particles } from './weather.js';
+import { Gamepads } from './gamepad.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { FlickGesture } from './gesture.js';
 import { DEFAULT_OUTFIT, OUTFIT_OPTIONS, UNLOCKS, AREA_XP } from './config.js';
@@ -144,6 +145,7 @@ class Game {
     this.updateTouch();
     // mouse flick: hold the left button on the game view and drag (pull ↓, flick ↑)
     this.mouseFlick = new FlickGesture(this.input);
+    this.pads = new Gamepads(this.input, () => this.mode === 'title' || this.ui.menuOpen, () => this.mode === 'title' && !this.ui.menuOpen);
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'mouse' || e.button !== 0 || this.mode === 'title' || this.paused) return;
       this.audio.init();
@@ -524,6 +526,7 @@ class Game {
     if (this._fpsAcc > 0.5) { this.fps = this._fpsN / this._fpsAcc; this._fpsAcc = 0; this._fpsN = 0; }
 
     const inp = this.input;
+    this.pads.update();
     if (this.mode === 'title') {
       if (this.ui.topMenu === 'closet') this.closetCam(realDt);
       else this.titleCam(realDt);

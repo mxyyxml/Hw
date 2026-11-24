@@ -53,6 +53,18 @@ Letting go without a flick does a plain ollie.
 | **H** | Help overlay |
 | **P / Esc** | Pause menu (teleport, challenges, settings) |
 
+### 🎮 Controller
+Plug in any standard gamepad. **Left stick** steers (analog) and pushes / brakes; the **right stick is flick-it**:
+pull down to crouch and flick up to pop. Flick up-left / up-right for kickflip / heelflip, or down → left → up for a 360 flip.
+A push, B step off/on, X grind, Y manual, RB/RT grab, LB revert, LT shift, L3 backflip, R3 respawn, Back camera,
+Start pause. Menus work with the D-pad and A / B.
+
+### 🧭 Career
+30 missions across the 10 areas of the city (stairs, gaps, rails, air, combos). Each one pays XP; discovering an area
+pays XP too. Levelling up unlocks gear in the Locker (crewneck, zip hoodie, windbreaker, high-tops, chunky shoes,
+chains, deck graphics, 60 mm wheels...). The HUD shows the missions for the area you're in, and the Missions
+screen can drop you straight at any spot.
+
 ### 📱 Phones & tablets
 Touch controls turn on automatically on touch-screen devices (Settings → Touch controls: Auto / On / Off).
 Hold your phone sideways.
