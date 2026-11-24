@@ -14,7 +14,11 @@ export class Challenges {
 
   get count() { return this.done.size; }
   isDone(id) { return this.done.has(id); }
-  next(n = 2) { return this.list.filter((c) => !this.done.has(c.id)).slice(0, n); }
+  // open missions, the current area's first
+  next(n = 2, area = -1) {
+    const open = this.list.filter((c) => !this.done.has(c.id));
+    return [...open.filter((c) => c.area === area), ...open.filter((c) => c.area !== area)].slice(0, n);
+  }
 
   complete(c) {
     if (this.done.has(c.id)) return;

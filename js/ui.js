@@ -4,7 +4,7 @@
 //  The game object passed in provides: startFree(), startLunch(), resume(),
 //  quitToTitle(), teleport(i), applySetting(key, value), settings, challenges...
 // =============================================================================
-import { CHALLENGES, OUTFIT_OPTIONS, OUTFIT_COLORS, KEYS } from './config.js';
+import { CHALLENGES, OUTFIT_OPTIONS, OUTFIT_COLORS, KEYS, UNLOCKS } from './config.js';
 import { LOAD } from './textures.js';
 import { Storage } from './storage.js';
 import { WEATHER_OPTIONS } from './weather.js';
@@ -179,10 +179,10 @@ export class UI {
   showHUD(on) { $('hud').classList.toggle('hidden', !on); }
   refreshTitle() {
     const g = this.game, L = levelOf(g.stats.xp);
-    $('nav-ch').textContent = `${g.challenges.count}/10 complete`;
+    $('nav-ch').textContent = `${g.challenges.count}/${CHALLENGES.length} missions`;
     $('player-card').innerHTML = `<div class="pc-top"><span class="pc-lvl">LEVEL <b>${L.level}</b></span><span class="muted">${fmt(L.next)} XP to next</span></div>
       <div class="xp"><i style="width:${(L.frac * 100).toFixed(1)}%"></i></div>
-      <div class="pc-stats"><span><b>${fmt(g.best.lunch)}</b>Best session</span><span><b>${fmt(g.best.combo)}</b>Best combo</span><span><b>${g.challenges.count}/10</b>Challenges</span></div>`;
+      <div class="pc-stats"><span><b>${fmt(g.best.lunch)}</b>Best session</span><span><b>${fmt(g.best.combo)}</b>Best combo</span><span><b>${g.challenges.count}/${CHALLENGES.length}</b>Missions</span></div>`;
   }
   toggleHelp(force) {
     const el = $('help');
@@ -221,7 +221,7 @@ export class UI {
       <button class="btn primary" data-act="resume">Resume <small>P</small></button>
       <button class="btn" data-act="teleport">Teleport <small>${g.world.spots.length} spots</small></button>
       <button class="btn" data-act="closet">Locker <small>Skater · fits · board</small></button>
-      <button class="btn" data-act="challenges">Challenges <small>${g.challenges.count}/10</small></button>
+      <button class="btn" data-act="challenges">Missions <small>${g.challenges.count}/${CHALLENGES.length}</small></button>
       <button class="btn" data-act="stats">Career <small>Level ${levelOf(g.stats.xp).level}</small></button>
       <button class="btn" data-act="settings">Settings</button>
       <button class="btn" data-act="lunch">${g.mode === 'lunch' ? 'Restart Board Session' : 'Start a Board Session'}</button>
@@ -232,8 +232,11 @@ export class UI {
     const o = g.outfit, tab = LOCKER.find((t) => t[0] === this.tab.closet);
     let h = this._head('Locker', tab[1]) + this._tabs('closet', LOCKER.map(([k, n]) => [k, n]));
     for (const k of tab[2]) {
-      if (OUTFIT_OPTIONS[k]) h += `<h3>${LABELS[k]}</h3><div class="tiles">` + OUTFIT_OPTIONS[k].map(([v, name]) =>
-        `<button class="tile ${o[k] === v ? 'sel' : ''}" data-outfit="${k}" data-val="${v}">${name}</button>`).join('') + '</div>';
+      if (OUTFIT_OPTIONS[k]) h += `<h3>${LABELS[k]}</h3><div class="tiles">` + OUTFIT_OPTIONS[k].map(([v, name]) => {
+        const need = UNLOCKS[k + ':' + v], locked = need && levelOf(g.stats.xp).level < need && o[k] !== v;
+        return locked ? `<button class="tile locked" disabled>${name}<small>🔒 Level ${need}</small></button>`
+          : `<button class="tile ${o[k] === v ? 'sel' : ''}" data-outfit="${k}" data-val="${v}">${name}</button>`;
+      }).join('') + '</div>';
       else if (OUTFIT_COLORS[k]) h += `<h3>${LABELS[k]}</h3><div class="swatches">` + OUTFIT_COLORS[k].map((c) =>
         `<button class="swatch ${o[k] === c ? 'sel' : ''}" style="background:${hex(c)}" data-outfit="${k}" data-color="${c}" aria-label="${LABELS[k]} ${hex(c)}"></button>`).join('') + '</div>';
     }
@@ -277,8 +280,15 @@ export class UI {
   }
 
   _challenges(g) {
-    let h = this._head('Progression', `Challenges ${g.challenges.count}/10`) + '<div class="xp" style="margin:16px 0"><i style="width:' + g.challenges.count * 10 + '%"></i></div>';
-    for (const c of CHALLENGES) { const d = g.challenges.isDone(c.id); h += `<div class="ch ${d ? 'done' : ''}"><span class="dot"></span><span>${c.text}</span><small>${d ? 'DONE' : ''}</small></div>`; }
+    const N = CHALLENGES.length, seen = Storage.get('areas', []);
+    let h = this._head('Career', `Missions ${g.challenges.count}/${N}`) + `<div class="xp" style="margin:16px 0"><i style="width:${g.challenges.count / N * 100}%"></i></div>`;
+    g.world.spots.forEach((s, a) => {
+      const list = CHALLENGES.filter((c) => c.area === a); if (!list.length) return;
+      const done = list.filter((c) => g.challenges.isDone(c.id)).length;
+      h += `<h3>${seen.includes(a) ? s.name.replace(/ \(.*\)$/, '') : '??? — undiscovered'} <span class="muted">${done}/${list.length}</span>` +
+        `<button class="tp-mini" data-tp="${a}">Go</button></h3>`;
+      for (const c of list) { const d = g.challenges.isDone(c.id); h += `<div class="ch ${d ? 'done' : ''}"><span class="dot"></span><span>${c.text}</span><small>${d ? 'DONE' : '+' + fmt(c.xp) + ' XP'}</small></div>`; }
+    });
     return h + `<div class="list"><button class="btn danger" data-act="resetch">Reset progress</button></div>` + this._back();
   }
 
@@ -352,7 +362,7 @@ export class UI {
       this._rerender();
       return;
     }
-    if (b.dataset.tp !== undefined) { this.closeMenu(); g.teleport(+b.dataset.tp); return; }
+    if (b.dataset.tp !== undefined) { this.closeMenu(); if (g.mode === 'title') g.startFree(); g.teleport(+b.dataset.tp); return; }
     switch (b.dataset.act) {
       case 'back':
         this.back();
@@ -389,8 +399,10 @@ export class UI {
 
   refreshChallenges() {
     const ch = this.game.challenges;
-    $('ch-count').textContent = `${ch.count}/10`;
-    const next = ch.next(2);
+    $('ch-count').textContent = `${ch.count}/${CHALLENGES.length}`;
+    const a = this.game.area ?? -1, spot = this.game.world.spots[a];
+    $('ch-area').textContent = spot ? spot.name.replace(/ \(.*\)$/, '') : 'Missions';
+    const next = ch.next(2, a);
     $('ch-next').innerHTML = next.length ? next.map((c) => `<li>${c.text}</li>`).join('') : '<li>All done — legend! 🏆</li>';
   }
 

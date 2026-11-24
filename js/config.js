@@ -208,18 +208,58 @@ export const SCORING = {
 //  CHALLENGES — 10 goals shown in the Challenges menu
 //  type: gapTrick | grind | takeoffTrick | manual | gap | air | combo | trick
 // -----------------------------------------------------------------------------
+// CAREER MISSIONS — grouped by area (index into MAP_SPOTS); xp is the reward.
+// ids c1–c10 are the original challenges (saved progress carries over).
 export const CHALLENGES = [
-  { id: 'c1',  text: 'Ollie the 3-stair',                    type: 'gapTrick', gap: '3-Stair',  trick: 'Ollie' },
-  { id: 'c2',  text: 'Kickflip the 5-stair',                 type: 'gapTrick', gap: '5-Stair',  trick: 'Kickflip' },
-  { id: 'c3',  text: 'Kickflip the 10-stair',                type: 'gapTrick', gap: '10-Stair', trick: 'Kickflip' },
-  { id: 'c4',  text: 'Grind the long rail for 3 seconds',    type: 'grind', rail: 'longrail', seconds: 3 },
-  { id: 'c5',  text: 'Land a 360 Flip off the mega-ramp',    type: 'takeoffTrick', takeoff: 'mega_kick', trick: '360 Flip' },
-  { id: 'c6',  text: 'Boardslide a handrail',                type: 'grind', rail: 'handrail', grind: 'Boardslide', seconds: 0.4 },
-  { id: 'c7',  text: 'Hold a manual for 4 seconds',          type: 'manual', seconds: 4 },
-  { id: 'c8',  text: 'Clear the plaza gap',                  type: 'gap', gap: 'Plaza Gap' },
-  { id: 'c9',  text: 'Get 1.5m of air out of the halfpipe',  type: 'air', takeoff: 'halfpipe', height: 1.5 },
-  { id: 'c10', text: 'Land a 5,000 point combo',             type: 'combo', points: 5000 },
+  // Kikar Plaza
+  { id: 'c8',  area: 0, xp: 800,  text: 'Clear the Plaza Gap',                   type: 'gap', gap: 'Plaza Gap' },
+  { id: 'p1',  area: 0, xp: 400,  text: 'Grind a fountain ledge for 1.5 seconds', type: 'grind', rail: 'fountain', seconds: 1.5 },
+  { id: 'c7',  area: 0, xp: 600,  text: 'Hold a manual for 4 seconds',            type: 'manual', seconds: 4 },
+  { id: 'c10', area: 0, xp: 1000, text: 'Land a 5,000 point combo',               type: 'combo', points: 5000 },
+  { id: 'p2',  area: 0, xp: 2500, text: 'Land a 25,000 point combo',              type: 'combo', points: 25000 },
+  // Stair Terrace
+  { id: 'c1',  area: 1, xp: 300,  text: 'Ollie the 3-stair',                      type: 'gapTrick', gap: '3-Stair',  trick: 'Ollie' },
+  { id: 'c2',  area: 1, xp: 600,  text: 'Kickflip the 5-stair',                   type: 'gapTrick', gap: '5-Stair',  trick: 'Kickflip' },
+  { id: 't1',  area: 1, xp: 700,  text: 'Heelflip the 5-stair',                   type: 'gapTrick', gap: '5-Stair',  trick: 'Heelflip' },
+  { id: 'c6',  area: 1, xp: 700,  text: 'Boardslide a handrail',                  type: 'grind', rail: 'handrail', grind: 'Boardslide', seconds: 0.4 },
+  { id: 't2',  area: 1, xp: 500,  text: 'Grind the terrace ledge for 2 seconds',  type: 'grind', rail: 'ledge', seconds: 2 },
+  // Mega Ramp
+  { id: 'm1',  area: 2, xp: 1500, text: 'Clear the Mega Gap',                     type: 'gap', gap: 'Mega Gap' },
+  { id: 'c5',  area: 2, xp: 2000, text: 'Land a 360 Flip off the mega ramp',      type: 'takeoffTrick', takeoff: 'mega_kick', trick: '360 Flip' },
+  { id: 'm2',  area: 2, xp: 3000, text: 'Backflip the Mega Gap',                  type: 'gapTrick', gap: 'Mega Gap', trick: 'Backflip' },
+  // Hill Street
+  { id: 'h1',  area: 3, xp: 600,  text: 'Get 1 m of air on Hill Street',          type: 'air', takeoff: 'street', height: 1 },
+  { id: 'h2',  area: 3, xp: 900,  text: 'Land a Varial Kickflip',                 type: 'trick', trick: 'Varial Kickflip' },
+  // Park HaYarkon
+  { id: 'c9',  area: 4, xp: 800,  text: 'Get 1.5 m of air out of the halfpipe',   type: 'air', takeoff: 'halfpipe', height: 1.5 },
+  { id: 'y1',  area: 4, xp: 1500, text: 'Get 2.5 m of air out of the halfpipe',   type: 'air', takeoff: 'halfpipe', height: 2.5 },
+  { id: 'y2',  area: 4, xp: 600,  text: 'Grind the hubba for 1 second',           type: 'grind', rail: 'hubba', seconds: 1 },
+  // Beit Sefer 10-Stair
+  { id: 's1',  area: 5, xp: 1200, text: 'Ollie the 10-stair',                     type: 'gapTrick', gap: '10-Stair', trick: 'Ollie' },
+  { id: 'c3',  area: 5, xp: 2000, text: 'Kickflip the 10-stair',                  type: 'gapTrick', gap: '10-Stair', trick: 'Kickflip' },
+  { id: 's2',  area: 5, xp: 800,  text: 'Grind a picnic table',                   type: 'grind', rail: 'table', seconds: 0.5 },
+  // Parking Garage Roof
+  { id: 'g1',  area: 6, xp: 900,  text: 'Grind a roof ledge for 2 seconds',       type: 'grind', rail: 'roof_ledge', seconds: 2 },
+  { id: 'g2',  area: 6, xp: 1000, text: 'Get 1.5 m of air off the roof quarter',  type: 'air', takeoff: 'roof_quarter', height: 1.5 },
+  // Container Gap
+  { id: 'k1',  area: 7, xp: 1000, text: 'Clear the Container Gap',                type: 'gap', gap: 'Container Gap' },
+  { id: 'k2',  area: 7, xp: 1800, text: 'Kickflip the Container Gap',             type: 'gapTrick', gap: 'Container Gap', trick: 'Kickflip' },
+  // Tayelet
+  { id: 'c4',  area: 0, xp: 700,  text: 'Grind the long rail for 3 seconds',      type: 'grind', rail: 'longrail', seconds: 3 },
+  { id: 'b1',  area: 8, xp: 1500, text: 'Grind the seawall for 5 seconds',        type: 'grind', rail: 'seawall', seconds: 5 },
+  { id: 'b2',  area: 8, xp: 700,  text: 'Grind a promenade bench',                type: 'grind', rail: 'tlv_bench', seconds: 0.5 },
+  // Secret Backyard Pool
+  { id: 'o1',  area: 9, xp: 1200, text: 'Get 1 m of air out of the pool',         type: 'air', takeoff: 'pool', height: 1 },
+  { id: 'o2',  area: 9, xp: 1500, text: 'Land a Frontflip anywhere',              type: 'trick', trick: 'Frontflip' },
 ];
+// Locker items unlocked by career level ('key:value' → level). Anything not listed is free.
+export const UNLOCKS = {
+  'top:crewneck': 2, 'shoeStyle:hightop': 2, 'chain:wallet': 2, 'hat:bucket': 2,
+  'top:ziphoodie': 3, 'shoeStyle:chunky': 3, 'chain:necklace': 3, 'deckGraphic:bolt': 3,
+  'top:windbreaker': 4, 'chain:both': 4, 'deckGraphic:star': 4, 'wheelSize:60': 4,
+  'top:jersey': 5, 'hairStyle:mohawk': 5, 'glasses:shades': 5,
+};
+export const AREA_XP = 250;     // first visit to each area
 
 // -----------------------------------------------------------------------------
 //  CAMERA

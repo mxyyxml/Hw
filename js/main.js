@@ -43,11 +43,11 @@ import { ComboSystem } from './tricks.js';
 import { Challenges } from './challenges.js';
 import { Audio } from './audio.js';
 import { Replay } from './replay.js';
-import { UI } from './ui.js';
+import { UI, levelOf } from './ui.js';
 import { Weather, Particles } from './weather.js';
 import { TouchControls, isTouchDevice } from './touch.js';
 import { FlickGesture } from './gesture.js';
-import { DEFAULT_OUTFIT } from './config.js';
+import { DEFAULT_OUTFIT, OUTFIT_OPTIONS, UNLOCKS, AREA_XP } from './config.js';
 import { Storage } from './storage.js';
 
 // Gradient sky dome (vertex colours, no texture) that follows the camera.
@@ -470,7 +470,7 @@ class Game {
       this.ui.showCombo(this.combo, 'banked', pts);
       this.audio.bank(d.mult);
       this.challenges.onCombo(pts);
-      this.stats.combos++; this.stats.xp += pts;
+      this.stats.combos++; this.addXP(pts);
     } else if (type === 'drop') {
       this.ui.showCombo(this.combo, 'dropped', d.lost);
       this.audio.drop();
@@ -478,8 +478,40 @@ class Game {
   }
 
   onChallenge(c) {
-    this.ui.toast('✔ Challenge complete: ' + c.text, 'challenge', 3500);
+    this.ui.toast(`✔ Mission complete: ${c.text}  +${(c.xp || 500).toLocaleString('en-US')} XP`, 'challenge', 3500);
     this.audio.challenge();
+    this.addXP(c.xp || 500);
+    this.ui.refreshChallenges();
+  }
+
+  // career XP; levelling up unlocks Locker gear (config.UNLOCKS)
+  addXP(n) {
+    const before = levelOf(this.stats.xp).level;
+    this.stats.xp += n;
+    const after = levelOf(this.stats.xp).level;
+    if (after > before) {
+      const gear = Object.entries(UNLOCKS).filter(([, l]) => l > before && l <= after).map(([k]) => {
+        const [key, v] = k.split(':'), opt = (OUTFIT_OPTIONS[key] || []).find((o) => String(o[0]) === v);
+        return opt ? opt[1] : v;
+      });
+      this.ui.popup('LEVEL ' + after + '!', 'good');
+      setTimeout(() => this.ui.toast(gear.length ? 'Unlocked in the Locker: ' + gear.join(', ') : 'Level ' + after + ' reached', 'challenge', 4000), 3600);
+    }
+  }
+
+  // which area (spot) are you in? first visits are discoveries (+XP)
+  _checkArea() {
+    const p = this.player.pos; let best = -1, bd = 32 * 32;
+    this.world.spots.forEach((s, i) => { const d = (s.x - p.x) ** 2 + (s.z - p.z) ** 2; if (d < bd) { bd = d; best = i; } });
+    if (best < 0 || best === this.area) return;
+    this.area = best;
+    const name = this.world.spots[best].name.replace(/ \(.*\)$/, '');
+    const seen = Storage.get('areas', []);
+    if (!seen.includes(best)) {
+      seen.push(best); Storage.set('areas', seen);
+      this.ui.toast(`Area discovered: ${name}  +${AREA_XP} XP`, 'challenge', 3000);
+      this.addXP(AREA_XP);
+    } else this.ui.toast(name, '', 1600);
     this.ui.refreshChallenges();
   }
 
@@ -558,6 +590,7 @@ class Game {
       this.audio.update(p.state === 'wallride' ? 'ride' : p.state, p.displaySpeed(), { surface, chatter: p.chatter || 0, grindName: p.grind && p.grind.def ? p.grind.def.name : '', walkSpeed: p.walkSpeed || 0, dt: realDt, beach });
     }
     this.ui.updateHUD(realDt);
+    if ((this._areaT = (this._areaT || 0) + realDt) > 0.5) { this._areaT = 0; this._checkArea(); }
     // career stats
     const S = this.stats;
     S.playTime += realDt;
