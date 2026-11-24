@@ -908,6 +908,7 @@ export class Skater {
     this.torso.rotation.x += a.bal * s * 1.1;
     this.head.rotation.y = s * (-0.95 + a.lean * 0.15) * (1 - a.push * 0.8);
     this.head.rotation.x = -0.1 - a.crouch * 0.2 - (a.bal || 0) * s * 0.5;
+    this.head.rotation.x += (a.clear || 0) * 0.4 + a.grab * 0.25;     // eyes on the board while it flips / when grabbing
     const t = performance.now() / 1000;
     for (const A of this.arms) {
       const wobble = (mode === 'manual' || mode === 'grind') ? Math.sin(t * 7 + A.sgn) * 0.15 : 0;
@@ -978,6 +979,30 @@ export class Skater {
         for (const L of this.legs) { L.hip.rotation.x -= 0.55; L.knee.rotation.x += 0.85; L.foot.rotation.x -= 0.3; }
         for (const A of this.arms) { A.sh.rotation.x -= 0.6; A.sh.rotation.z += A.sgn * 0.45; }
       }
+    }
+
+    // ---------------- SECONDARY MOTION: the body's inertia. Springs driven by the
+    // board's real acceleration make the upper body lag when you push or brake, sway
+    // through carves, and the arms flare and settle after landings (with overshoot).
+    if (mode !== 'bail' && dt > 0) {
+      const sm = this._sm || (this._sm = { p: this.root.position.clone(), v: new THREE.Vector3(), a: new THREE.Vector3(), q: new THREE.Quaternion(),
+        tz: 0, tzv: 0, tx: 0, txv: 0, ar: 0, arv: 0 });
+      const v = this.root.position.clone().sub(sm.p).divideScalar(dt);
+      sm.p.copy(this.root.position);
+      if (v.lengthSq() > 900) v.copy(sm.v);                              // teleport / respawn: ignore
+      const acc = v.clone().sub(sm.v).divideScalar(dt); sm.v.copy(v);
+      acc.clampLength(0, 40);
+      sm.a.lerp(acc, 1 - Math.exp(-25 * dt));                           // smooth out the fixed-step jitter
+      const loc = sm.a.clone().applyQuaternion(sm.q.copy(this.root.quaternion).invert());   // board frame: z = travel, x = side
+      const spring = (x, xv, target, k, c) => { const av = k * (target - x) - c * xv; xv += av * dt; return [x + xv * dt, xv]; };
+      [sm.tz, sm.tzv] = spring(sm.tz, sm.tzv, Math.max(-0.22, Math.min(0.22, -s * loc.z * 0.022)), 90, 9);
+      [sm.tx, sm.txv] = spring(sm.tx, sm.txv, Math.max(-0.15, Math.min(0.15, loc.x * 0.012 * s)), 80, 10);
+      const impact = mode === 'air' ? 0 : Math.max(0, loc.y - 2) * 0.012;                  // landing: big upward accel
+      [sm.ar, sm.arv] = spring(sm.ar, sm.arv, Math.min(0.9, impact), 60, 6);
+      const w = 1 - a.walk;
+      this.torso.rotation.z += sm.tz * w; this.torso.rotation.x += sm.tx * w;
+      this.head.rotation.z = -sm.tz * 0.7 * w;                         // eyes stay level
+      for (const A of this.arms) { A.sh.rotation.z += A.sgn * (sm.ar * 0.9 + Math.abs(sm.tz) * 0.8) * w; A.sh.rotation.x += sm.tz * A.sgn * 0.6 * w; A.el.rotation.x -= sm.ar * 0.5 * w; }
     }
 
     // ---------------- bail tumble (roll angle from Player physics)
