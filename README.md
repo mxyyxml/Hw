@@ -122,6 +122,15 @@ mapping, a filmic colour grade (split toning, light contrast, soft vignette) and
 City blocks have real facade relief: a stone band at every floor, deep cornices and corner pilasters.
 Use **Low** on very weak machines (no post-processing).
 
+### 🗿 Modelled & sculpted in Blender
+- **Shoes** (`tools/model-shoes.py`): three skate-shoe silhouettes (vulc low-top, padded high-top, chunky cupsole),
+  built part by part in Blender: last-shaped sole with rounded edge, rubber toe bumper and foxing stripe; a lofted,
+  subdivided upper with a real ankle opening and wall thickness; padded collar following the opening; curved tongue;
+  suede toe cap and heel counter; criss-cross laces through metal eyelets. Exported as glTF; colours come from the Locker.
+- **Body sculpt** (`tools/sculpt-body.py`): the skater's body (male and female) is subdivided to ~320k faces in
+  Blender, its anatomy sharpened (muscle grooves, collarbones, shoulder blades, kneecaps, knuckles, face planes) and
+  given skin grain, then **baked to a normal map** on the game mesh's skin UVs — the standard sculpt-high / bake-low workflow.
+
 ### 🧵 Cloth-simulated clothes (Blender)
 Every top and bottom, on both bodies, is draped by a real **Blender cloth simulation** (`tools/cloth-sim.py`, run with
 Blender's Python module): the garment the game builds is simulated over the body with gravity, collision, a little

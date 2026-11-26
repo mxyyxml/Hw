@@ -9,7 +9,18 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { DEFAULT_OUTFIT, PUSH } from './config.js';
 import { buildBody } from './body.js';
 import { fitSkeleton, buildHuman, hairTextures, humanTex } from './human.js';
-import { getFabric } from './textures.js';
+import { getFabric, assetURL } from './textures.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// skate shoes modelled in Blender (tools/model-shoes.py), one glTF per silhouette
+const _shoeModels = {};
+function loadShoe(style) {
+  if (!_shoeModels[style]) {
+    const loader = new GLTFLoader(); loader.manager.setURLModifier((u) => assetURL(u));
+    _shoeModels[style] = new Promise((ok) => loader.load(`assets/models/shoes/shoe_${style}.gltf`, (g) => ok(g.scene), undefined, () => ok(null)));
+  }
+  return _shoeModels[style];
+}
 
 const THIGH = 0.42, SHIN = 0.42;          // leg bone lengths
 const DECK_Y = 0.105;                     // height of the deck top above the ground
@@ -150,7 +161,7 @@ export class Skater {
       skin: M(0xe0ac69), skinDark: M(0xc0905a), hair: M(0x2b1d14),
       top: M(0x2a9d8f), topDark: M(0x21867a), topTrim: M(0xffffff),
       pants: M(0x3d5a80), pantsDark: M(0x2f4766),
-      shoe: M(0xf1f1f1), sole: M(0x222222), lace: M(0xdddddd),
+      shoe: M(0xf1f1f1), sole: M(0x222222), lace: M(0xdddddd), soleW: M(0xf2efe8), shoeAccent: M(0xbdbdbd),
       hat: M(0xf4743b), hatDark: M(0xd65a22), visor: M(0x1d1d1d),
       pack: M(0x264653), packDark: M(0x1b343d),
       grip: M(0x1d1d1d), deck: M(0xe9c46a), deckSide: M(0xc9a24a),
@@ -343,14 +354,16 @@ export class Skater {
     this._fitBody(fit);
     this.bodyMesh = buildHuman(this);
     if (this.belt) this.belt.visible = false;
-    // proper sneakers on the real feet
+    // proper sneakers on the real feet (procedural first, the Blender model replaces them once loaded)
     for (const L of this.legs) this._makeSneaker(L.foot);
+    this._useShoeModel('vulc');
   }
 
   // everything that depends on the body's proportions: leg lengths for the IK,
   // eyes, hats, glasses, hood and backpack
   _fitBody(fit) {
     this.thigh = fit.thigh; this.shin = fit.shin; this.footH = fit.footH; this.hipX = fit.hipX;
+    for (const L of this.legs || []) for (const c of L.foot.children) if (c.userData.model) c.position.y = -this.footH;
     const J = fit.joints, neck = J.neck;
     ['l', 'r'].forEach((side, i) => this._eyes[i].position.copy(J[side + '-eye']).sub(neck));
     // fit hats (designed for the old head) onto the real head
@@ -402,6 +415,27 @@ export class Skater {
   //    toe box; printed suede toe & heel panels, stitching and a side stripe
   //  * vulcanised sole with a raised rubber foxing band and toe bumper
   //  * padded collar, tongue, and real criss-cross laces through eyelets
+  // swap the procedural shoes for the Blender-modelled ones (right shoe as modelled, left mirrored)
+  _useShoeModel(style) {
+    loadShoe(style).then((scene) => {
+      if (!scene || (this._shoeStyle || 'vulc') !== style) return;
+      const m = this.mat, MAP = { upper: 'shoe', accent: 'shoeAccent', sole: 'soleW', foxing: 'sole', lace: 'lace', metal: 'bolt' };
+      this.legs.forEach((L, i) => {
+        for (const c of [...L.foot.children]) if (c.userData.shoe) { L.foot.remove(c); if (!c.userData.model) c.geometry.dispose(); }
+        const s = scene.clone(true);
+        s.traverse((o) => {
+          if (!o.isMesh) return;
+          o.material = m[MAP[o.material.name] || 'shoe'];
+          o.castShadow = o.material !== m.lace && o.material !== m.bolt; o.receiveShadow = true;
+        });
+        s.position.y = -this.footH;
+        if (i === 1) s.scale.x = -1;                 // leg 1 = the character's left foot
+        s.userData.shoe = true; s.userData.model = true;
+        L.foot.add(s);
+      });
+    });
+  }
+
   // style: 'vulc' (slim low-top), 'hightop' (padded collar over the ankle), 'chunky' (puffy cupsole)
   _makeSneaker(foot, style = 'vulc') {
     const m = this.mat;
@@ -621,6 +655,11 @@ export class Skater {
     o = { ...DEFAULT_OUTFIT, ...o };
     const m = this.mat, dark = (hex, f = 0.78) => new THREE.Color(hex).multiplyScalar(f);
     m.skin.color.setHex(o.skin); m.skinDark.color.copy(dark(o.skin, 0.86));
+    if (this.human) {
+      // sculpted anatomy + skin grain, baked in Blender onto the skin UVs (tools/sculpt-body.py)
+      const nm = humanTex(o.body === 'female' ? 'skin_n_female.webp' : 'skin_n_male.webp', false);
+      if (m.skin.normalMap !== nm) { m.skin.normalMap = nm; m.skin.normalScale.set(1, 1); m.skin.needsUpdate = true; }
+    }
     m.hair.color.setHex(o.hairColor);
     for (const k of ['brow', 'hairCard', 'stubble']) m[k].color.setHex(o.hairColor);
     m.brow.color.multiplyScalar(0.8);
@@ -639,10 +678,12 @@ export class Skater {
     if (this.human && (o.shoeStyle || 'vulc') !== (this._shoeStyle || 'vulc')) {   // new silhouette: rebuild both shoes
       this._shoeStyle = o.shoeStyle;
       for (const L of this.legs) {
-        for (const c of [...L.foot.children]) if (c.userData.shoe) { L.foot.remove(c); c.geometry.dispose(); }
+        for (const c of [...L.foot.children]) if (c.userData.shoe) { L.foot.remove(c); c.geometry && c.geometry.dispose(); }
         this._makeSneaker(L.foot, o.shoeStyle);
       }
+      this._useShoeModel(o.shoeStyle || 'vulc');
     }
+    m.shoeAccent.color.copy(dark(o.shoeColor, 0.78));
     m.grip.color.setHex(o.gripColor ?? 0x262626);
     m.truck.color.setHex(o.truckColor ?? 0xb9bec4);
     if (m.top.isMeshStandardMaterial) m.topDark.roughness = m.top.roughness = o.top === 'windbreaker' ? 0.42 : 0.92;
