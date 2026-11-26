@@ -200,10 +200,11 @@ class GeoBuilder {
   }
 
   // Thin box between two 3D points (rails, posts, coping)
-  beam(a, b, thick, color) {
+  // round = a steel tube (rails, posts) instead of a square bar
+  beam(a, b, thick, color, round = false) {
     const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
     const len = Math.hypot(dx, dy, dz);
-    const geo = new THREE.BoxGeometry(thick, thick, len).toNonIndexed();
+    const geo = round ? new THREE.CylinderGeometry(thick / 2, thick / 2, len, 12).rotateX(Math.PI / 2).toNonIndexed() : new THREE.BoxGeometry(thick, thick, len).toNonIndexed();
     const m = new THREE.Matrix4();
     const mid = new THREE.Vector3((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
     m.lookAt(mid, new THREE.Vector3(b[0], b[1], b[2]), Math.abs(dy / len) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0));
@@ -311,7 +312,7 @@ export class World {
   }
   rail(a, b, tag, color = C.rail, posts = true) {
     this.col.addRail(a, b, tag);
-    this.geo.beam(a, b, 0.07, color);
+    this.geo.beam(a, b, 0.07, color, true);
     if (!posts) return;
     const len = Math.hypot(b[0] - a[0], b[2] - a[2]);
     const n = Math.max(2, Math.ceil(len / 3) + 1);
@@ -319,7 +320,7 @@ export class World {
       const t = 0.04 + 0.92 * (i / (n - 1));
       const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t, z = a[2] + (b[2] - a[2]) * t;
       const gy = this.col.ground(x, z, y - 0.05).h;
-      this.geo.beam([x, gy, z], [x, y, z], 0.06, C.metal);
+      this.geo.beam([x, gy, z], [x, y, z], 0.06, C.metal, true);
     }
   }
   // grindable ledge: a box whose two long top edges are rails

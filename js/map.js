@@ -63,16 +63,54 @@ function stairs(W, { xc, zTop, W: width, n, tag, rails }) {
 }
 
 // a parked car (collision + simple body, cabin, glass and wheels)
+// A modelled hatchback / sedan: a bevelled body extruded from a real side profile,
+// a glass cabin with body-coloured roof and pillars, wheel arches, five-spoke rims,
+// head- and tail-lights, mirrors and number plates.
+let _carGeo = null;
+function carParts() {
+  if (_carGeo) return _carGeo;
+  const ext = (pts, depth, bevel) => {
+    const sh = new THREE.Shape(); pts.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+    return new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 6 }).translate(0, 0, -depth / 2);
+  };
+  // side profile, x = along the car (front at +x), y = up
+  const body = ext([[-2.1, 0.32], [2.05, 0.32], [2.15, 0.48], [2.12, 0.72], [1.95, 0.82], [1.0, 0.9], [-1.3, 0.92], [-2.05, 0.9], [-2.15, 0.7], [-2.15, 0.45]], 1.62, 0.09);
+  const cabin = ext([[-1.65, 0.92], [0.95, 0.92], [0.25, 1.38], [-1.25, 1.4], [-1.75, 1.0]], 1.46, 0.05);
+  const roof = ext([[-1.2, 1.36], [0.22, 1.36], [0.2, 1.42], [-1.18, 1.44]], 1.42, 0.03);
+  const pillars = [ext([[-0.43, 0.92], [-0.33, 0.92], [-0.33, 1.38], [-0.43, 1.38]], 1.5, 0.01)];
+  // wheel: tyre + rim with five spokes, built pointing along z (the car's width axis)
+  const tyre = new THREE.TorusGeometry(0.25, 0.085, 8, 20);
+  const rim = [new THREE.CylinderGeometry(0.2, 0.2, 0.06, 16).rotateX(Math.PI / 2)];
+  for (let k = 0; k < 5; k++) rim.push(new THREE.BoxGeometry(0.035, 0.17, 0.03).translate(0, 0.085, 0.04).rotateZ(k * Math.PI * 2 / 5));
+  const arch = new THREE.CylinderGeometry(0.4, 0.4, 1.66, 16, 1, true, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2).rotateZ(Math.PI / 2);
+  _carGeo = { body, cabin, roof, pillars, tyre, rim, arch };
+  return _carGeo;
+}
 function car(W, x, z, yaw, color) {
-  const c = Math.cos(yaw), s = Math.sin(yaw), L = 4.3, Wd = 1.8;
-  W.col.addBox({ x, z, w: Wd, d: L, h: 1.45, yaw, tag: 'car' });
-  W.geo.prism({ x, z, w: Wd, d: L, yaw }, [0.95, 0.95, 0.95, 0.95], 0.3, color, color);
-  W.geo.prism({ x: x - s * 0.2, z: z - c * 0.2, w: Wd - 0.15, d: 2.2, yaw }, [1.45, 1.45, 1.45, 1.45], 0.95, 0x2a3440, 0x2a3440);
-  for (const [lx, lz] of [[-0.8, -1.3], [0.8, -1.3], [-0.8, 1.35], [0.8, 1.35]]) {
-    const wx = x + lx * c + lz * s, wz = z - lx * s + lz * c;
-    W.geo.addGeometry(new THREE.CylinderGeometry(0.33, 0.33, 0.24, 12).rotateZ(Math.PI / 2).rotateY(yaw), new THREE.Matrix4().makeTranslation(wx, 0.33, wz), 0x1d1d1d);
+  const P = carParts(), G = W.geo;
+  W.col.addBox({ x, z, w: 1.8, d: 4.3, h: 1.45, yaw, tag: 'car' });
+  // the profile runs along local x; turn it so the car's length lies along the yaw direction
+  const M = (lx, ly, lz) => new THREE.Matrix4().makeTranslation(x, 0, z).multiply(new THREE.Matrix4().makeRotationY(yaw - Math.PI / 2)).multiply(new THREE.Matrix4().makeTranslation(lx, ly, lz));
+  const add = (g, m, c) => G.addGeometry(g.clone(), m, c);
+  add(P.body, M(0, 0, 0), color);
+  add(P.cabin, M(0, 0, 0), 0x1e2730);
+  add(P.roof, M(0, 0, 0), color);
+  for (const g of P.pillars) add(g, M(0, 0, 0), color);
+  for (const ax of [-1.3, 1.35]) {
+    add(P.arch, M(ax, 0.33, 0), 0x15181b);
+    for (const side of [-1, 1]) {
+      add(P.tyre, M(ax, 0.33, side * 0.8), 0x1b1b1b);
+      for (const g of P.rim) add(g, M(ax, 0.33, side * 0.84).multiply(new THREE.Matrix4().makeRotationY(side < 0 ? Math.PI : 0)), 0xb9bec4);
+    }
   }
-  W.geo.castShadow([[x - 1, 0, z - 2.2], [x + 1, 0, z - 2.2], [x - 1, 0, z + 2.2], [x + 1, 0, z + 2.2], [x, 1.4, z]], 0);
+  for (const side of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.06, 0.1, 0.32), M(2.17, 0.68, side * 0.56), 0xfff6d8);      // headlights
+    add(new THREE.BoxGeometry(0.06, 0.12, 0.3), M(-2.18, 0.72, side * 0.6), 0xb3202a);      // tail-lights
+    add(new THREE.BoxGeometry(0.16, 0.09, 0.06), M(0.75, 1.0, side * 0.92), color);         // mirrors
+  }
+  add(new THREE.BoxGeometry(0.03, 0.12, 0.5), M(2.22, 0.42, 0), 0xf2f2f2);                // plates
+  add(new THREE.BoxGeometry(0.03, 0.12, 0.5), M(-2.24, 0.5, 0), 0xf2d34a);               // (Israeli rear plates are yellow)
+  G.castShadow([[x - 1, 0, z - 2.2], [x + 1, 0, z - 2.2], [x - 1, 0, z + 2.2], [x + 1, 0, z + 2.2], [x, 1.4, z]], 0);
 }
 
 // A Tel Aviv "White City" apartment block, all real geometry: white / cream stucco,
@@ -133,10 +171,16 @@ function block(W, x, z, w, d, h, col, k) {
   }
 }
 
+// street lamp: tapered round pole, base plinth, curved arm and a lantern head
 function lamp(W, x, z, y = 0) {
+  const G = W.geo;
   W.col.addBox({ x, z, w: 0.22, d: 0.22, h: y + 5, tag: 'lamp' });
-  W.geo.beam([x, y, z], [x, y + 5, z], 0.12, C.metal);
-  W.geo.prism({ x: x + 0.5, z, w: 1.2, d: 0.35 }, [y + 5.15, y + 5.15, y + 5.15, y + 5.15], y + 4.95, 0xfff3b0, 0xfff3b0);
+  G.addGeometry(new THREE.CylinderGeometry(0.16, 0.18, 0.6, 12), new THREE.Matrix4().makeTranslation(x, y + 0.3, z), C.metal);
+  G.addGeometry(new THREE.CylinderGeometry(0.055, 0.09, 4.7, 10), new THREE.Matrix4().makeTranslation(x, y + 2.95, z), C.metal);
+  const arc = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 5.2, 0), new THREE.Vector3(0, 5.75, 0), new THREE.Vector3(0.9, 5.6, 0));
+  G.addGeometry(new THREE.TubeGeometry(arc, 10, 0.045, 8), new THREE.Matrix4().makeTranslation(x, y, z), C.metal);
+  G.addGeometry(new THREE.CylinderGeometry(0.12, 0.26, 0.22, 12), new THREE.Matrix4().makeTranslation(x + 0.95, y + 5.5, z), C.metal);
+  G.addGeometry(new THREE.CylinderGeometry(0.22, 0.2, 0.06, 12), new THREE.Matrix4().makeTranslation(x + 0.95, y + 5.37, z), 0xfff3b0);
 }
 
 export function buildMap(W) {
