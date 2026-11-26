@@ -55,7 +55,7 @@ kbd {
 .nav-item { position: relative; display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; text-align: left; background: none; border: 0;
   padding: 12px 14px; border-radius: 12px; transition: background 0.2s, transform 0.2s; animation: slideIn 0.5s ease both; }
 .nav-item:nth-child(1) { animation-delay: 0.05s; } .nav-item:nth-child(2) { animation-delay: 0.1s; } .nav-item:nth-child(3) { animation-delay: 0.15s; }
-.nav-item:nth-child(4) { animation-delay: 0.2s; } .nav-item:nth-child(5) { animation-delay: 0.25s; } .nav-item:nth-child(6) { animation-delay: 0.3s; }
+.nav-item:nth-child(4) { animation-delay: 0.2s; } .nav-item:nth-child(5) { animation-delay: 0.25s; } .nav-item:nth-child(6) { animation-delay: 0.3s; } .nav-item:nth-child(7) { animation-delay: 0.35s; }
 .nav-item .num { grid-row: span 2; font: 800 13px var(--display); color: var(--dim); padding-top: 6px; letter-spacing: 1px; }
 .nav-item .lbl { font-family: var(--display); font-size: 30px; letter-spacing: 1px; text-transform: uppercase; line-height: 1.05; }
 .nav-item .sub { font-size: 12.5px; color: var(--dim); }

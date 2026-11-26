@@ -8,6 +8,7 @@ import { CHALLENGES, OUTFIT_OPTIONS, OUTFIT_COLORS, KEYS, UNLOCKS } from './conf
 import { LOAD } from './textures.js';
 import { Storage } from './storage.js';
 import { WEATHER_OPTIONS } from './weather.js';
+import { PAD_ACTIONS } from './gamepad.js';
 import { TOUCH_HELP } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
@@ -150,6 +151,7 @@ export class UI {
     g.audio.init(); g.audio.ui();
     if (act === 'play') g.startFree();
     else if (act === 'lunch') g.startLunch();
+    else if (act === 'ctlsettings') { this.tab.settings = 'controls'; this.showTitle(false); this.openMenu('settings', fromTitle); }
     else { this.showTitle(false); this.openMenu(act, fromTitle); }
   }
 
@@ -229,6 +231,7 @@ export class UI {
       <button class="btn" data-act="closet">Locker <small>Skater · fits · board</small></button>
       <button class="btn" data-act="challenges">Missions <small>${g.challenges.count}/${CHALLENGES.length}</small></button>
       <button class="btn" data-act="stats">Career <small>Level ${levelOf(g.stats.xp).level}</small></button>
+      <button class="btn" data-act="ctlsettings">Controls <small>Keyboard &amp; controller</small></button>
       <button class="btn" data-act="settings">Settings</button>
       <button class="btn" data-act="lunch">${g.mode === 'lunch' ? 'Restart Board Session' : 'Start a Board Session'}</button>
       <button class="btn danger" data-act="title">Quit to main menu</button></div>`;
@@ -263,7 +266,12 @@ export class UI {
     } else if (t === 'controls') {
       h += `<p class="muted">Click a binding, then press the new key. <kbd>Esc</kbd> cancels. Arrow keys stay as a second binding for movement.</p>`;
       for (const [a, n] of Object.entries(BIND_NAMES)) if (KEYS[a]) h += `<div class="bind"><span>${n}</span><button data-bind="${a}" class="${this._binding === a ? 'wait' : ''}">${this._binding === a ? 'Press a key…' : keyName(KEYS[a][0])}</button></div>`;
-      h += `<div class="list"><button class="btn" data-act="controls">Full controls reference</button><button class="btn danger" data-act="resetkeys">Reset to defaults</button></div>`;
+      h += `<h3>Controller</h3><p class="muted">${g.pads.connected ? 'Click an action, then press a button on your controller.' : 'Plug in a controller and press any button to remap it here.'} The left stick steers and the right stick is flick-it.</p>`;
+      for (const a of PAD_ACTIONS) {
+        const w = this._padBinding === a, cur = g.pads.buttonsFor(a).join(' / ') || '—';
+        h += `<div class="bind"><span>${BIND_NAMES[a] || a}</span><button data-padbind="${a}" class="${w ? 'wait' : ''}">${w ? 'Press a button…' : cur}</button></div>`;
+      }
+      h += `<div class="list"><button class="btn" data-act="controls">Full controls reference</button><button class="btn danger" data-act="resetkeys">Reset keyboard &amp; controller to defaults</button></div>`;
     } else if (t === 'camera') {
       h += row('Camera', 'Also C while skating', this._seg('camera', [['follow', 'Follow'], ['filmer', 'Filmer'], ['fisheye', 'Fisheye'], ['first', 'First person']], g.rig.mode));
       h += row(`Mouse sensitivity <b id="sens-val">${s.camSensitivity.toFixed(1)}</b>`, 'Right-mouse drag look', `<input type="range" min="0.3" max="2" step="0.1" value="${s.camSensitivity}" data-range="camSensitivity">`);
@@ -359,6 +367,13 @@ export class UI {
     g.audio.init(); g.audio.ui();
     if (b.dataset.tab) { this.tab[b.dataset.tab] = b.dataset.val; this._renderMenu(); $('menu-card').scrollTop = 0; return; }
     if (b.dataset.bind) { if (!this._binding) this._startBind(b.dataset.bind); return; }
+    if (b.dataset.padbind) {
+      const a = b.dataset.padbind; this._padBinding = a; this._rerender();
+      const cancel = (e) => { if (e.code === 'Escape') { e.stopImmediatePropagation(); g.pads.capture = null; this._padBinding = null; this._rerender(); } window.removeEventListener('keydown', cancel, true); };
+      window.addEventListener('keydown', cancel, true);
+      g.pads.capture = (i) => { g.pads.rebind(a, i); this._padBinding = null; window.removeEventListener('keydown', cancel, true); if (this.menuOpen) this._rerender(); };
+      return;
+    }
     if (b.dataset.set) { g.applySetting(b.dataset.set, b.dataset.val); this._rerender(); return; }
     if (b.dataset.outfit) {
       const k = b.dataset.outfit;
@@ -381,7 +396,8 @@ export class UI {
       case 'play': this.closeMenu(); g.startFree(); break;
       case 'title': this.closeMenu(); g.quitToTitle(); break;
       case 'resetch': g.challenges.reset(); this.refreshChallenges(); this._renderMenu(); break;
-      case 'resetkeys': Storage.set('keys', {}); location.reload(); break;
+      case 'resetkeys': Storage.set('keys', {}); g.pads.reset(); location.reload(); break;
+      case 'ctlsettings': this.tab.settings = 'controls'; this.openMenu('settings', top.fromTitle); break;
       default: this.openMenu(b.dataset.act, top.fromTitle);
     }
   }

@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { HUMAN } from './humanData.js';
 import { assetURL, track } from './textures.js';
+import { CLOTH_BAKE } from './clothBake.js';
 import { mergeGeometries as mergeGeos } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // textures for the MakeHuman assets (photo skin, hair / brow / lash cut-outs, eyes)
@@ -387,13 +388,14 @@ export function buildHuman(sk) {
   // Cut the body surface where field < 0. thick(i, f) = how far each vertex is
   // pushed out. Returns a skinned BufferGeometry (with a folded hem) or null.
   const layer = (field, thick, opts = {}) => {
+    let bakeDelta = null;
     const F = new Float32Array(n);
     for (let i = 0; i < n; i++) F[i] = field(i);
-    const P = [], N = [], SI = [], SW = [], UV = [], TH = [], OUT = [];
+    const P = [], N = [], SI = [], SW = [], UV = [], TH = [], OUT = [], SRC = [];   // SRC: body vertices a, b, t each vertex came from
     const vmap = new Int32Array(n).fill(-1), emap = new Map();
     const addV = (i) => {
       if (vmap[i] >= 0) return vmap[i];
-      const k = P.length / 3; vmap[i] = k;
+      const k = P.length / 3; vmap[i] = k; SRC.push(i, i, 0);
       P.push(base[i * 3], base[i * 3 + 1], base[i * 3 + 2]); N.push(normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
       for (let c = 0; c < 4; c++) { SI.push(si[i * 4 + c]); SW.push(swf[i * 4 + c]); }
       UV.push(uv[i * 2], uv[i * 2 + 1]); TH.push(thick(i, F[i]));
@@ -403,7 +405,7 @@ export function buildHuman(sk) {
       const key = a < b ? a * n + b : b * n + a;
       if (emap.has(key)) return emap.get(key);
       const t = F[a] / (F[a] - F[b]);
-      const k = P.length / 3;
+      const k = P.length / 3; SRC.push(a, b, t);
       for (let c = 0; c < 3; c++) { P.push(base[a * 3 + c] + (base[b * 3 + c] - base[a * 3 + c]) * t); N.push(normals[a * 3 + c] + (normals[b * 3 + c] - normals[a * 3 + c]) * t); }
       // blend the two skin-weight sets, keep the 4 strongest
       const w = new Map();
@@ -486,6 +488,29 @@ export function buildHuman(sk) {
         if (d) { P[k * 3] += OUT[k * 3] * d; P[k * 3 + 1] += OUT[k * 3 + 1] * d; P[k * 3 + 2] += OUT[k * 3 + 2] * d; }
       }
     }
+    // CLOTH SIMULATION BAKE: per-vertex drape from a Blender cloth sim of this exact
+    // garment on this exact body (tools/cloth-sim.py); same topology, so we add the deltas
+    if (opts.bake) {
+      if (typeof window !== 'undefined' && window.__clothExport) window.__clothExport.push({ key: opts.bake, P: Array.from(P.slice(0, cnt0 * 3)), tris: tris.slice(), body: Array.from(base), index: Array.from(index), J: { neckY, shY, shX, waistY, hipY, kneeY, ankleY } });
+      const D = CLOTH_BAKE[opts.bake];
+      if (D && D.n === cnt0) {
+        const d = dec(D.d, Int16Array), BD = new Float32Array(n * 3);   // drape per body vertex, for overlays
+        for (let k = 0; k < cnt0 * 3; k++) P[k] += d[k] * 1e-4;
+        for (let i = 0; i < n; i++) { const k = vmap[i]; if (k >= 0) for (let c = 0; c < 3; c++) BD[i * 3 + c] = d[k * 3 + c] * 1e-4; }
+        bakeDelta = BD;
+      }
+    }
+    // overlays (print, zip, yoke, hood, straps) ride on the draped garment below: their
+    // offset already covers the outward part, so add the sideways / downward part of its drape
+    if (opts.follow && opts.follow.userData.drape) {
+      const BD = opts.follow.userData.drape;
+      for (let k = 0; k < cnt0; k++) {
+        const a = SRC[k * 3], b = SRC[k * 3 + 1], t = SRC[k * 3 + 2];
+        let dx = BD[a * 3] * (1 - t) + BD[b * 3] * t, dy = BD[a * 3 + 1] * (1 - t) + BD[b * 3 + 1] * t, dz = BD[a * 3 + 2] * (1 - t) + BD[b * 3 + 2] * t;
+        const dn = dx * OUT[k * 3] + dy * OUT[k * 3 + 1] + dz * OUT[k * 3 + 2];
+        P[k * 3] += dx - dn * OUT[k * 3]; P[k * 3 + 1] += dy - dn * OUT[k * 3 + 1]; P[k * 3 + 2] += dz - dn * OUT[k * 3 + 2];
+      }
+    }
     // remember how far out the finished layer sits over each body vertex (so a
     // layer on top — backpack straps — can sit exactly on it)
     const offset = new Float32Array(n);
@@ -523,7 +548,7 @@ export function buildHuman(sk) {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
     geo.setIndex(tris);
     geo.computeVertexNormals();
-    geo.userData.covered = F; geo.userData.offset = offset;
+    geo.userData.covered = F; geo.userData.offset = offset; geo.userData.drape = bakeDelta;
     return geo;
   };
 
@@ -694,8 +719,8 @@ export function buildHuman(sk) {
       if (Math.abs(x) > shX * 0.9 && T.sleeve) d += 0.0025 * Math.pow(Math.abs(Math.sin(Math.hypot(x, y) * 110)), 2);   // sleeve rings
       return d;
     };
-    if (T) topGeo = layer((i) => topField(i, T), (i) => topThick(i, T), { smooth: 10, folds: topFolds });
-    const pantsGeo = layer((i) => pantsField(i, PN), (i) => pantsThick(i, PN), { smooth: 4, folds: pantsFolds });
+    if (T) topGeo = layer((i) => topField(i, T), (i) => topThick(i, T), { smooth: 10, folds: topFolds, bake: `${shape}:top:${o.top}` });
+    const pantsGeo = layer((i) => pantsField(i, PN), (i) => pantsThick(i, PN), { smooth: 4, folds: pantsFolds, bake: `${shape}:pants:${o.pants}` });
     addLayer(pantsGeo, M.pants);
     if (o.pants === 'cargo') {
       // big side pockets on the thighs
@@ -706,7 +731,17 @@ export function buildHuman(sk) {
       };
       addLayer(layer(pocket, (i) => pantsThick(i, PN) + 0.012, { smooth: 2 }), M.pantsDark);
     }
-    addLayer(topGeo, M.top);
+    if (T && T.yoke && topGeo) {
+      // YOKE (windbreaker): the shoulder panel is part of the jacket itself, a second
+      // material on the triangles above the line — so it always moves with the drape
+      const idx = topGeo.index.array, pos = topGeo.attributes.position.array, A = [], Bk = [], line = shY - 0.11;
+      for (let t = 0; t < idx.length; t += 3) {
+        const cy = (pos[idx[t] * 3 + 1] + pos[idx[t + 1] * 3 + 1] + pos[idx[t + 2] * 3 + 1]) / 3;
+        (cy > line ? Bk : A).push(idx[t], idx[t + 1], idx[t + 2]);
+      }
+      topGeo.setIndex([...A, ...Bk]); topGeo.clearGroups(); topGeo.addGroup(0, A.length, 0); topGeo.addGroup(A.length, Bk.length, 1);
+      addLayer(topGeo, [M.top, M.topTrim || M.topDark]);
+    } else addLayer(topGeo, M.top);
     // hair: a shell over the scalp (thick on top, tapering at the hairline)
     let hairF = null;
     if (H) {
@@ -756,7 +791,7 @@ export function buildHuman(sk) {
         const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
         return Math.max(-z + 0.02, Math.abs(x) - pw, py0 - y, y - py1);
       };
-      const pg = layer(print, (i) => Math.max(topGeo.userData.offset[i], 0) + 0.0015, { hem: false });
+      const pg = layer(print, (i) => Math.max(topGeo.userData.offset[i], 0) + 0.0015, { hem: false, follow: topGeo });
       if (pg) {
         const pp = pg.attributes.position, uv2 = pg.attributes.uv;
         for (let k = 0; k < pp.count; k++) uv2.setXY(k, (pp.getX(k) + pw) / (2 * pw), (pp.getY(k) - py0) / (py1 - py0));
@@ -838,7 +873,7 @@ export function buildHuman(sk) {
         const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
         return Math.max(z + 0.005, Math.abs(x) - 0.14, (shY - 0.16) - y, y - (neckY + 0.04));
       };
-      addLayer(layer(hood, (i, fv) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.05 * sstep(0, 0.045, -fv) + 0.006, { smooth: 6 }), M.topDark);
+      addLayer(layer(hood, (i, fv) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.05 * sstep(0, 0.045, -fv) + 0.006, { smooth: 6, follow: topGeo }), M.topDark);
     }
     // ---- ZIP (zip hoodie, windbreaker): a metal zip tape down the centre front
     const topOff = (i) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0);
@@ -848,15 +883,7 @@ export function buildHuman(sk) {
         const x = base[i * 3], y = base[i * 3 + 1], z = base[i * 3 + 2];
         return Math.max(-z + 0.02, Math.abs(x) - 0.0055, (waistY - T.hem + 0.01) - y, y - (neckY - 0.01));
       };
-      addLayer(layer(zip, (i) => topOff(i) + 0.0022, { hem: false }), M.bolt, { shadow: false });
-    }
-    // ---- YOKE (windbreaker): a contrast panel across the shoulders and upper arms
-    if (T && T.yoke && topGeo) {
-      const yoke = (i) => {
-        const r = reg[i]; if (r !== R.torso && r !== R.collar && r !== R.upperArm) return 1;
-        return (shY - 0.11) - base[i * 3 + 1];
-      };
-      addLayer(layer(yoke, (i) => topOff(i) + 0.0018, { smooth: 3 }), M.topTrim || M.topDark);
+      addLayer(layer(zip, (i) => topOff(i) + 0.005, { hem: false, follow: topGeo }), M.bolt, { shadow: false });
     }
     // ---- BACKPACK: padded straps cut over the shoulders + a real pack on the back
     if (o.backpack) {
@@ -869,7 +896,7 @@ export function buildHuman(sk) {
         const yMin = z > 0 ? waistY + 0.17 : shY - 0.22;            // chest: down to the ribs; back: into the pack
         return Math.max(Math.abs(Math.abs(x) - sx) - 0.021, yMin - y);
       };
-      addLayer(layer(strap, (i) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.012, { smooth: 2 }), M.packDark);
+      addLayer(layer(strap, (i) => Math.max(topGeo ? topGeo.userData.offset[i] : 0, 0) + 0.012, { smooth: 2, follow: topGeo }), M.packDark);
       let backZ = 0;
       for (let i = 0; i < n; i++) {
         const r = reg[i]; if (r !== R.torso && r !== R.collar) continue;

@@ -122,6 +122,12 @@ mapping, a filmic colour grade (split toning, light contrast, soft vignette) and
 City blocks have real facade relief: a stone band at every floor, deep cornices and corner pilasters.
 Use **Low** on very weak machines (no post-processing).
 
+### 🧵 Cloth-simulated clothes (Blender)
+Every top and bottom, on both bodies, is draped by a real **Blender cloth simulation** (`tools/cloth-sim.py`, run with
+Blender's Python module): the garment the game builds is simulated over the body with gravity, collision, a little
+spare fabric so it buckles into folds, and pins at the collar / waistband. The movement is baked per vertex into
+`js/clothBake.js`, so the clothes keep their rigging and fit while wearing the simulated drape.
+
 ### 👟 Character & board detail
 - **Skate shoes** are lofted through foot-shaped cross-sections (narrow heel, wide ball, rounded toe box,
   padded collar) with a vulcanised sole, foxing band, tongue, criss-cross laces through eyelets, suede
@@ -230,7 +236,8 @@ Tabs:
   (High + full-resolution AO and 4K shadows), and **weather**: Clear, Overcast, Golden hour or Rain (falling rain,
   rain sound, low cloud and fog).
 - **Audio**: master volume.
-- **Controls**: **rebind every key** (click, then press the key; saved), the full controls reference, reset to defaults.
+- **Controls** (also straight from the main menu and the pause menu): **rebind every keyboard key** and **remap every controller
+  button** (click an action, then press the key / button; saved), the full controls reference, reset to defaults.
 - **Camera**: Follow, Filmer, Fisheye or First person, and mouse sensitivity.
 - **Gameplay**: landing assist and touch controls.
 
