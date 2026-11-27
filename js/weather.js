@@ -47,6 +47,11 @@ export class Weather {
     if (P.sky) { sc.background = g.skyTex || null; g.sky.visible = !g.skyTex; sc.backgroundIntensity = P.skyDim || 1; }
     else { sc.background = sc.fog.color.clone(); g.sky.visible = false; }
     this.rain.visible = !!P.rain;
+    // wet streets: darker, glossier ground and walls while it rains (sky reflections on High)
+    for (const m of Object.values(g.world._mats || {})) {
+      m.color.setScalar(P.rain ? 0.72 : 1);
+      if (m.roughness !== undefined) { if (m.userData.dryRough === undefined) m.userData.dryRough = m.roughness; m.roughness = P.rain ? m.userData.dryRough * 0.35 : m.userData.dryRough; }
+    }
     if (g.audio && g.audio.setRain) g.audio.setRain(!!P.rain);
   }
 

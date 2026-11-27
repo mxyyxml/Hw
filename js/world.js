@@ -614,12 +614,13 @@ export class World {
     let k = 0;
     // inner faces of the buildings around the city (every other one gets a piece)
     for (let x = b.minX; x < b.maxX; x += 22) {
-      if (k++ % 2 === 0) D.graffiti([x + 11 + (r() - 0.5) * 6, 5.2, b.minZ - 1], [0, 0, 1], 6 + r() * 2, k % 4);
+      // (on the ground-floor shutters, in front of the shop glass — upper floors are windows now)
+      if (k++ % 2 === 0) D.graffiti([x + 11 + (r() - 0.5) * 6, 1.75, b.minZ - 0.9], [0, 0, 1], 3 + r(), k % 4);
     }
     for (let z = b.minZ; z < b.maxZ; z += 22) {
       if (z > 105) continue;                              // seafront: no buildings
-      if (k++ % 2 === 0) D.graffiti([b.minX, 5.2, z + 11 + (r() - 0.5) * 6], [1, 0, 0], 6 + r() * 2, k % 4);
-      if (k % 3 === 0) D.graffiti([b.maxX, 5.2, z + 11 + (r() - 0.5) * 6], [-1, 0, 0], 6 + r() * 2, (k + 2) % 4);
+      if (k++ % 2 === 0) D.graffiti([b.minX - 0.9, 1.75, z + 11 + (r() - 0.5) * 6], [1, 0, 0], 3 + r(), k % 4);
+      if (k % 3 === 0) D.graffiti([b.maxX + 0.9, 1.75, z + 11 + (r() - 0.5) * 6], [-1, 0, 0], 3 + r(), (k + 2) % 4);
     }
     // the beach sea wall
     for (const x of [-130, -95, -45, 5]) D.graffiti([x, 0.62, 150.02], [0, 0, 1], 2.2, ((x + 200) / 10 | 0) % 4);
